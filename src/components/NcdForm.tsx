@@ -24,6 +24,9 @@ export const NcdForm: React.FC<NcdFormProps> = ({
 }) => {
   const [showConsentModal, setShowConsentModal] = useState(false);
   const [hasConsented, setHasConsented] = useState(false);
+  const [showValidationAlert, setShowValidationAlert] = useState(false);
+  const [showOfflineSuccessAlert, setShowOfflineSuccessAlert] = useState(false);
+  const [offlineSavedRecord, setOfflineSavedRecord] = useState<any>(null);
 
   // Personal Info
   const [name, setName] = useState("");
@@ -426,7 +429,7 @@ export const NcdForm: React.FC<NcdFormProps> = ({
     });
 
     if (missingQuestions.length > 0) {
-      alert("กรุณาตอบคำถามประเมินพฤติกรรมการบริโภคอาหาร (หมวดหวาน มัน เค็ม) ให้ครบทุกข้อ");
+      setShowValidationAlert(true);
       return;
     }
 
@@ -597,10 +600,11 @@ export const NcdForm: React.FC<NcdFormProps> = ({
     }
 
     if (isOfflineMode) {
-      alert("บันทึกข้อมูลแบบออฟไลน์สำเร็จ (เซิร์ฟเวอร์หลักไม่ได้เชื่อมต่อ ระบบบันทึกข้อมูลไว้ในเครื่องของคุณเรียบร้อยแล้ว)");
+      setOfflineSavedRecord(savedRecord);
+      setShowOfflineSuccessAlert(true);
+    } else {
+      onSubmitSuccess(savedRecord, !isFollowUp && !!initialRecord);
     }
-
-    onSubmitSuccess(savedRecord, !isFollowUp && !!initialRecord);
   };
 
   return (
@@ -1402,6 +1406,55 @@ export const NcdForm: React.FC<NcdFormProps> = ({
         }}
         name={name}
       />
+
+      {/* Custom Validation Alert Modal */}
+      {showValidationAlert && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col p-6 text-center animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-center w-12 h-12 bg-rose-100 rounded-full mb-4 mx-auto animate-bounce">
+              <AlertTriangle className="w-6 h-6 text-rose-600" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-800 mb-2">ข้อมูลไม่ครบถ้วน</h3>
+            <p className="text-sm text-slate-600 mb-6 leading-relaxed">
+              กรุณาตอบคำถามประเมินพฤติกรรมการบริโภคอาหาร <br/>
+              <span className="font-semibold text-rose-600">(หมวดหวาน มัน เค็ม) ให้ครบทุกข้อ</span> <br/>
+              เพื่อให้ระบบสามารถประเมินผลและวิเคราะห์ระดับความเสี่ยงของท่านได้อย่างสมบูรณ์
+            </p>
+            <button 
+              onClick={() => setShowValidationAlert(false)}
+              className="w-full py-2.5 text-sm font-bold text-white bg-rose-600 hover:bg-rose-700 active:scale-98 rounded-xl transition-all shadow-sm cursor-pointer"
+            >
+              รับทราบและกลับไปตอบคำถาม
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Offline Success Alert Modal */}
+      {showOfflineSuccessAlert && offlineSavedRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col p-6 text-center animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-center w-12 h-12 bg-emerald-100 rounded-full mb-4 mx-auto">
+              <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-800 mb-2">บันทึกข้อมูลแบบออฟไลน์สำเร็จ</h3>
+            <p className="text-sm text-slate-600 mb-6 leading-relaxed">
+              เซิร์ฟเวอร์หลักไม่ได้เชื่อมต่อชั่วคราว <br/>
+              <span className="font-semibold text-emerald-600">ระบบบันทึกข้อมูลไว้ในเครื่องของคุณเรียบร้อยแล้ว</span> <br/>
+              เมื่อระบบสามารถเชื่อมต่อได้ข้อมูลจะได้รับการซิงค์ตามขั้นตอน
+            </p>
+            <button 
+              onClick={() => {
+                setShowOfflineSuccessAlert(false);
+                onSubmitSuccess(offlineSavedRecord, !isFollowUp && !!initialRecord);
+              }}
+              className="w-full py-2.5 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-98 rounded-xl transition-all shadow-sm cursor-pointer"
+            >
+              ตกลงและดำเนินการต่อ
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
