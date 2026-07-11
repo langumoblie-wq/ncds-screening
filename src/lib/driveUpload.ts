@@ -56,16 +56,18 @@ export const getAccessToken = async (): Promise<string | null> => {
   return cachedAccessToken;
 };
 
-export const uploadToDrive = async (fileBlob: Blob, filename: string, folderId: string) => {
+export const uploadToDrive = async (fileBlob: Blob, filename: string, folderId?: string) => {
   const accessToken = await getAccessToken();
   if (!accessToken) throw new Error("Google Drive access token not available");
 
   const form = new FormData();
-  const metadata = {
+  const metadata: any = {
     name: filename,
-    mimeType: 'application/pdf',
-    parents: [folderId]
+    mimeType: 'application/pdf'
   };
+  if (folderId) {
+    metadata.parents = [folderId];
+  }
   form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
   form.append('file', fileBlob);
 
