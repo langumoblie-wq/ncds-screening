@@ -3,7 +3,7 @@ import {
   Users, CheckCircle2, AlertTriangle, ShieldAlert, Search, Filter, 
   MapPin, Eye, Trash2, SlidersHorizontal, ArrowUpDown, ChevronDown, 
   Download, FileSpreadsheet, RotateCcw, Cigarette, Wine, Flame, EyeOff,
-  Pencil, PlusCircle, History, Apple, Dumbbell, Smile, Moon, Activity
+  Pencil, PlusCircle, History, Apple, Dumbbell, Smile, Moon, Activity, Upload
 } from "lucide-react";
 import { ScreeningRecord, DistrictType, LOCATION_DATA } from "../types";
 
@@ -14,6 +14,7 @@ interface NcdDashboardProps {
   onEditRecord?: (record: ScreeningRecord) => void;
   onAddScreeningClicked?: () => void;
   onFollowUpRecord?: (record: ScreeningRecord) => void;
+  onImportRecords?: (records: ScreeningRecord[]) => void;
 }
 
 // Reusable custom circular progress gauge
@@ -376,7 +377,8 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
   onSelectRecord,
   onEditRecord,
   onAddScreeningClicked,
-  onFollowUpRecord
+  onFollowUpRecord,
+  onImportRecords
 }) => {
   const [recordToDelete, setRecordToDelete] = useState<ScreeningRecord | null>(null);
   
@@ -696,6 +698,48 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handleExportBackup = () => {
+    if (records.length === 0) {
+      alert("ไม่มีข้อมูลสำหรับสำรองข้อมูล");
+      return;
+    }
+    const dataStr = JSON.stringify(records, null, 2);
+    const blob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `ncd_backup_${new Date().toISOString().split('T')[0]}.json`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 100);
+  };
+
+  const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const importedData = JSON.parse(event.target?.result as string);
+        if (Array.isArray(importedData)) {
+          if (onImportRecords) {
+            onImportRecords(importedData);
+          } else {
+            alert("ฟังก์ชันนำเข้ายังไม่เปิดใช้งาน");
+          }
+        } else {
+          alert("รูปแบบไฟล์ไม่ถูกต้อง กรุณาใช้ไฟล์ JSON ที่ได้จากการสำรองข้อมูล");
+        }
+      } catch (err) {
+        console.error(err);
+        alert("เกิดข้อผิดพลาดในการอ่านไฟล์ กรุณาตรวจสอบว่าไฟล์ถูกต้องหรือไม่");
+      }
+    };
+    reader.readAsText(file);
+    // Reset input value so the same file can be selected again
+    e.target.value = '';
   };
 
   return (
@@ -1146,6 +1190,28 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
                 เพิ่มการคัดกรอง
               </button>
             )}
+
+            {/* Action: Backup JSON */}
+            <button
+              onClick={handleExportBackup}
+              disabled={records.length === 0}
+              className="bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 font-bold text-xs py-3 px-3.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0 transition-all"
+            >
+              <Download className="w-4 h-4" />
+              สำรองข้อมูล
+            </button>
+
+            {/* Action: Restore JSON */}
+            <label className="bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 text-emerald-700 font-bold text-xs py-3 px-3.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shrink-0 transition-all">
+              <Upload className="w-4 h-4" />
+              นำเข้าข้อมูล
+              <input 
+                type="file" 
+                accept=".json" 
+                onChange={handleImportBackup} 
+                className="hidden" 
+              />
+            </label>
 
             {/* Action: Export CSV */}
             <button

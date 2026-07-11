@@ -149,6 +149,46 @@ export default function App() {
     }
   };
 
+  // Import records (Restore from Backup)
+  const handleImportRecords = async (importedRecords: ScreeningRecord[]) => {
+    if (!importedRecords || !Array.isArray(importedRecords) || importedRecords.length === 0) {
+      alert("ไฟล์ที่อัปโหลดไม่มีข้อมูลที่ถูกต้อง");
+      return;
+    }
+
+    try {
+      // Map to Supabase format
+      const formattedData = importedRecords.map(record => ({
+         id: record.id,
+         name: record.name,
+         visit_number: record.visitNumber || 1,
+         age: record.age,
+         gender: record.gender,
+         data: record
+      }));
+      
+      const { error } = await supabase.from('ncd_records').upsert(formattedData);
+      
+      if (error) {
+        console.error("Supabase bulk insert error:", error);
+        alert("เกิดข้อผิดพลาดในการอัปโหลดไปที่ฐานข้อมูล");
+        return;
+      }
+
+      // Merge local state immediately
+      setRecords(prev => {
+        const newIds = new Set(importedRecords.map(r => r.id));
+        return [...prev.filter(r => !newIds.has(r.id)), ...importedRecords].sort((a, b) => b.id - a.id);
+      });
+
+      alert(`นำเข้าข้อมูลสำเร็จจำนวน ${importedRecords.length} เคส`);
+
+    } catch (error) {
+       console.error("Error importing records:", error);
+       alert("เกิดข้อผิดพลาดในการนำเข้าข้อมูล");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans antialiased text-slate-800">
       
@@ -311,6 +351,7 @@ export default function App() {
                     setIsFollowUpMode(false);
                     setActiveTab("form");
                   }}
+                  onImportRecords={handleImportRecords}
                 />
               </motion.div>
             )}
