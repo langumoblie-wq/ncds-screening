@@ -405,6 +405,7 @@ export default function App() {
                 transition={{ duration: 0.25 }}
               >
                 <IndividualProfile 
+                  isAdmin={isAdmin}
                   records={records}
                   onSelectRecord={setSelectedRecord}
                   onFollowUpRecord={(record) => {
@@ -412,6 +413,12 @@ export default function App() {
                     setIsFollowUpMode(true);
                     setActiveTab("form");
                   }}
+                  onEditRecord={(record) => {
+                    setEditingRecord(record);
+                    setIsFollowUpMode(false);
+                    setActiveTab("form");
+                  }}
+                  onDeleteRecord={(record) => handleDeleteRecord(record.id)}
                 />
               </motion.div>
             )}

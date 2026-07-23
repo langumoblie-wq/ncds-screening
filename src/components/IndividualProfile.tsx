@@ -3,7 +3,7 @@ import {
   Search, ArrowRight, Activity, Calendar, MapPin, 
   Heart, User, Phone, Sparkles, TrendingUp, ChevronRight,
   Info, AlertCircle, Droplet, History,
-  Target, CheckCircle2, XCircle
+  Target, CheckCircle2, XCircle, Pencil, Trash2
 } from "lucide-react";
 import { ScreeningRecord } from "../types";
 import { 
@@ -12,9 +12,12 @@ import {
 } from "../utils";
 
 interface IndividualProfileProps {
+  isAdmin?: boolean;
   records: ScreeningRecord[];
   onSelectRecord?: (record: ScreeningRecord) => void;
   onFollowUpRecord?: (record: ScreeningRecord) => void;
+  onEditRecord?: (record: ScreeningRecord) => void;
+  onDeleteRecord?: (record: ScreeningRecord) => void;
 }
 
 // Sparkline/Line Chart component using plain responsive SVGs
@@ -281,9 +284,12 @@ const CustomTrendChart: React.FC<{
 };
 
 export const IndividualProfile: React.FC<IndividualProfileProps> = ({ 
+  isAdmin = false,
   records, 
   onSelectRecord,
-  onFollowUpRecord
+  onFollowUpRecord,
+  onEditRecord,
+  onDeleteRecord
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPatientId, setSelectedPatientId] = useState<string>("");
@@ -525,7 +531,29 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
 
               {/* Combined Status Banner */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto shrink-0">
-                {onFollowUpRecord && (
+                
+                {isAdmin && onEditRecord && (
+                  <button
+                    onClick={() => onEditRecord(latestVisit)}
+                    className="bg-amber-100/50 border border-amber-200 hover:bg-amber-100 text-amber-600 font-bold text-xs py-3 px-4 rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all shadow-xs"
+                    title="แก้ไขข้อมูลล่าสุด"
+                  >
+                    <Pencil className="w-4 h-4" />
+                    แก้ไข
+                  </button>
+                )}
+                {isAdmin && onDeleteRecord && (
+                  <button
+                    onClick={() => onDeleteRecord(latestVisit)}
+                    className="bg-rose-100/50 border border-rose-200 hover:bg-rose-100 text-rose-600 font-bold text-xs py-3 px-4 rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all shadow-xs"
+                    title="ลบข้อมูลล่าสุด"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    ลบ
+                  </button>
+                )}
+
+                {isAdmin && onFollowUpRecord && (
                   <button
                     onClick={() => onFollowUpRecord(latestVisit)}
                     className="bg-emerald-600 border border-emerald-700 hover:bg-emerald-700 text-white font-bold text-xs py-3 px-4.5 rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all shadow-xs"
