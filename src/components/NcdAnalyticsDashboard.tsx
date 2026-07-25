@@ -20,7 +20,8 @@ import {
   SlidersHorizontal,
   Sparkles,
   Info,
-  ChevronRight
+  ChevronRight,
+  Printer
 } from "lucide-react";
 
 interface NcdAnalyticsDashboardProps {
@@ -409,9 +410,21 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
 
   return (
     <div className="space-y-6">
+      {/* Print Header (hidden on screen) */}
+      <div className="hidden print:block text-center space-y-2 pb-6 border-b border-slate-200 mb-6">
+        <h2 className="text-2xl font-black text-slate-800">รายงานสรุปผลการวิเคราะห์ NCDs และพฤติกรรมเสี่ยง</h2>
+        <p className="text-slate-600 font-medium">
+          ข้อมูล ณ วันที่ {new Date().toLocaleDateString("th-TH", { year: "numeric", month: "long", day: "numeric" })}
+        </p>
+        <div className="text-sm text-slate-500 flex items-center justify-center gap-4 mt-2">
+          <span>โมเดล: {filterModel || "ทั้งหมด"}</span>
+          <span>อำเภอ: {filterDistrict ? `อ.${filterDistrict}` : "ทั้งหมด"}</span>
+          <span>ตำบล: {filterSubdistrict ? `ต.${filterSubdistrict}` : "ทั้งหมด"}</span>
+        </div>
+      </div>
       
       {/* 1. Header Filter Card */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4 print:hidden">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
           <div className="flex items-center gap-2">
             <div className="bg-gradient-to-tr from-blue-600 to-indigo-600 text-white p-2 rounded-xl shrink-0">
@@ -422,19 +435,28 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
               <p className="text-[10px] text-slate-500">กรองข้อมูลในหน่วยงานและพื้นที่โครงการเพื่อวิเคราะห์ปัญหา ความสำเร็จ และหาแนวทางเชิงลึก</p>
             </div>
           </div>
-          {(filterModel || filterDistrict || filterSubdistrict || filterTargetArea) && (
+          <div className="flex items-center gap-2">
             <button 
-              onClick={() => {
-                setFilterModel("");
-                setFilterDistrict("");
-                setFilterSubdistrict("");
-                setFilterTargetArea("");
-              }}
-              className="text-[10px] font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
+              onClick={() => window.print()}
+              className="text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
             >
-              ล้างตัวกรองทั้งหมด
+              <Printer className="w-4 h-4" />
+              พิมพ์รายงาน
             </button>
-          )}
+            {(filterModel || filterDistrict || filterSubdistrict || filterTargetArea) && (
+              <button 
+                onClick={() => {
+                  setFilterModel("");
+                  setFilterDistrict("");
+                  setFilterSubdistrict("");
+                  setFilterTargetArea("");
+                }}
+                className="text-[10px] font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
+              >
+                ล้างตัวกรองทั้งหมด
+              </button>
+            )}
+          </div>
         </div>
         
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -513,7 +535,7 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             
             {/* Success Factor 1: Follow-up Improvement Rate */}
-            <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 p-5 rounded-2xl shadow-xs flex flex-col justify-between relative overflow-hidden">
+            <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 p-5 rounded-2xl shadow-xs flex flex-col justify-between relative overflow-hidden print:break-inside-avoid">
               <div className="absolute right-0 bottom-0 translate-x-4 translate-y-4 bg-emerald-100/40 w-24 h-24 rounded-full -z-10" />
               <div className="space-y-3">
                 <div className="flex items-center gap-1.5 text-emerald-800">
@@ -534,7 +556,7 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
             </div>
 
             {/* Success Factor 2: Community Healthy Behavior Correlation */}
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 p-5 rounded-2xl shadow-xs flex flex-col justify-between relative overflow-hidden">
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 p-5 rounded-2xl shadow-xs flex flex-col justify-between relative overflow-hidden print:break-inside-avoid">
               <div className="absolute right-0 bottom-0 translate-x-4 translate-y-4 bg-blue-100/40 w-24 h-24 rounded-full -z-10" />
               <div className="space-y-3">
                 <div className="flex items-center gap-1.5 text-blue-800">
@@ -555,7 +577,7 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
             </div>
 
             {/* Success Factor 3: Operational Model Efficiency Comparison */}
-            <div className="bg-gradient-to-br from-indigo-50 to-violet-50 border border-indigo-200 p-5 rounded-2xl shadow-xs flex flex-col justify-between relative overflow-hidden">
+            <div className="bg-gradient-to-br from-indigo-50 to-violet-50 border border-indigo-200 p-5 rounded-2xl shadow-xs flex flex-col justify-between relative overflow-hidden print:break-inside-avoid">
               <div className="absolute right-0 bottom-0 translate-x-4 translate-y-4 bg-indigo-100/40 w-24 h-24 rounded-full -z-10" />
               <div className="space-y-3">
                 <div className="flex items-center gap-1.5 text-indigo-800">
@@ -590,7 +612,7 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
             {/* Left side: Problem Identification & Behavioral Risks */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between print:break-inside-avoid">
               <div className="space-y-4">
                 <div className="flex items-center gap-1.5 border-b border-slate-100 pb-2.5">
                   <div className="bg-rose-50 text-rose-600 p-1.5 rounded-xl">
@@ -644,7 +666,7 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
             </div>
 
             {/* Right side: Spatial risk hotspots (Where are the problems concentrated?) */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between print:break-inside-avoid">
               <div className="space-y-4">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
                   <div className="flex items-center gap-1.5">
