@@ -10,9 +10,11 @@ interface ProjectTrackingProps {
 export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => {
   const [modelFilter, setModelFilter] = useState<string>("all");
   const [districtFilter, setDistrictFilter] = useState<string>("all");
+  const [riskFilter, setRiskFilter] = useState<string>("all");
   const [targets, setTargets] = useState<Record<string, number>>({});
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>("");
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem("ncd_project_targets");
@@ -46,7 +48,7 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
   // Get distinct districts for filter
   const allDistricts = useMemo(() => {
     const d = new Set<string>();
-    records.forEach(r => {
+    filteredRecords.forEach(r => {
       if (r.district) d.add(r.district);
     });
     return Array.from(d).sort();
@@ -54,15 +56,39 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
 
   const stats = useMemo(() => {
     // group by: modelType + district + area
+    let filteredRecords = records;
+    if (riskFilter !== "all") {
+      filteredRecords = records.filter(r => {
+        const smoking = r.smoking?.includes("สูบอยู่") || r.smoking?.includes("ประจำ");
+        const alcohol = r.alcohol?.includes("ประจำ") || r.alcohol?.includes("ครั้งคราว");
+        const exercise = r.exercise?.includes("ไม่ออก") || r.exercise?.includes("นั่งนิ่ง");
+        const sleep = r.sleep?.includes("น้อยกว่า 6") || r.sleep?.includes("ไม่เพียงพอ");
+        const food = ["เสี่ยงสูง", "เสี่ยงสูงมาก"].includes(r.foodHabit?.sweet?.level || "") ||
+                     ["เสี่ยงสูง", "เสี่ยงสูงมาก"].includes(r.foodHabit?.fat?.level || "") ||
+                     ["เสี่ยงสูง", "เสี่ยงสูงมาก"].includes(r.foodHabit?.salt?.level || "");
+        
+        switch (riskFilter) {
+          case "3a2s": return smoking || alcohol || exercise || sleep || food;
+          case "smoking": return smoking;
+          case "alcohol": return alcohol;
+          case "exercise": return exercise;
+          case "food": return food;
+          case "sleep": return sleep;
+          default: return true;
+        }
+      });
+    }
+
     const grouped: Record<string, {
       modelType: string;
       district: string;
       area: string;
       uniquePatients: Set<string>;
       totalVisits: number;
+      records: ScreeningRecord[];
     }> = {};
 
-    records.forEach(r => {
+    filteredRecords.forEach(r => {
       const area = (r.modelType === "หมู่บ้าน" ? r.targetArea : r.subdistrict) || "ไม่ระบุพื้นที่";
       const mType = r.modelType || "ไม่ระบุโมเดล";
       const dist = r.district || "ไม่ระบุอำเภอ";
@@ -74,7 +100,8 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
           district: dist,
           area: area,
           uniquePatients: new Set(),
-          totalVisits: 0
+          totalVisits: 0,
+          records: []
         };
       }
       
@@ -82,6 +109,7 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
         grouped[key].uniquePatients.add(r.name);
       }
       grouped[key].totalVisits += 1;
+      grouped[key].records.push(r);
     });
 
     let result = Object.entries(grouped).map(([key, data]) => {
@@ -89,13 +117,41 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
       const achieved = data.uniquePatients.size;
       const percent = target > 0 ? (achieved / target) * 100 : 0;
       
+      const visitBreakdown: Record<number, Set<string>> = {};
+      const nameCounts: Record<string, number> = {};
+      const duplicates: {name: string, count: number, visits: number[]}[] = [];
+
+      data.records.forEach(r => {
+        const vNum = r.visitNumber || 1;
+        if (!visitBreakdown[vNum]) visitBreakdown[vNum] = new Set();
+        if (r.name) {
+          visitBreakdown[vNum].add(r.name);
+          nameCounts[r.name] = (nameCounts[r.name] || 0) + 1;
+        }
+      });
+
+      for (const [name, count] of Object.entries(nameCounts)) {
+        if (count > 1) {
+          const personVisits = data.records.filter(r => r.name === name).map(r => r.visitNumber || 1).sort((a,b)=>a-b);
+          duplicates.push({ name, count, visits: personVisits });
+        }
+      }
+
+      const visits = Object.entries(visitBreakdown).map(([v, s]) => ({
+        visitNumber: parseInt(v),
+        count: s.size,
+        percent: target > 0 ? (s.size / target) * 100 : 0
+      })).sort((a, b) => a.visitNumber - b.visitNumber);
+
       return {
         key,
         ...data,
         achieved,
         target,
-        percent: Math.min(percent, 100), // cap at 100% for bar
-        realPercent: percent // can be > 100%
+        percent: Math.min(percent, 100),
+        realPercent: percent,
+        visitsBreakdown: visits,
+        duplicates
       };
     });
 
@@ -113,7 +169,7 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
     });
 
     return result;
-  }, [records, targets, modelFilter, districtFilter]);
+  }, [records, targets, modelFilter, districtFilter, riskFilter]);
 
   const overall = useMemo(() => {
     let totalTarget = 0;
@@ -159,6 +215,13 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
         <div className="text-sm text-slate-500 flex items-center justify-center gap-4 mt-2">
           <span>โมเดล: {modelFilter === "all" ? "ทั้งหมด" : modelFilter}</span>
           <span>อำเภอ: {districtFilter === "all" ? "ทั้งหมด" : `อ.${districtFilter}`}</span>
+          <span>ความเสี่ยง: {riskFilter === "all" ? "ทั้งหมด" : 
+                riskFilter === "3a2s" ? "เสี่ยงสูง (3อ. 2ส.)" : 
+                riskFilter === "smoking" ? "สูบบุหรี่" : 
+                riskFilter === "alcohol" ? "ดื่มแอลกอฮอล์" : 
+                riskFilter === "food" ? "อาหาร (หวาน/มัน/เค็ม)" : 
+                riskFilter === "exercise" ? "ขาดการออกกำลังกาย" : 
+                "การนอนหลับ"}</span>
         </div>
       </div>
       {/* Header & Overall Summary */}
@@ -217,6 +280,20 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
         </div>
         
         <select 
+          value={riskFilter}
+          onChange={(e) => setRiskFilter(e.target.value)}
+          className="bg-slate-50 border border-slate-200 text-sm font-semibold rounded-xl px-4 py-2 text-slate-700 outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all"
+        >
+          <option value="all">ทุกกลุ่มพฤติกรรม</option>
+          <option value="3a2s">เสี่ยงสูง (3อ. 2ส.)</option>
+          <option value="smoking">เสี่ยง: สูบบุหรี่</option>
+          <option value="alcohol">เสี่ยง: ดื่มแอลกอฮอล์</option>
+          <option value="food">เสี่ยง: อาหาร (หวาน/มัน/เค็ม)</option>
+          <option value="exercise">เสี่ยง: ขาดการออกกำลังกาย</option>
+          <option value="sleep">เสี่ยง: การนอนหลับ</option>
+        </select>
+
+        <select 
           value={modelFilter}
           onChange={(e) => setModelFilter(e.target.value)}
           className="bg-slate-50 border border-slate-200 text-sm font-semibold rounded-xl px-4 py-2 text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
@@ -263,15 +340,20 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
                   </tr>
                 )}
                 {stats.map((s, idx) => (
+                  <React.Fragment key={s.key}>
                   <motion.tr 
+                    onClick={() => setExpandedKey(expandedKey === s.key ? null : s.key)}
+                    className="hover:bg-slate-50/50 transition-colors cursor-pointer"
                     key={s.key}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: idx * 0.05 }}
-                    className="hover:bg-slate-50/50 transition-colors"
                   >
                     <td className="py-4 px-6">
-                      <div className="font-bold text-slate-800 text-sm">{s.area}</div>
+                      <div className="flex items-center gap-2">
+                        <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${expandedKey === s.key ? "rotate-90" : ""}`} />
+                        <div className="font-bold text-slate-800 text-sm">{s.area}</div><div className="text-[9px] text-indigo-400 font-semibold mt-0.5">(คลิกดูรายละเอียด)</div>
+                      </div>
                     </td>
                     <td className="py-4 px-6">
                       <div className="flex flex-col gap-1">
@@ -302,7 +384,7 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
                             min="0"
                           />
                           <button 
-                            onClick={() => saveTarget(s.key)}
+                            onClick={(e) => { e.stopPropagation(); saveTarget(s.key); }}
                             className="p-1.5 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors"
                           >
                             <Check className="w-3.5 h-3.5" />
@@ -310,7 +392,7 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
                         </div>
                       ) : (
                         <div 
-                          onClick={() => startEdit(s.key, s.target)}
+                          onClick={(e) => { e.stopPropagation(); startEdit(s.key, s.target); }}
                           className="group flex items-center justify-center gap-1 cursor-pointer hover:bg-slate-100 px-2 py-1 rounded-lg transition-colors"
                         >
                           <span className={`text-lg font-black ${s.target > 0 ? "text-indigo-600" : "text-slate-300"}`}>
@@ -348,6 +430,84 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
                       )}
                     </td>
                   </motion.tr>
+                  {expandedKey === s.key && (
+                    <tr>
+                      <td colSpan={6} className="p-0 border-b border-slate-100">
+                        <div className="bg-slate-50/50 p-6 space-y-6 animate-in slide-in-from-top-2 fade-in duration-200">
+                          {/* Visits Breakdown */}
+                          <div className="space-y-3">
+                            <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                              <Activity className="w-4 h-4 text-indigo-500" />
+                              แยกตามรายการครั้งที่ (Visits Breakdown)
+                            </h4>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                              {s.visitsBreakdown.map(v => (
+                                <div key={v.visitNumber} className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                                  <div className="flex justify-between items-center mb-2">
+                                    <span className="text-xs font-bold text-slate-600">ครั้งที่ {v.visitNumber}</span>
+                                    <span className="text-xs font-black text-indigo-600">{v.count} คน</span>
+                                  </div>
+                                  {s.target > 0 ? (
+                                    <div className="space-y-1 mt-2 border-t border-slate-100 pt-2">
+                                      <div className="flex justify-between text-[10px] text-slate-500 font-semibold">
+                                        <span>ความก้าวหน้า ({v.count}/{s.target})</span>
+                                        <span className={v.percent >= 100 ? "text-emerald-600 font-black" : "text-indigo-600 font-black"}>{v.percent.toFixed(1)}%</span>
+                                      </div>
+                                      <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                                        <div className={`h-full rounded-full ${v.percent >= 100 ? "bg-emerald-500" : "bg-indigo-500"}`} style={{ width: `${Math.min(v.percent, 100)}%` }} />
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="text-[10px] text-slate-400 font-semibold flex items-center gap-1 mt-2 border-t border-slate-100 pt-2">
+                                      <AlertCircle className="w-3 h-3" />
+                                      โปรดระบุเป้าหมาย
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Duplicates / Multiple Visits */}
+                          {s.duplicates.length > 0 && (
+                            <div className="space-y-3">
+                              <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                                <Users className="w-4 h-4 text-amber-500" />
+                                รายการซ้ำ / รับบริการหลายครั้ง ({s.duplicates.length} รายการ)
+                              </h4>
+                              <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                                <table className="w-full text-left text-xs">
+                                  <thead>
+                                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-500">
+                                      <th className="py-2 px-4 font-bold">ชื่อ-สกุล</th>
+                                      <th className="py-2 px-4 font-bold text-center">จำนวนครั้ง</th>
+                                      <th className="py-2 px-4 font-bold">รายการครั้งที่ (Visits)</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100">
+                                    {s.duplicates.map(d => (
+                                      <tr key={d.name}>
+                                        <td className="py-2 px-4 font-semibold text-slate-700">{d.name}</td>
+                                        <td className="py-2 px-4 text-center font-bold text-amber-600">{d.count}</td>
+                                        <td className="py-2 px-4">
+                                          <div className="flex flex-wrap gap-1">
+                                            {d.visits.map((v, i) => (
+                                              <span key={i} className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-semibold">ครั้งที่ {v}</span>
+                                            ))}
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
                 ))}
               </AnimatePresence>
             </tbody>

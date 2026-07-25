@@ -19,6 +19,88 @@ interface NcdDashboardProps {
 }
 
 // Reusable custom circular progress gauge
+const BMIDoughnut: React.FC<{
+  underweight: number;
+  normal: number;
+  overweight: number;
+  obese1: number;
+  obese2: number;
+  title: string;
+}> = ({ underweight, normal, overweight, obese1, obese2, title }) => {
+  const total = underweight + normal + overweight + obese1 + obese2;
+
+  const pctUW = total > 0 ? (underweight / total) * 100 : 0;
+  const pctN = total > 0 ? (normal / total) * 100 : 0;
+  const pctOW = total > 0 ? (overweight / total) * 100 : 0;
+  const pctOB1 = total > 0 ? (obese1 / total) * 100 : 0;
+  const pctOB2 = total > 0 ? (obese2 / total) * 100 : 0;
+
+  const size = 160;
+  const strokeWidth = 14;
+  const center = size / 2;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+
+  const dasharray = circumference;
+  const offsetUW = circumference;
+  const offsetN = offsetUW - (pctUW / 100) * circumference;
+  const offsetOW = offsetN - (pctN / 100) * circumference;
+  const offsetOB1 = offsetOW - (pctOW / 100) * circumference;
+  const offsetOB2 = offsetOB1 - (pctOB1 / 100) * circumference;
+
+  return (
+    <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex flex-col items-center justify-between">
+      <h3 className="text-sm font-black text-slate-800 text-center uppercase tracking-wider mb-2">{title}</h3>
+      <div className="relative w-40 h-40">
+        <svg width={size} height={size} className="-rotate-90 transform">
+          <circle cx={center} cy={center} r={radius} fill="transparent" stroke="#f1f5f9" strokeWidth={strokeWidth} />
+          <circle cx={center} cy={center} r={radius} fill="transparent" stroke="#8b5cf6" strokeWidth={strokeWidth} strokeDasharray={dasharray} strokeDashoffset={offsetOB2} className="transition-all duration-1000 ease-out" />
+          <circle cx={center} cy={center} r={radius} fill="transparent" stroke="#f43f5e" strokeWidth={strokeWidth} strokeDasharray={dasharray} strokeDashoffset={offsetOB1} className="transition-all duration-1000 ease-out" />
+          <circle cx={center} cy={center} r={radius} fill="transparent" stroke="#f59e0b" strokeWidth={strokeWidth} strokeDasharray={dasharray} strokeDashoffset={offsetOW} className="transition-all duration-1000 ease-out" />
+          <circle cx={center} cy={center} r={radius} fill="transparent" stroke="#10b981" strokeWidth={strokeWidth} strokeDasharray={dasharray} strokeDashoffset={offsetN} className="transition-all duration-1000 ease-out" />
+          <circle cx={center} cy={center} r={radius} fill="transparent" stroke="#3b82f6" strokeWidth={strokeWidth} strokeDasharray={dasharray} strokeDashoffset={offsetUW} className="transition-all duration-1000 ease-out" />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">ทั้งหมด</span>
+          <span className="text-2xl font-black text-slate-800 leading-none">{total}</span>
+        </div>
+      </div>
+      <div className="w-full space-y-1.5 mt-3">
+        <div className="flex justify-between items-center text-[10px]">
+          <div className="flex items-center gap-1.5 font-semibold text-slate-600">
+            <div className="w-2.5 h-2.5 rounded-full bg-blue-500"></div> ผอม
+          </div>
+          <span className="font-black text-slate-800">{underweight} <span className="text-slate-400 font-semibold">({Math.round(pctUW)}%)</span></span>
+        </div>
+        <div className="flex justify-between items-center text-[10px]">
+          <div className="flex items-center gap-1.5 font-semibold text-slate-600">
+            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500"></div> ปกติ
+          </div>
+          <span className="font-black text-slate-800">{normal} <span className="text-slate-400 font-semibold">({Math.round(pctN)}%)</span></span>
+        </div>
+        <div className="flex justify-between items-center text-[10px]">
+          <div className="flex items-center gap-1.5 font-semibold text-slate-600">
+            <div className="w-2.5 h-2.5 rounded-full bg-amber-500"></div> ท้วม
+          </div>
+          <span className="font-black text-slate-800">{overweight} <span className="text-slate-400 font-semibold">({Math.round(pctOW)}%)</span></span>
+        </div>
+        <div className="flex justify-between items-center text-[10px]">
+          <div className="flex items-center gap-1.5 font-semibold text-slate-600">
+            <div className="w-2.5 h-2.5 rounded-full bg-rose-500"></div> อ้วน
+          </div>
+          <span className="font-black text-slate-800">{obese1} <span className="text-slate-400 font-semibold">({Math.round(pctOB1)}%)</span></span>
+        </div>
+        <div className="flex justify-between items-center text-[10px]">
+          <div className="flex items-center gap-1.5 font-semibold text-slate-600">
+            <div className="w-2.5 h-2.5 rounded-full bg-purple-500"></div> อ้วนมาก
+          </div>
+          <span className="font-black text-slate-800">{obese2} <span className="text-slate-400 font-semibold">({Math.round(pctOB2)}%)</span></span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const RiskDoughnut: React.FC<{
   normal: number;
   risk: number;
@@ -391,6 +473,7 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
   const [filterSubdistrict, setFilterSubdistrict] = useState<string>("");
   const [filterTargetArea, setFilterTargetArea] = useState<string>("");
   const [filterRiskLevel, setFilterRiskLevel] = useState<string>("");
+  const [filterBehaviorRisk, setFilterBehaviorRisk] = useState<string>("");
   const [sortBy, setSortBy] = useState<"date" | "name" | "age" | "bmi">("date");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
@@ -500,7 +583,26 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
 
         const matchesRisk = filterRiskLevel ? rLevel === filterRiskLevel : true;
 
-        return matchesSearch && matchesModel && matchesDistrict && matchesSubdistrict && matchesTargetArea && matchesRisk;
+        // Behavior Risk Filter (3อ. 2ส.)
+        let matchesBehavior = true;
+        if (filterBehaviorRisk) {
+          if (filterBehaviorRisk === "food") {
+            matchesBehavior = (r.foodHabit?.sweet?.level === "เสี่ยงสูงมาก" || r.foodHabit?.sweet?.level === "เสี่ยงสูง" || r.foodHabit?.fat?.level === "เสี่ยงสูงมาก" || r.foodHabit?.fat?.level === "เสี่ยงสูง" || r.foodHabit?.salt?.level === "เสี่ยงสูงมาก" || r.foodHabit?.salt?.level === "เสี่ยงสูง" || r.sodium?.includes("เค็มประจำ"));
+          } else if (filterBehaviorRisk === "exercise") {
+            matchesBehavior = (r.exercise?.includes("ไม่ออก") || r.exercise?.includes("นั่งนิ่ง"));
+          } else if (filterBehaviorRisk === "sleep") {
+            matchesBehavior = (r.sleep?.includes("น้อยกว่า 6") || r.sleep?.includes("ไม่เพียงพอ"));
+          } else if (filterBehaviorRisk === "smoking") {
+            matchesBehavior = (r.smoking?.includes("สูบอยู่") || r.smoking?.includes("ประจำ"));
+          } else if (filterBehaviorRisk === "alcohol") {
+            matchesBehavior = (r.alcohol?.includes("ประจำ") || r.alcohol?.includes("ครั้งคราว"));
+          } else if (filterBehaviorRisk === "bmi_risk") {
+            const b = parseFloat(r.bmi);
+            matchesBehavior = (!isNaN(b) && b >= 23.0);
+          }
+        }
+
+        return matchesSearch && matchesModel && matchesDistrict && matchesSubdistrict && matchesTargetArea && matchesRisk && matchesBehavior;
       })
       .sort((a, b) => {
         let valA: any = a.id;
@@ -521,7 +623,7 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
         if (valA > valB) return sortOrder === "asc" ? 1 : -1;
         return 0;
       });
-  }, [records, searchTerm, filterModel, filterDistrict, filterSubdistrict, filterTargetArea, filterRiskLevel, sortBy, sortOrder]);
+  }, [records, searchTerm, filterModel, filterDistrict, filterSubdistrict, filterTargetArea, filterRiskLevel, filterBehaviorRisk, sortBy, sortOrder]);
 
   // Stat computations based on filteredRecords
   const stats = useMemo(() => {
@@ -543,6 +645,11 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
     let foodSweetCount = 0;
     let foodFatCount = 0;
     let foodSaltCount = 0;
+    let bmiUnderweight = 0;
+    let bmiNormal = 0;
+    let bmiOverweight = 0;
+    let bmiObese1 = 0;
+    let bmiObese2 = 0;
     let foodAnyRiskCount = 0;
 
     filteredRecords.forEach((r) => {
@@ -593,6 +700,9 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
       }
     });
 
+    const bmiOverweightTotal = stats.bmiStats.overweight + stats.bmiStats.obese1 + stats.bmiStats.obese2;
+    const bmiOverweightPct = Math.round((bmiOverweightTotal / total) * 100);
+
     return {
       total,
       normal,
@@ -600,6 +710,7 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
       danger,
       ht: { normal: htNormal, risk: htRisk, danger: htDanger },
       dm: { normal: dmNormal, risk: dmRisk, danger: dmDanger },
+      bmiStats: { underweight: bmiUnderweight, normal: bmiNormal, overweight: bmiOverweight, obese1: bmiObese1, obese2: bmiObese2 },
       lifestyle: { 
         smokeCount, 
         alcoholCount, 
@@ -653,6 +764,9 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
     const sortedBehaviors = [...behaviors].sort((a, b) => b.count - a.count);
     const topBehavior = sortedBehaviors[0];
 
+    const bmiOverweightTotal = stats.bmiStats.overweight + stats.bmiStats.obese1 + stats.bmiStats.obese2;
+    const bmiOverweightPct = Math.round((bmiOverweightTotal / total) * 100);
+
     return {
       total,
       normalPct,
@@ -662,6 +776,8 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
       mainIssue,
       mainIssuePct,
       topBehavior,
+      bmiOverweightTotal,
+      bmiOverweightPct,
       allBehaviors: behaviors
     };
   }, [stats]);
@@ -932,7 +1048,7 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
       </div>
 
       {/* Doughnut Gauges and Lifestyle Risk Bars */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         
         {/* Hypertension Gauge */}
         <RiskDoughnut 
@@ -940,6 +1056,16 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
           risk={stats.ht.risk} 
           danger={stats.ht.danger} 
           title="สัดส่วนความเสี่ยงโรคความดันโลหิตสูง (HT)" 
+        />
+
+        {/* BMI Gauge */}
+        <BMIDoughnut 
+          underweight={stats.bmiStats.underweight}
+          normal={stats.bmiStats.normal}
+          overweight={stats.bmiStats.overweight}
+          obese1={stats.bmiStats.obese1}
+          obese2={stats.bmiStats.obese2}
+          title="สัดส่วนความเสี่ยงดัชนีมวลกาย (BMI)"
         />
 
         {/* Diabetes Gauge */}
@@ -987,7 +1113,7 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
           </div>
 
           {/* Core Insights Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Health summary text */}
             <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-200/60 space-y-3.5">
               <div className="flex items-center gap-1.5 text-slate-800 font-bold text-xs">
@@ -1057,6 +1183,41 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
                 <div className="mt-3 text-[10px] bg-white border border-amber-200 text-amber-850 p-2.5 rounded-xl font-bold flex items-center gap-1.5 leading-tight">
                   <span className="shrink-0 bg-orange-500 text-white text-[9px] px-1.5 py-0.5 rounded font-black font-mono">คำแนะนำเชิงพื้นที่</span>
                   <span>เน้นจัดโครงการควบคุมพฤติกรรม "{interpretation.topBehavior.name.split(" (")[0]}" เป็นมาตรการระดับพื้นที่เร่งด่วนอันดับหนึ่ง</span>
+                </div>
+              )}
+            </div>
+
+            {/* BMI Analysis */}
+            <div className="bg-gradient-to-br from-indigo-50/50 to-blue-50/50 p-4 rounded-xl border border-indigo-200/60 flex flex-col justify-between">
+              <div className="space-y-3.5">
+                <div className="flex items-center gap-1.5 text-indigo-850 font-bold text-xs">
+                  <span className="bg-indigo-100 text-indigo-700 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black font-mono">C</span>
+                  <span>ภาวะโภชนาการและดัชนีมวลกาย (BMI Analysis)</span>
+                </div>
+                
+                <div className="space-y-2.5 text-xs text-slate-600 leading-relaxed font-semibold">
+                  {interpretation.bmiOverweightTotal > 0 ? (
+                    <div className="flex items-start gap-2">
+                      <Activity className="w-4.5 h-4.5 text-indigo-500 shrink-0 mt-0.5" />
+                      <div>
+                        <span><strong>อัตราน้ำหนักเกินเกณฑ์:</strong> ประชากรกลุ่มเสี่ยงที่มีภาวะท้วม อ้วน หรืออ้วนมาก มีจำนวน <strong className="text-indigo-700">{interpretation.bmiOverweightTotal}</strong> ราย หรือคิดเป็น <strong className="text-indigo-700 text-sm font-black font-mono">{interpretation.bmiOverweightPct}%</strong> ของจำนวนผู้คัดกรองทั้งหมด ซึ่งเป็นปัจจัยเสี่ยงโดยตรงต่อโรคความดันโลหิตและเบาหวาน</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-start gap-2">
+                      <CheckCircle2 className="w-4.5 h-4.5 text-emerald-500 shrink-0 mt-0.5" />
+                      <div>
+                        <span><strong>ภาวะโภชนาการดี:</strong> ประชากรในกลุ่มที่คัดกรองส่วนใหญ่อยู่ในเกณฑ์มาตรฐาน ไม่พบกลุ่มภาวะน้ำหนักเกินในระดับที่ต้องเฝ้าระวัง</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {interpretation.bmiOverweightPct >= 30 && (
+                <div className="mt-3 text-[10px] bg-white border border-indigo-200 text-indigo-850 p-2.5 rounded-xl font-bold flex items-center gap-1.5 leading-tight">
+                  <span className="shrink-0 bg-indigo-500 text-white text-[9px] px-1.5 py-0.5 rounded font-black font-mono">แนวทางจัดกิจกรรม</span>
+                  <span>ควรจัดกิจกรรมปรับพฤติกรรมการกิน (ลดหวาน/มัน/เค็ม) ควบคู่กับการส่งเสริมการออกกำลังกายชุมชน</span>
                 </div>
               )}
             </div>
@@ -1208,6 +1369,21 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
               className="w-full text-xs rounded-xl border border-slate-300 pl-9 pr-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
+
+          {/* Behavior Risk Selector (3อ. 2ส.) */}
+          <select 
+            value={filterBehaviorRisk} 
+            onChange={(e) => setFilterBehaviorRisk(e.target.value)}
+            className="text-xs border border-slate-300 rounded-xl px-3 py-3 bg-white outline-none focus:ring-2 focus:ring-blue-500 shrink-0 font-semibold text-slate-700"
+          >
+            <option value="">แสดงทุกพฤติกรรมเสี่ยง</option>
+            <option value="food">อาหาร (กินหวาน/มัน/เค็มจัด)</option>
+            <option value="exercise">การออกกำลังกาย (ไม่ออกเลย)</option>
+            <option value="sleep">การนอนหลับ (พักผ่อนไม่เพียงพอ)</option>
+            <option value="smoking">สูบบุหรี่ (ยังสูบอยู่)</option>
+            <option value="alcohol">ดื่มแอลกอฮอล์ (ดื่มเป็นประจำ/ครั้งคราว)</option>
+            <option value="bmi_risk">ดัชนีมวลกาย (BMI ท้วม/อ้วนขึ้นไป)</option>
+          </select>
 
           {/* Risk Level Selector */}
           <select 
@@ -1392,8 +1568,26 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
                       </td>
 
                       {/* BMI */}
-                      <td className="py-4 px-5 text-center font-mono font-bold text-slate-700">
-                        {r.bmi}
+                      <td className="py-4 px-5 text-center">
+                        {(() => {
+                          const b = parseFloat(r.bmi);
+                          if (isNaN(b) || b <= 0) return <span className="font-mono font-bold text-slate-400">-</span>;
+                          let colorClass = "";
+                          let label = "";
+                          if (b < 18.5) { colorClass = "bg-blue-50 text-blue-600 border-blue-200"; label = "ผอม"; }
+                          else if (b < 23) { colorClass = "bg-emerald-50 text-emerald-600 border-emerald-200"; label = "ปกติ"; }
+                          else if (b < 25) { colorClass = "bg-amber-50 text-amber-600 border-amber-200"; label = "ท้วม"; }
+                          else if (b < 30) { colorClass = "bg-rose-50 text-rose-600 border-rose-200"; label = "อ้วน"; }
+                          else { colorClass = "bg-purple-50 text-purple-600 border-purple-200"; label = "อ้วนมาก"; }
+                          return (
+                            <div className="flex flex-col items-center justify-center gap-1">
+                              <span className={`px-2 py-0.5 rounded-md border text-[9px] font-bold whitespace-nowrap ${colorClass}`}>
+                                {label}
+                              </span>
+                              <span className="font-mono font-black text-slate-700 text-[11px]">{r.bmi}</span>
+                            </div>
+                          );
+                        })()}
                       </td>
 
                       {/* Management Action */}
