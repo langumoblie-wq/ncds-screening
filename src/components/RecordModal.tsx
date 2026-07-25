@@ -7,16 +7,18 @@ import {
   Trash2, Check, ShieldAlert, Printer, Download, FileCheck, Loader2
 } from "lucide-react";
 import { ScreeningRecord } from "../types";
+import { CustomTrendChart } from "./TrendChart";
 
 interface RecordModalProps {
   isAdmin?: boolean;
   record: ScreeningRecord;
+  allRecords?: ScreeningRecord[];
   onClose: () => void;
   onUpdateRecord: (updatedRecord: ScreeningRecord) => void;
   onDeleteRecord?: (id: number) => void;
 }
 
-export const RecordModal: React.FC<RecordModalProps> = ({ isAdmin = false, record, onClose, onUpdateRecord, onDeleteRecord }) => {
+export const RecordModal: React.FC<RecordModalProps> = ({ isAdmin = false, record, allRecords = [], onClose, onUpdateRecord, onDeleteRecord }) => {
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
@@ -56,6 +58,30 @@ export const RecordModal: React.FC<RecordModalProps> = ({ isAdmin = false, recor
     }
   };
   const recordDate = getThaiDate(record.date);
+
+  // Filter all records for the same patient to build the chart data
+  const patientVisits = React.useMemo(() => {
+    return allRecords
+      .filter(r => r.name === record.name)
+      .sort((a, b) => a.visitNumber - b.visitNumber);
+  }, [allRecords, record.name]);
+
+  const bpChartData = React.useMemo(() => {
+    return patientVisits.map(v => ({
+      label: `ครั้งที่ ${v.visitNumber}`,
+      value: v.bpSys,
+      value2: v.bpDia,
+      date: v.date
+    }));
+  }, [patientVisits]);
+
+  const dmChartData = React.useMemo(() => {
+    return patientVisits.map(v => ({
+      label: `ครั้งที่ ${v.visitNumber}`,
+      value: v.sugar,
+      date: v.date
+    }));
+  }, [patientVisits]);
 
   const handlePrint = () => {
     window.print();
@@ -510,6 +536,46 @@ export const RecordModal: React.FC<RecordModalProps> = ({ isAdmin = false, recor
                     })}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {/* Section: Trend Charts (if multiple visits) */}
+          {patientVisits.length > 1 && (
+            <div className="bg-white p-5 rounded-xl border border-slate-200 space-y-4">
+              <h4 className="font-bold text-slate-700 flex items-center gap-2 text-sm uppercase tracking-wider mb-2">
+                <Activity className="w-4 h-4 text-blue-500" />
+                แนวโน้มผลการตรวจติดตาม (Trend Analysis)
+              </h4>
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                <CustomTrendChart 
+                  title="ประวัติความดันโลหิต (Blood Pressure)"
+                  unit="mmHg"
+                  data={bpChartData}
+                  minVal={60}
+                  maxVal={200}
+                  color="#ef4444" 
+                  color2="#3b82f6" 
+                  label1="ค่าบน (Systolic)"
+                  label2="ค่าล่าง (Diastolic)"
+                  thresholds={[
+                    { value: 140, label: "อันตราย", color: "#ef4444" },
+                    { value: 120, label: "เสี่ยง", color: "#f59e0b" }
+                  ]}
+                />
+                <CustomTrendChart 
+                  title="ประวัติน้ำตาลในเลือด (Blood Sugar)"
+                  unit="mg/dL"
+                  data={dmChartData}
+                  minVal={50}
+                  maxVal={250}
+                  color="#f59e0b"
+                  label1="ระดับน้ำตาล"
+                  thresholds={[
+                    { value: 126, label: "อันตราย", color: "#ef4444" },
+                    { value: 100, label: "เสี่ยง", color: "#f59e0b" }
+                  ]}
+                />
               </div>
             </div>
           )}

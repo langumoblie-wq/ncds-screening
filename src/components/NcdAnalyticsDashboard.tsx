@@ -206,9 +206,9 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
       if (r.exercise?.includes("ไม่ออก") || r.exercise?.includes("นั่งนิ่ง")) noExerciseCount++;
       if (r.sleep?.includes("น้อยกว่า 6") || r.sleep?.includes("ไม่เพียงพอ")) poorSleepCount++;
       
-      if (r.foodHabit?.sweet?.level === "danger" || r.foodHabit?.sweet?.level === "risk") sweetCount++;
-      if (r.foodHabit?.fat?.level === "danger" || r.foodHabit?.fat?.level === "risk") fatCount++;
-      if (r.foodHabit?.salt?.level === "danger" || r.foodHabit?.salt?.level === "risk" || r.sodium?.includes("เค็มประจำ")) saltCount++;
+      if (r.foodHabit?.sweet?.level === "เสี่ยงสูงมาก" || r.foodHabit?.sweet?.level === "เสี่ยงสูง") sweetCount++;
+      if (r.foodHabit?.fat?.level === "เสี่ยงสูงมาก" || r.foodHabit?.fat?.level === "เสี่ยงสูง") fatCount++;
+      if (r.foodHabit?.salt?.level === "เสี่ยงสูงมาก" || r.foodHabit?.salt?.level === "เสี่ยงสูง" || r.sodium?.includes("เค็มประจำ")) saltCount++;
 
       // BMI Calculator
       const bmiVal = parseFloat(r.bmi);

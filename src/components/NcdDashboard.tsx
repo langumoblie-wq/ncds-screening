@@ -571,23 +571,24 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
       else dmNormal++;
 
       // Lifestyle risks tallies
-      if (r.smoking?.includes("สูบอยู่")) smokeCount++;
+      const isSmoke = r.smoking?.includes("สูบอยู่") || r.smoking?.includes("ประจำ");
+      if (isSmoke) smokeCount++;
       
       const isAlcohol = r.alcohol?.includes("ประจำ") || r.alcohol?.includes("ครั้งคราว");
       if (isAlcohol) alcoholCount++;
       
-      if (r.exercise?.includes("ไม่ออก")) noExerciseCount++;
-      if (r.sleep?.includes("น้อยกว่า 6")) poorSleepCount++;
+      if (r.exercise?.includes("ไม่ออก") || r.exercise?.includes("นั่งนิ่ง")) noExerciseCount++;
+      if (r.sleep?.includes("น้อยกว่า 6") || r.sleep?.includes("ไม่เพียงพอ")) poorSleepCount++;
 
-      const hasSweetRisk = r.foodHabit?.sweet?.level === "danger" || r.foodHabit?.sweet?.level === "risk";
-      const hasFatRisk = r.foodHabit?.fat?.level === "danger" || r.foodHabit?.fat?.level === "risk";
-      const hasSaltRisk = r.foodHabit?.salt?.level === "danger" || r.foodHabit?.salt?.level === "risk" || r.sodium?.includes("เค็มประจำ") || r.sodium?.includes("ปานกลาง");
+      const hasSweetRisk = r.foodHabit?.sweet?.level === "เสี่ยงสูงมาก" || r.foodHabit?.sweet?.level === "เสี่ยงสูง";
+      const hasFatRisk = r.foodHabit?.fat?.level === "เสี่ยงสูงมาก" || r.foodHabit?.fat?.level === "เสี่ยงสูง";
+      const hasSaltRisk = r.foodHabit?.salt?.level === "เสี่ยงสูงมาก" || r.foodHabit?.salt?.level === "เสี่ยงสูง" || r.sodium?.includes("เค็มประจำ");
 
       if (hasSweetRisk) foodSweetCount++;
       if (hasFatRisk) foodFatCount++;
       if (hasSaltRisk) foodSaltCount++;
       
-      if (hasSweetRisk || hasFatRisk || r.sodium?.includes("เค็มประจำ") || r.foodHabit?.salt?.level === "danger") {
+      if (hasSweetRisk || hasFatRisk || r.sodium?.includes("เค็มประจำ") || r.foodHabit?.salt?.level === "เสี่ยงสูงมาก" || r.foodHabit?.salt?.level === "เสี่ยงสูง") {
         foodAnyRiskCount++;
       }
     });
@@ -639,7 +640,7 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
     const behaviors = [
       { name: "การรับประทานรสหวานจัด (อ.อาหาร)", count: stats.lifestyle.foodSweetCount, pct: Math.round((stats.lifestyle.foodSweetCount / total) * 100) },
       { name: "การรับประทานอาหารทอด/ไขมันสูง (อ.อาหาร)", count: stats.lifestyle.foodFatCount, pct: Math.round((stats.lifestyle.foodFatCount / total) * 100) },
-      { name: "การรับประทานเค็มจัด/ปรุงรสเค็ม (อ.อาหาร)", count: stats.lifestyle.foodSaltCount, pct: Math.round((stats.lifestyle.foodSaltCount / total) * 150) }, // fallback multiplier check or raw pct
+      { name: "การรับประทานเค็มจัด/ปรุงรสเค็ม (อ.อาหาร)", count: stats.lifestyle.foodSaltCount, pct: Math.round((stats.lifestyle.foodSaltCount / total) * 100) },
       { name: "การขาดการออกกำลังกาย (อ.ออกกำลังกาย)", count: stats.lifestyle.noExerciseCount, pct: Math.round((stats.lifestyle.noExerciseCount / total) * 100) },
       { name: "การนอนหลับพักผ่อนไม่เพียงพอ (อ.อารมณ์)", count: stats.lifestyle.poorSleepCount, pct: Math.round((stats.lifestyle.poorSleepCount / total) * 100) },
       { name: "การสูบบุหรี่ประจำ (ส.สูบ)", count: stats.lifestyle.smokeCount, pct: Math.round((stats.lifestyle.smokeCount / total) * 100) },

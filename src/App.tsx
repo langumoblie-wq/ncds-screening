@@ -467,6 +467,7 @@ export default function App() {
           <RecordModal 
             isAdmin={isAdmin}
             record={selectedRecord}
+            allRecords={records}
             onClose={() => setSelectedRecord(null)}
             onUpdateRecord={handleUpdateRecord}
             onDeleteRecord={handleDeleteRecord}
