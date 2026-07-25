@@ -700,8 +700,6 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
       }
     });
 
-    const bmiOverweightTotal = stats.bmiStats.overweight + stats.bmiStats.obese1 + stats.bmiStats.obese2;
-    const bmiOverweightPct = Math.round((bmiOverweightTotal / total) * 100);
 
     return {
       total,
