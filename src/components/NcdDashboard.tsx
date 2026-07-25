@@ -18,6 +18,66 @@ interface NcdDashboardProps {
   onImportRecords?: (records: ScreeningRecord[]) => void;
 }
 
+
+
+const MultiSelectDropdown = ({ options, selected, onChange, placeholder, disabled = false, labelKey = (v: string) => v }: { options: string[], selected: string[], onChange: (val: string[]) => void, placeholder: string, disabled?: boolean, labelKey?: (v: string) => string }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <div 
+        className={`w-full text-xs border border-slate-300 rounded-xl px-3 py-2.5 bg-white outline-none cursor-pointer flex justify-between items-center ${disabled ? 'bg-slate-50 text-slate-400' : 'text-slate-700 font-semibold'}`}
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+      >
+        <div className="truncate pr-2">
+          {selected.length === 0 ? placeholder : selected.map(labelKey).join(', ')}
+        </div>
+        <ChevronDown className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </div>
+      {isOpen && !disabled && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+          {options.length > 0 && (
+            <div 
+              className="px-3 py-2 text-xs border-b border-slate-100 hover:bg-slate-50 cursor-pointer text-slate-500 font-bold"
+              onClick={() => { onChange([]); setIsOpen(false); }}
+            >
+              ล้างตัวเลือก
+            </div>
+          )}
+          {options.map(opt => (
+            <label key={opt} className="flex items-center px-3 py-2 hover:bg-slate-50 cursor-pointer text-xs font-medium text-slate-700">
+              <input 
+                type="checkbox" 
+                className="mr-2 rounded text-blue-600 focus:ring-blue-500"
+                checked={selected.includes(opt)}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    onChange([...selected, opt]);
+                  } else {
+                    onChange(selected.filter(s => s !== opt));
+                  }
+                }}
+              />
+              {labelKey(opt)}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // Reusable custom circular progress gauge
 const BMIDoughnut: React.FC<{
   underweight: number;
@@ -28,79 +88,98 @@ const BMIDoughnut: React.FC<{
   title: string;
 }> = ({ underweight, normal, overweight, obese1, obese2, title }) => {
   const total = underweight + normal + overweight + obese1 + obese2;
-
   const pctUW = total > 0 ? (underweight / total) * 100 : 0;
   const pctN = total > 0 ? (normal / total) * 100 : 0;
   const pctOW = total > 0 ? (overweight / total) * 100 : 0;
   const pctOB1 = total > 0 ? (obese1 / total) * 100 : 0;
   const pctOB2 = total > 0 ? (obese2 / total) * 100 : 0;
-
   const size = 160;
   const strokeWidth = 14;
   const center = size / 2;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
-
   const dasharray = circumference;
-  const offsetUW = circumference;
-  const offsetN = offsetUW - (pctUW / 100) * circumference;
-  const offsetOW = offsetN - (pctN / 100) * circumference;
-  const offsetOB1 = offsetOW - (pctOW / 100) * circumference;
-  const offsetOB2 = offsetOB1 - (pctOB1 / 100) * circumference;
-
   return (
-    <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex flex-col items-center justify-between">
-      <h3 className="text-sm font-black text-slate-800 text-center uppercase tracking-wider mb-2">{title}</h3>
-      <div className="relative w-40 h-40">
-        <svg width={size} height={size} className="-rotate-90 transform">
-          <circle cx={center} cy={center} r={radius} fill="transparent" stroke="#f1f5f9" strokeWidth={strokeWidth} />
-          <circle cx={center} cy={center} r={radius} fill="transparent" stroke="#8b5cf6" strokeWidth={strokeWidth} strokeDasharray={dasharray} strokeDashoffset={offsetOB2} className="transition-all duration-1000 ease-out" />
-          <circle cx={center} cy={center} r={radius} fill="transparent" stroke="#f43f5e" strokeWidth={strokeWidth} strokeDasharray={dasharray} strokeDashoffset={offsetOB1} className="transition-all duration-1000 ease-out" />
-          <circle cx={center} cy={center} r={radius} fill="transparent" stroke="#f59e0b" strokeWidth={strokeWidth} strokeDasharray={dasharray} strokeDashoffset={offsetOW} className="transition-all duration-1000 ease-out" />
-          <circle cx={center} cy={center} r={radius} fill="transparent" stroke="#10b981" strokeWidth={strokeWidth} strokeDasharray={dasharray} strokeDashoffset={offsetN} className="transition-all duration-1000 ease-out" />
-          <circle cx={center} cy={center} r={radius} fill="transparent" stroke="#3b82f6" strokeWidth={strokeWidth} strokeDasharray={dasharray} strokeDashoffset={offsetUW} className="transition-all duration-1000 ease-out" />
-        </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">ทั้งหมด</span>
-          <span className="text-2xl font-black text-slate-800 leading-none">{total}</span>
+    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col items-center">
+      <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center mb-4">{title}</h4>
+      {total === 0 ? (
+        <div className="h-[160px] flex flex-col items-center justify-center text-slate-400 text-xs text-center space-y-1">
+          <EyeOff className="w-8 h-8 text-slate-300" />
+          <p>ไม่มีข้อมูลแสดงผล</p>
         </div>
-      </div>
-      <div className="w-full space-y-1.5 mt-3">
-        <div className="flex justify-between items-center text-[10px]">
-          <div className="flex items-center gap-1.5 font-semibold text-slate-600">
-            <div className="w-2.5 h-2.5 rounded-full bg-blue-500"></div> ผอม
+      ) : (
+        <div className="flex flex-col sm:flex-row items-center gap-6 w-full justify-center">
+          <div className="relative w-[160px] h-[160px] shrink-0">
+            <svg width={size} height={size} className="-rotate-90 transform">
+              <circle cx={center} cy={center} r={radius} fill="transparent" stroke="#f1f5f9" strokeWidth={strokeWidth} />
+              {pctUW > 0 && <circle cx={center} cy={center} r={radius} fill="transparent" stroke="#3b82f6" strokeWidth={strokeWidth} strokeDasharray={dasharray} strokeDashoffset={circumference - (circumference * pctUW) / 100} />}
+              {pctN > 0 && <circle cx={center} cy={center} r={radius} fill="transparent" stroke="#10b981" strokeWidth={strokeWidth} strokeDasharray={dasharray} strokeDashoffset={circumference - (circumference * pctN) / 100} style={{ transform: `rotate(${pctUW * 3.6}deg)`, transformOrigin: "center" }} />}
+              {pctOW > 0 && <circle cx={center} cy={center} r={radius} fill="transparent" stroke="#f59e0b" strokeWidth={strokeWidth} strokeDasharray={dasharray} strokeDashoffset={circumference - (circumference * pctOW) / 100} style={{ transform: `rotate(${(pctUW + pctN) * 3.6}deg)`, transformOrigin: "center" }} />}
+              {pctOB1 > 0 && <circle cx={center} cy={center} r={radius} fill="transparent" stroke="#f43f5e" strokeWidth={strokeWidth} strokeDasharray={dasharray} strokeDashoffset={circumference - (circumference * pctOB1) / 100} style={{ transform: `rotate(${(pctUW + pctN + pctOW) * 3.6}deg)`, transformOrigin: "center" }} />}
+              {pctOB2 > 0 && <circle cx={center} cy={center} r={radius} fill="transparent" stroke="#8b5cf6" strokeWidth={strokeWidth} strokeDasharray={dasharray} strokeDashoffset={circumference - (circumference * pctOB2) / 100} style={{ transform: `rotate(${(pctUW + pctN + pctOW + pctOB1) * 3.6}deg)`, transformOrigin: "center" }} />}
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-2xl font-black text-slate-800">{total}</span>
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">เคสทั้งหมด</span>
+            </div>
           </div>
-          <span className="font-black text-slate-800">{underweight} <span className="text-slate-400 font-semibold">({Math.round(pctUW)}%)</span></span>
-        </div>
-        <div className="flex justify-between items-center text-[10px]">
-          <div className="flex items-center gap-1.5 font-semibold text-slate-600">
-            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500"></div> ปกติ
+          <div className="space-y-3 w-full max-w-[140px]">
+            <div className="flex justify-between items-start text-xs">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 bg-blue-500 rounded-full" />
+                <span className="text-slate-600 font-medium whitespace-nowrap">ผอม</span>
+              </div>
+              <div className="flex flex-col items-end">
+                <span className="font-bold text-slate-800 whitespace-nowrap">{underweight} ราย</span>
+                <span className="text-[10px] font-semibold text-slate-500">({Math.round(pctUW)}%)</span>
+              </div>
+            </div>
+            <div className="flex justify-between items-start text-xs">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full" />
+                <span className="text-slate-600 font-medium whitespace-nowrap">ปกติ</span>
+              </div>
+              <div className="flex flex-col items-end">
+                <span className="font-bold text-slate-800 whitespace-nowrap">{normal} ราย</span>
+                <span className="text-[10px] font-semibold text-slate-500">({Math.round(pctN)}%)</span>
+              </div>
+            </div>
+            <div className="flex justify-between items-start text-xs">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 bg-amber-500 rounded-full" />
+                <span className="text-slate-600 font-medium whitespace-nowrap">ท้วม</span>
+              </div>
+              <div className="flex flex-col items-end">
+                <span className="font-bold text-slate-800 whitespace-nowrap">{overweight} ราย</span>
+                <span className="text-[10px] font-semibold text-slate-500">({Math.round(pctOW)}%)</span>
+              </div>
+            </div>
+            <div className="flex justify-between items-start text-xs">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 bg-rose-500 rounded-full" />
+                <span className="text-slate-600 font-medium whitespace-nowrap">อ้วน</span>
+              </div>
+              <div className="flex flex-col items-end">
+                <span className="font-bold text-slate-800 whitespace-nowrap">{obese1} ราย</span>
+                <span className="text-[10px] font-semibold text-slate-500">({Math.round(pctOB1)}%)</span>
+              </div>
+            </div>
+            <div className="flex justify-between items-start text-xs">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 bg-purple-500 rounded-full" />
+                <span className="text-slate-600 font-medium whitespace-nowrap">อ้วนมาก</span>
+              </div>
+              <div className="flex flex-col items-end">
+                <span className="font-bold text-slate-800 whitespace-nowrap">{obese2} ราย</span>
+                <span className="text-[10px] font-semibold text-slate-500">({Math.round(pctOB2)}%)</span>
+              </div>
+            </div>
           </div>
-          <span className="font-black text-slate-800">{normal} <span className="text-slate-400 font-semibold">({Math.round(pctN)}%)</span></span>
         </div>
-        <div className="flex justify-between items-center text-[10px]">
-          <div className="flex items-center gap-1.5 font-semibold text-slate-600">
-            <div className="w-2.5 h-2.5 rounded-full bg-amber-500"></div> ท้วม
-          </div>
-          <span className="font-black text-slate-800">{overweight} <span className="text-slate-400 font-semibold">({Math.round(pctOW)}%)</span></span>
-        </div>
-        <div className="flex justify-between items-center text-[10px]">
-          <div className="flex items-center gap-1.5 font-semibold text-slate-600">
-            <div className="w-2.5 h-2.5 rounded-full bg-rose-500"></div> อ้วน
-          </div>
-          <span className="font-black text-slate-800">{obese1} <span className="text-slate-400 font-semibold">({Math.round(pctOB1)}%)</span></span>
-        </div>
-        <div className="flex justify-between items-center text-[10px]">
-          <div className="flex items-center gap-1.5 font-semibold text-slate-600">
-            <div className="w-2.5 h-2.5 rounded-full bg-purple-500"></div> อ้วนมาก
-          </div>
-          <span className="font-black text-slate-800">{obese2} <span className="text-slate-400 font-semibold">({Math.round(pctOB2)}%)</span></span>
-        </div>
-      </div>
+      )}
     </div>
   );
 };
-
 const RiskDoughnut: React.FC<{
   normal: number;
   risk: number;
@@ -163,7 +242,6 @@ const RiskDoughnut: React.FC<{
                   strokeDashoffset={circumference - (circumference * pctNormal) / 100}
                 />
               )}
-
               {/* Risk Segment */}
               {pctRisk > 0 && (
                 <circle
@@ -178,7 +256,6 @@ const RiskDoughnut: React.FC<{
                   style={{ transform: `rotate(${pctNormal * 3.6}deg)`, transformOrigin: "center" }}
                 />
               )}
-
               {/* Danger Segment */}
               {pctDanger > 0 && (
                 <circle
@@ -194,7 +271,6 @@ const RiskDoughnut: React.FC<{
                 />
               )}
             </svg>
-
             {/* Inner Content */}
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <span className="text-2xl font-black text-slate-800">{total}</span>
@@ -203,38 +279,45 @@ const RiskDoughnut: React.FC<{
           </div>
 
           {/* Legend Table */}
-          <div className="space-y-2 w-full max-w-[140px]">
-            <div className="flex justify-between items-center text-xs">
+          <div className="space-y-3 w-full max-w-[140px]">
+            <div className="flex justify-between items-start text-xs">
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full" />
-                <span className="text-slate-600 font-medium">ปกติ</span>
+                <span className="text-slate-600 font-medium whitespace-nowrap">ปกติ</span>
               </div>
-              <span className="font-bold text-slate-800">{normal} ราย ({pctNormal}%)</span>
+              <div className="flex flex-col items-end">
+                <span className="font-bold text-slate-800 whitespace-nowrap">{normal} ราย</span>
+                <span className="text-[10px] font-semibold text-slate-500">({pctNormal}%)</span>
+              </div>
             </div>
             
-            <div className="flex justify-between items-center text-xs">
+            <div className="flex justify-between items-start text-xs">
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 bg-amber-500 rounded-full" />
-                <span className="text-slate-600 font-medium">กลุ่มเสี่ยง</span>
+                <span className="text-slate-600 font-medium whitespace-nowrap">กลุ่มเสี่ยง</span>
               </div>
-              <span className="font-bold text-slate-800">{risk} ราย ({pctRisk}%)</span>
+              <div className="flex flex-col items-end">
+                <span className="font-bold text-slate-800 whitespace-nowrap">{risk} ราย</span>
+                <span className="text-[10px] font-semibold text-slate-500">({pctRisk}%)</span>
+              </div>
             </div>
 
-            <div className="flex justify-between items-center text-xs">
+            <div className="flex justify-between items-start text-xs">
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 bg-red-500 rounded-full" />
-                <span className="text-slate-600 font-medium">สงสัยป่วย</span>
+                <span className="text-slate-600 font-medium whitespace-nowrap">สงสัยป่วย</span>
               </div>
-              <span className="font-bold text-slate-800">{danger} ราย ({pctDanger}%)</span>
+              <div className="flex flex-col items-end">
+                <span className="font-bold text-slate-800 whitespace-nowrap">{danger} ราย</span>
+                <span className="text-[10px] font-semibold text-slate-500">({pctDanger}%)</span>
+              </div>
             </div>
           </div>
-
         </div>
       )}
     </div>
   );
 };
-
 const LifestyleBehaviors3O2S: React.FC<{
   smokeCount: number;
   alcoholCount: number;
@@ -468,12 +551,13 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
   
   // Filters state
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterModel, setFilterModel] = useState<"หมู่บ้าน" | "ตำบล" | "">("");
-  const [filterDistrict, setFilterDistrict] = useState<string>("");
-  const [filterSubdistrict, setFilterSubdistrict] = useState<string>("");
-  const [filterTargetArea, setFilterTargetArea] = useState<string>("");
-  const [filterRiskLevel, setFilterRiskLevel] = useState<string>("");
-  const [filterBehaviorRisk, setFilterBehaviorRisk] = useState<string>("");
+  const [filterModel, setFilterModel] = useState<string[]>([]);
+  const [filterDistrict, setFilterDistrict] = useState<string[]>([]);
+  const [filterSubdistrict, setFilterSubdistrict] = useState<string[]>([]);
+  const [filterTargetArea, setFilterTargetArea] = useState<string[]>([]);
+  const [filterHtRisk, setFilterHtRisk] = useState<string[]>([]);
+  const [filterDmRisk, setFilterDmRisk] = useState<string[]>([]);
+  const [filterBehaviorRisk, setFilterBehaviorRisk] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<"date" | "name" | "age" | "bmi">("date");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
@@ -488,55 +572,57 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
 
   // Cascading dropdown updates for filters
   useEffect(() => {
-    setFilterDistrict("");
-    setFilterSubdistrict("");
-    setFilterTargetArea("");
+    setFilterDistrict([]);
+    setFilterSubdistrict([]);
+    setFilterTargetArea([]);
   }, [filterModel]);
 
   useEffect(() => {
-    setFilterSubdistrict("");
-    setFilterTargetArea("");
+    setFilterSubdistrict([]);
+    setFilterTargetArea([]);
   }, [filterDistrict]);
 
   useEffect(() => {
-    setFilterTargetArea("");
+    setFilterTargetArea([]);
   }, [filterSubdistrict]);
 
   // Dynamic options for filters
   const availableDistricts = useMemo(() => {
-    if (filterModel) {
-      return Object.keys(LOCATION_DATA[filterModel]) as DistrictType[];
-    }
+    const models = filterModel.length > 0 ? filterModel : ["หมู่บ้าน", "ตำบล"];
     const districtsSet = new Set<string>();
-    Object.keys(LOCATION_DATA["หมู่บ้าน"]).forEach(d => districtsSet.add(d));
-    Object.keys(LOCATION_DATA["ตำบล"]).forEach(d => districtsSet.add(d));
+    models.forEach(model => {
+      if (LOCATION_DATA[model as keyof typeof LOCATION_DATA]) {
+        Object.keys(LOCATION_DATA[model as keyof typeof LOCATION_DATA]).forEach(d => districtsSet.add(d));
+      }
+    });
     return Array.from(districtsSet) as DistrictType[];
   }, [filterModel]);
 
   const availableSubdistricts = useMemo(() => {
-    if (!filterDistrict) return [];
-    if (filterModel) {
-      const subdistMap = (LOCATION_DATA[filterModel] as any)?.[filterDistrict] || {};
-      return Object.keys(subdistMap);
-    }
+    if (filterDistrict.length === 0) return [];
+    const models = filterModel.length > 0 ? filterModel : ["หมู่บ้าน", "ตำบล"];
     const subdistSet = new Set<string>();
-    const mbSubdists = (LOCATION_DATA["หมู่บ้าน"] as any)?.[filterDistrict] || {};
-    const tbSubdists = (LOCATION_DATA["ตำบล"] as any)?.[filterDistrict] || {};
-    Object.keys(mbSubdists).forEach(s => subdistSet.add(s));
-    Object.keys(tbSubdists).forEach(s => subdistSet.add(s));
+    models.forEach(model => {
+      filterDistrict.forEach(district => {
+        const subdistMap = (LOCATION_DATA[model as keyof typeof LOCATION_DATA] as any)?.[district] || {};
+        Object.keys(subdistMap).forEach(s => subdistSet.add(s));
+      });
+    });
     return Array.from(subdistSet);
   }, [filterModel, filterDistrict]);
 
   const availableTargetAreas = useMemo(() => {
-    if (!filterDistrict || !filterSubdistrict) return [];
-    if (filterModel) {
-      return (LOCATION_DATA[filterModel] as any)?.[filterDistrict]?.[filterSubdistrict] || [];
-    }
+    if (filterDistrict.length === 0 || filterSubdistrict.length === 0) return [];
+    const models = filterModel.length > 0 ? filterModel : ["หมู่บ้าน", "ตำบล"];
     const areaSet = new Set<string>();
-    const mbAreas = (LOCATION_DATA["หมู่บ้าน"] as any)?.[filterDistrict]?.[filterSubdistrict] || [];
-    const tbAreas = (LOCATION_DATA["ตำบล"] as any)?.[filterDistrict]?.[filterSubdistrict] || [];
-    mbAreas.forEach((a: string) => areaSet.add(a));
-    tbAreas.forEach((a: string) => areaSet.add(a));
+    models.forEach(model => {
+      filterDistrict.forEach(district => {
+        filterSubdistrict.forEach(subdist => {
+          const areas = (LOCATION_DATA[model as keyof typeof LOCATION_DATA] as any)?.[district]?.[subdist] || [];
+          areas.forEach((a: string) => areaSet.add(a));
+        });
+      });
+    });
     return Array.from(areaSet);
   }, [filterModel, filterDistrict, filterSubdistrict]);
 
@@ -560,46 +646,46 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
             recordModel = "ตำบล";
           }
         }
-        const matchesModel = filterModel ? recordModel === filterModel : true;
+        const matchesModel = filterModel.length > 0 ? filterModel.includes(recordModel) : true;
 
         // District filter
-        const matchesDistrict = filterDistrict ? r.district === filterDistrict : true;
+        const matchesDistrict = filterDistrict.length > 0 ? filterDistrict.includes(r.district) : true;
 
         // Subdistrict filter
-        const matchesSubdistrict = filterSubdistrict ? r.subdistrict === filterSubdistrict : true;
+        const matchesSubdistrict = filterSubdistrict.length > 0 ? filterSubdistrict.includes(r.subdistrict) : true;
 
         // Target Area filter
-        const matchesTargetArea = filterTargetArea ? r.targetArea === filterTargetArea : true;
+        const matchesTargetArea = filterTargetArea.length > 0 ? filterTargetArea.includes(r.targetArea) : true;
 
         // Risk Level filter
         let rLevel = "normal";
         const htLevel = r.htResult?.level || "normal";
         const dmLevel = r.dmResult?.level || "normal";
-        if (htLevel === "danger" || dmLevel === "danger") {
-          rLevel = "danger";
-        } else if (htLevel === "risk" || dmLevel === "risk") {
-          rLevel = "risk";
-        }
-
-        const matchesRisk = filterRiskLevel ? rLevel === filterRiskLevel : true;
+        
+        const matchesHtRisk = filterHtRisk.length > 0 ? filterHtRisk.includes(htLevel) : true;
+        const matchesDmRisk = filterDmRisk.length > 0 ? filterDmRisk.includes(dmLevel) : true;
+        const matchesRisk = matchesHtRisk && matchesDmRisk;
 
         // Behavior Risk Filter (3อ. 2ส.)
         let matchesBehavior = true;
-        if (filterBehaviorRisk) {
-          if (filterBehaviorRisk === "food") {
-            matchesBehavior = (r.foodHabit?.sweet?.level === "เสี่ยงสูงมาก" || r.foodHabit?.sweet?.level === "เสี่ยงสูง" || r.foodHabit?.fat?.level === "เสี่ยงสูงมาก" || r.foodHabit?.fat?.level === "เสี่ยงสูง" || r.foodHabit?.salt?.level === "เสี่ยงสูงมาก" || r.foodHabit?.salt?.level === "เสี่ยงสูง" || r.sodium?.includes("เค็มประจำ"));
-          } else if (filterBehaviorRisk === "exercise") {
-            matchesBehavior = (r.exercise?.includes("ไม่ออก") || r.exercise?.includes("นั่งนิ่ง"));
-          } else if (filterBehaviorRisk === "sleep") {
-            matchesBehavior = (r.sleep?.includes("น้อยกว่า 6") || r.sleep?.includes("ไม่เพียงพอ"));
-          } else if (filterBehaviorRisk === "smoking") {
-            matchesBehavior = (r.smoking?.includes("สูบอยู่") || r.smoking?.includes("ประจำ"));
-          } else if (filterBehaviorRisk === "alcohol") {
-            matchesBehavior = (r.alcohol?.includes("ประจำ") || r.alcohol?.includes("ครั้งคราว"));
-          } else if (filterBehaviorRisk === "bmi_risk") {
-            const b = parseFloat(r.bmi);
-            matchesBehavior = (!isNaN(b) && b >= 23.0);
-          }
+        if (filterBehaviorRisk.length > 0) {
+          matchesBehavior = filterBehaviorRisk.some(riskType => {
+            if (riskType === "food") {
+              return (r.foodHabit?.sweet?.level === "เสี่ยงสูงมาก" || r.foodHabit?.sweet?.level === "เสี่ยงสูง" || r.foodHabit?.fat?.level === "เสี่ยงสูงมาก" || r.foodHabit?.fat?.level === "เสี่ยงสูง" || r.foodHabit?.salt?.level === "เสี่ยงสูงมาก" || r.foodHabit?.salt?.level === "เสี่ยงสูง" || r.sodium?.includes("เค็มประจำ"));
+            } else if (riskType === "exercise") {
+              return (r.exercise?.includes("ไม่ออก") || r.exercise?.includes("นั่งนิ่ง"));
+            } else if (riskType === "sleep") {
+              return (r.sleep?.includes("น้อยกว่า 6") || r.sleep?.includes("ไม่เพียงพอ"));
+            } else if (riskType === "smoking") {
+              return (r.smoking?.includes("สูบอยู่") || r.smoking?.includes("ประจำ"));
+            } else if (riskType === "alcohol") {
+              return (r.alcohol?.includes("ประจำ") || r.alcohol?.includes("ครั้งคราว"));
+            } else if (riskType === "bmi_risk") {
+              const b = parseFloat(r.bmi);
+              return (!isNaN(b) && b >= 23.0);
+            }
+            return false;
+          });
         }
 
         return matchesSearch && matchesModel && matchesDistrict && matchesSubdistrict && matchesTargetArea && matchesRisk && matchesBehavior;
@@ -623,7 +709,7 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
         if (valA > valB) return sortOrder === "asc" ? 1 : -1;
         return 0;
       });
-  }, [records, searchTerm, filterModel, filterDistrict, filterSubdistrict, filterTargetArea, filterRiskLevel, filterBehaviorRisk, sortBy, sortOrder]);
+  }, [records, searchTerm, filterModel, filterDistrict, filterSubdistrict, filterTargetArea, filterHtRisk, filterDmRisk, filterBehaviorRisk, sortBy, sortOrder]);
 
   // Stat computations based on filteredRecords
   const stats = useMemo(() => {
@@ -694,6 +780,16 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
       if (hasSweetRisk) foodSweetCount++;
       if (hasFatRisk) foodFatCount++;
       if (hasSaltRisk) foodSaltCount++;
+
+      // BMI breakdown
+      const bmiVal = parseFloat(r.bmi);
+      if (!isNaN(bmiVal) && bmiVal > 0) {
+        if (bmiVal < 18.5) bmiUnderweight++;
+        else if (bmiVal < 23.0) bmiNormal++;
+        else if (bmiVal < 25.0) bmiOverweight++;
+        else if (bmiVal < 30.0) bmiObese1++;
+        else bmiObese2++;
+      }
       
       if (hasSweetRisk || hasFatRisk || r.sodium?.includes("เค็มประจำ") || r.foodHabit?.salt?.level === "เสี่ยงสูงมาก" || r.foodHabit?.salt?.level === "เสี่ยงสูง") {
         foodAnyRiskCount++;
@@ -914,13 +1010,13 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
             </div>
           </div>
           {/* Quick Clear Filter Button if any selected */}
-          {(filterModel || filterDistrict || filterSubdistrict || filterTargetArea) && (
+          {(filterModel.length > 0 || filterDistrict.length > 0 || filterSubdistrict.length > 0 || filterTargetArea.length > 0) && (
             <button 
               onClick={() => {
-                setFilterModel("");
-                setFilterDistrict("");
-                setFilterSubdistrict("");
-                setFilterTargetArea("");
+                setFilterModel([]);
+                setFilterDistrict([]);
+                setFilterSubdistrict([]);
+                setFilterTargetArea([]);
               }}
               className="text-[10px] font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-2.5 py-1.5 rounded-lg self-start sm:self-center transition-colors"
             >
@@ -934,62 +1030,49 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
           {/* 1. Model Filter */}
           <div className="space-y-1">
             <label className="block text-[10px] font-bold text-slate-400">โมเดล</label>
-            <select 
-              value={filterModel} 
-              onChange={(e) => setFilterModel(e.target.value as any)}
-              className="w-full text-xs border border-slate-300 rounded-xl px-3 py-2.5 bg-white outline-none focus:ring-2 focus:ring-blue-500 font-semibold text-slate-700"
-            >
-              <option value="">ทั้งหมด (หมู่บ้าน / ตำบล)</option>
-              <option value="หมู่บ้าน">หมู่บ้าน</option>
-              <option value="ตำบล">ตำบล</option>
-            </select>
+            <MultiSelectDropdown 
+              options={["หมู่บ้าน", "ตำบล"]}
+              selected={filterModel}
+              onChange={setFilterModel}
+              placeholder="ทั้งหมด (หมู่บ้าน / ตำบล)"
+            />
           </div>
 
           {/* 2. District Filter */}
           <div className="space-y-1">
             <label className="block text-[10px] font-bold text-slate-400">อำเภอ</label>
-            <select 
-              value={filterDistrict} 
-              onChange={(e) => setFilterDistrict(e.target.value)}
-              className="w-full text-xs border border-slate-300 rounded-xl px-3 py-2.5 bg-white outline-none focus:ring-2 focus:ring-blue-500 font-semibold text-slate-700"
-            >
-              <option value="">ทุกอำเภอ</option>
-              {availableDistricts.map((dist) => (
-                <option key={dist} value={dist}>อ.{dist}</option>
-              ))}
-            </select>
+            <MultiSelectDropdown 
+              options={availableDistricts}
+              selected={filterDistrict}
+              onChange={setFilterDistrict}
+              placeholder="ทุกอำเภอ"
+              labelKey={(v) => `อ.${v}`}
+            />
           </div>
 
           {/* 3. Subdistrict Filter */}
           <div className="space-y-1">
             <label className="block text-[10px] font-bold text-slate-400">ตำบล</label>
-            <select 
-              value={filterSubdistrict} 
-              onChange={(e) => setFilterSubdistrict(e.target.value)}
-              disabled={!filterDistrict}
-              className="w-full text-xs border border-slate-300 rounded-xl px-3 py-2.5 bg-white outline-none focus:ring-2 focus:ring-blue-500 font-semibold text-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
-            >
-              <option value="">{filterDistrict ? "ทุกตำบล" : "โปรดเลือกอำเภอก่อน"}</option>
-              {availableSubdistricts.map((sub, idx) => (
-                <option key={idx} value={sub}>ต.{sub}</option>
-              ))}
-            </select>
+            <MultiSelectDropdown 
+              options={availableSubdistricts}
+              selected={filterSubdistrict}
+              onChange={setFilterSubdistrict}
+              placeholder={filterDistrict.length > 0 ? "ทุกตำบล" : "โปรดเลือกอำเภอก่อน"}
+              disabled={filterDistrict.length === 0}
+              labelKey={(v) => `ต.${v}`}
+            />
           </div>
 
           {/* 4. Target Area Filter */}
           <div className="space-y-1">
             <label className="block text-[10px] font-bold text-slate-400">พื้นที่เป้าหมาย / หมู่บ้าน</label>
-            <select 
-              value={filterTargetArea} 
-              onChange={(e) => setFilterTargetArea(e.target.value)}
-              disabled={!filterSubdistrict}
-              className="w-full text-xs border border-slate-300 rounded-xl px-3 py-2.5 bg-white outline-none focus:ring-2 focus:ring-blue-500 font-semibold text-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
-            >
-              <option value="">{filterSubdistrict ? "ทุกพื้นที่เป้าหมาย" : "โปรดเลือกตำบลก่อน"}</option>
-              {availableTargetAreas.map((area, idx) => (
-                <option key={idx} value={area}>{area}</option>
-              ))}
-            </select>
+            <MultiSelectDropdown 
+              options={availableTargetAreas}
+              selected={filterTargetArea}
+              onChange={setFilterTargetArea}
+              placeholder={filterSubdistrict.length > 0 ? "ทุกพื้นที่เป้าหมาย" : "โปรดเลือกตำบลก่อน"}
+              disabled={filterSubdistrict.length === 0}
+            />
           </div>
 
         </div>
@@ -1369,31 +1452,67 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
           </div>
 
           {/* Behavior Risk Selector (3อ. 2ส.) */}
-          <select 
-            value={filterBehaviorRisk} 
-            onChange={(e) => setFilterBehaviorRisk(e.target.value)}
-            className="text-xs border border-slate-300 rounded-xl px-3 py-3 bg-white outline-none focus:ring-2 focus:ring-blue-500 shrink-0 font-semibold text-slate-700"
-          >
-            <option value="">แสดงทุกพฤติกรรมเสี่ยง</option>
-            <option value="food">อาหาร (กินหวาน/มัน/เค็มจัด)</option>
-            <option value="exercise">การออกกำลังกาย (ไม่ออกเลย)</option>
-            <option value="sleep">การนอนหลับ (พักผ่อนไม่เพียงพอ)</option>
-            <option value="smoking">สูบบุหรี่ (ยังสูบอยู่)</option>
-            <option value="alcohol">ดื่มแอลกอฮอล์ (ดื่มเป็นประจำ/ครั้งคราว)</option>
-            <option value="bmi_risk">ดัชนีมวลกาย (BMI ท้วม/อ้วนขึ้นไป)</option>
-          </select>
+          <div className="w-56 shrink-0">
+            <MultiSelectDropdown 
+              options={["food", "exercise", "sleep", "smoking", "alcohol", "bmi_risk"]}
+              selected={filterBehaviorRisk}
+              onChange={setFilterBehaviorRisk}
+              placeholder="แสดงทุกพฤติกรรมเสี่ยง"
+              labelKey={(v) => {
+                const map: Record<string, string> = {
+                  food: "อาหาร (กินหวาน/มัน/เค็มจัด)",
+                  exercise: "การออกกำลังกาย (ไม่ออกเลย)",
+                  sleep: "การนอนหลับ (พักผ่อนไม่เพียงพอ)",
+                  smoking: "สูบบุหรี่ (ยังสูบอยู่)",
+                  alcohol: "ดื่มแอลกอฮอล์ (ดื่มเป็นประจำ/ครั้งคราว)",
+                  bmi_risk: "ดัชนีมวลกาย (BMI ท้วม/อ้วนขึ้นไป)"
+                };
+                return map[v] || v;
+              }}
+            />
+          </div>
 
           {/* Risk Level Selector */}
-          <select 
-            value={filterRiskLevel} 
-            onChange={(e) => setFilterRiskLevel(e.target.value)}
-            className="text-xs border border-slate-300 rounded-xl px-3 py-3 bg-white outline-none focus:ring-2 focus:ring-blue-500 shrink-0 font-semibold text-slate-700"
-          >
-            <option value="">แสดงทุกกลุ่มเสี่ยง</option>
-            <option value="normal">กลุ่มปกติ (ขาว)</option>
-            <option value="risk">กลุ่มเสี่ยงสูง (เหลือง)</option>
-            <option value="danger">สงสัยป่วย (แดง)</option>
-          </select>
+          <div className="flex flex-col gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold text-slate-500 w-12">HT (ความดัน):</span>
+              <div className="flex gap-1">
+                {['normal', 'risk', 'danger'].map(level => {
+                  const labels: Record<string, string> = { normal: 'ปกติ', risk: 'เสี่ยง', danger: 'สงสัยป่วย' };
+                  const colors: Record<string, string> = { normal: 'text-emerald-700 bg-emerald-100', risk: 'text-amber-700 bg-amber-100', danger: 'text-rose-700 bg-rose-100' };
+                  const isSelected = filterHtRisk.includes(level);
+                  return (
+                    <button
+                      key={level}
+                      onClick={() => setFilterHtRisk(prev => prev.includes(level) ? prev.filter(l => l !== level) : [...prev, level])}
+                      className={`text-[10px] px-2 py-1 rounded-lg font-bold transition-all ${isSelected ? colors[level] + ' ring-1 ring-black/10' : 'bg-white text-slate-400 border border-slate-200 hover:bg-slate-100'}`}
+                    >
+                      {labels[level]}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold text-slate-500 w-12">DM (เบาหวาน):</span>
+              <div className="flex gap-1">
+                {['normal', 'risk', 'danger'].map(level => {
+                  const labels: Record<string, string> = { normal: 'ปกติ', risk: 'เสี่ยง', danger: 'สงสัยป่วย' };
+                  const colors: Record<string, string> = { normal: 'text-emerald-700 bg-emerald-100', risk: 'text-amber-700 bg-amber-100', danger: 'text-rose-700 bg-rose-100' };
+                  const isSelected = filterDmRisk.includes(level);
+                  return (
+                    <button
+                      key={level}
+                      onClick={() => setFilterDmRisk(prev => prev.includes(level) ? prev.filter(l => l !== level) : [...prev, level])}
+                      className={`text-[10px] px-2 py-1 rounded-lg font-bold transition-all ${isSelected ? colors[level] + ' ring-1 ring-black/10' : 'bg-white text-slate-400 border border-slate-200 hover:bg-slate-100'}`}
+                    >
+                      {labels[level]}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
 
           <div className="flex flex-wrap gap-2 items-center">
             {/* Action: Add Screening */}

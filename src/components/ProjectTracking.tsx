@@ -1,16 +1,75 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { ScreeningRecord } from "../types";
-import { Target, Users, Activity, Filter, Map, ChevronRight, BarChart3, Edit2, Check, AlertCircle, TrendingUp, Trophy, Printer } from "lucide-react";
+import { Target, Users, Activity, Filter, Map, ChevronRight, ChevronDown, BarChart3, Edit2, Check, AlertCircle, TrendingUp, Trophy, Printer } from "lucide-react";
 
 interface ProjectTrackingProps {
   records: ScreeningRecord[];
 }
 
+
+
+const MultiSelectDropdown = ({ options, selected, onChange, placeholder, disabled = false, labelKey = (v: string) => v }: { options: string[], selected: string[], onChange: (val: string[]) => void, placeholder: string, disabled?: boolean, labelKey?: (v: string) => string }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div className="relative w-full md:w-64" ref={containerRef}>
+      <div 
+        className={`w-full text-sm border border-slate-200 rounded-xl px-4 py-2 bg-slate-50 outline-none cursor-pointer flex justify-between items-center ${disabled ? 'text-slate-400' : 'text-slate-700 font-semibold'} hover:bg-slate-100 transition-colors`}
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+      >
+        <div className="truncate pr-2">
+          {selected.length === 0 ? placeholder : selected.map(labelKey).join(', ')}
+        </div>
+      </div>
+      {isOpen && !disabled && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+          {options.length > 0 && (
+            <div 
+              className="px-3 py-2 text-xs border-b border-slate-100 hover:bg-slate-50 cursor-pointer text-slate-500 font-bold"
+              onClick={() => { onChange([]); setIsOpen(false); }}
+            >
+              ล้างตัวเลือก
+            </div>
+          )}
+          {options.map(opt => (
+            <label key={opt} className="flex items-center px-3 py-2 hover:bg-slate-50 cursor-pointer text-xs font-medium text-slate-700">
+              <input 
+                type="checkbox" 
+                className="mr-2 rounded text-blue-600 focus:ring-blue-500"
+                checked={selected.includes(opt)}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    onChange([...selected, opt]);
+                  } else {
+                    onChange(selected.filter(s => s !== opt));
+                  }
+                }}
+              />
+              {labelKey(opt)}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => {
-  const [modelFilter, setModelFilter] = useState<string>("all");
-  const [districtFilter, setDistrictFilter] = useState<string>("all");
-  const [riskFilter, setRiskFilter] = useState<string>("all");
+  const [modelFilter, setModelFilter] = useState<string[]>([]);
+  const [districtFilter, setDistrictFilter] = useState<string[]>([]);
+  const [riskFilter, setRiskFilter] = useState<string[]>([]);
   const [targets, setTargets] = useState<Record<string, number>>({});
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>("");
@@ -48,7 +107,7 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
   // Get distinct districts for filter
   const allDistricts = useMemo(() => {
     const d = new Set<string>();
-    filteredRecords.forEach(r => {
+    records.forEach(r => {
       if (r.district) d.add(r.district);
     });
     return Array.from(d).sort();
@@ -57,7 +116,7 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
   const stats = useMemo(() => {
     // group by: modelType + district + area
     let filteredRecords = records;
-    if (riskFilter !== "all") {
+    if (riskFilter.length > 0) {
       filteredRecords = records.filter(r => {
         const smoking = r.smoking?.includes("สูบอยู่") || r.smoking?.includes("ประจำ");
         const alcohol = r.alcohol?.includes("ประจำ") || r.alcohol?.includes("ครั้งคราว");
@@ -67,15 +126,17 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
                      ["เสี่ยงสูง", "เสี่ยงสูงมาก"].includes(r.foodHabit?.fat?.level || "") ||
                      ["เสี่ยงสูง", "เสี่ยงสูงมาก"].includes(r.foodHabit?.salt?.level || "");
         
-        switch (riskFilter) {
-          case "3a2s": return smoking || alcohol || exercise || sleep || food;
-          case "smoking": return smoking;
-          case "alcohol": return alcohol;
-          case "exercise": return exercise;
-          case "food": return food;
-          case "sleep": return sleep;
-          default: return true;
-        }
+        return riskFilter.some(filter => {
+          switch (filter) {
+            case "3a2s": return smoking || alcohol || exercise || sleep || food;
+            case "smoking": return smoking;
+            case "alcohol": return alcohol;
+            case "exercise": return exercise;
+            case "food": return food;
+            case "sleep": return sleep;
+            default: return true;
+          }
+        });
       });
     }
 
@@ -155,11 +216,11 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
       };
     });
 
-    if (modelFilter !== "all") {
-      result = result.filter(r => r.modelType === modelFilter);
+    if (modelFilter.length > 0) {
+      result = result.filter(r => modelFilter.includes(r.modelType));
     }
-    if (districtFilter !== "all") {
-      result = result.filter(r => r.district === districtFilter);
+    if (districtFilter.length > 0) {
+      result = result.filter(r => districtFilter.includes(r.district));
     }
 
     // Sort by progress descending, then by total visits
@@ -213,15 +274,19 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
           ข้อมูล ณ วันที่ {new Date().toLocaleDateString("th-TH", { year: "numeric", month: "long", day: "numeric" })}
         </p>
         <div className="text-sm text-slate-500 flex items-center justify-center gap-4 mt-2">
-          <span>โมเดล: {modelFilter === "all" ? "ทั้งหมด" : modelFilter}</span>
-          <span>อำเภอ: {districtFilter === "all" ? "ทั้งหมด" : `อ.${districtFilter}`}</span>
-          <span>ความเสี่ยง: {riskFilter === "all" ? "ทั้งหมด" : 
-                riskFilter === "3a2s" ? "เสี่ยงสูง (3อ. 2ส.)" : 
-                riskFilter === "smoking" ? "สูบบุหรี่" : 
-                riskFilter === "alcohol" ? "ดื่มแอลกอฮอล์" : 
-                riskFilter === "food" ? "อาหาร (หวาน/มัน/เค็ม)" : 
-                riskFilter === "exercise" ? "ขาดการออกกำลังกาย" : 
-                "การนอนหลับ"}</span>
+          <span>โมเดล: {modelFilter.length === 0 ? "ทั้งหมด" : modelFilter.join(", ")}</span>
+          <span>อำเภอ: {districtFilter.length === 0 ? "ทั้งหมด" : districtFilter.map(d => `อ.${d}`).join(", ")}</span>
+          <span>ความเสี่ยง: {riskFilter.length === 0 ? "ทั้งหมด" : riskFilter.map(v => {
+            const map: Record<string, string> = {
+              "3a2s": "เสี่ยงสูง (3อ. 2ส.)",
+              "smoking": "สูบบุหรี่",
+              "alcohol": "ดื่มแอลกอฮอล์",
+              "food": "อาหาร (หวาน/มัน/เค็ม)",
+              "exercise": "ขาดการออกกำลังกาย",
+              "sleep": "การนอนหลับ"
+            };
+            return map[v] || v;
+          }).join(", ")}</span>
         </div>
       </div>
       {/* Header & Overall Summary */}
@@ -279,41 +344,39 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
           <span className="text-sm font-bold text-slate-600">ตัวกรอง:</span>
         </div>
         
-        <select 
-          value={riskFilter}
-          onChange={(e) => setRiskFilter(e.target.value)}
-          className="bg-slate-50 border border-slate-200 text-sm font-semibold rounded-xl px-4 py-2 text-slate-700 outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all"
-        >
-          <option value="all">ทุกกลุ่มพฤติกรรม</option>
-          <option value="3a2s">เสี่ยงสูง (3อ. 2ส.)</option>
-          <option value="smoking">เสี่ยง: สูบบุหรี่</option>
-          <option value="alcohol">เสี่ยง: ดื่มแอลกอฮอล์</option>
-          <option value="food">เสี่ยง: อาหาร (หวาน/มัน/เค็ม)</option>
-          <option value="exercise">เสี่ยง: ขาดการออกกำลังกาย</option>
-          <option value="sleep">เสี่ยง: การนอนหลับ</option>
-        </select>
+        <MultiSelectDropdown 
+          options={["3a2s", "smoking", "alcohol", "food", "exercise", "sleep"]}
+          selected={riskFilter}
+          onChange={setRiskFilter}
+          placeholder="ทุกกลุ่มพฤติกรรม"
+          labelKey={(v) => {
+            const map: Record<string, string> = {
+              "3a2s": "เสี่ยงสูง (3อ. 2ส.)",
+              "smoking": "เสี่ยง: สูบบุหรี่",
+              "alcohol": "เสี่ยง: ดื่มแอลกอฮอล์",
+              "food": "เสี่ยง: อาหาร (หวาน/มัน/เค็ม)",
+              "exercise": "เสี่ยง: ขาดการออกกำลังกาย",
+              "sleep": "เสี่ยง: การนอนหลับ"
+            };
+            return map[v] || v;
+          }}
+        />
 
-        <select 
-          value={modelFilter}
-          onChange={(e) => setModelFilter(e.target.value)}
-          className="bg-slate-50 border border-slate-200 text-sm font-semibold rounded-xl px-4 py-2 text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-        >
-          <option value="all">ทุกโมเดล</option>
-          <option value="หมู่บ้าน">โมเดลหมู่บ้าน</option>
-          <option value="ตำบล">โมเดลตำบล</option>
-          <option value="ไม่ระบุโมเดล">ไม่ระบุโมเดล</option>
-        </select>
+        <MultiSelectDropdown 
+          options={["หมู่บ้าน", "ตำบล", "ไม่ระบุโมเดล"]}
+          selected={modelFilter}
+          onChange={setModelFilter}
+          placeholder="ทุกโมเดล"
+          labelKey={(v) => v === "ไม่ระบุโมเดล" ? "ไม่ระบุโมเดล" : `โมเดล${v}`}
+        />
 
-        <select 
-          value={districtFilter}
-          onChange={(e) => setDistrictFilter(e.target.value)}
-          className="bg-slate-50 border border-slate-200 text-sm font-semibold rounded-xl px-4 py-2 text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-        >
-          <option value="all">ทุกอำเภอ</option>
-          {allDistricts.map(d => (
-            <option key={d} value={d}>{d}</option>
-          ))}
-        </select>
+        <MultiSelectDropdown 
+          options={allDistricts}
+          selected={districtFilter}
+          onChange={setDistrictFilter}
+          placeholder="ทุกอำเภอ"
+          labelKey={(v) => `อ.${v}`}
+        />
       </div>
 
       {/* Detail Table */}
