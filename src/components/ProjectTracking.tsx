@@ -558,7 +558,16 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
                                         <td className="py-2 px-4">
                                           <div className="flex flex-wrap gap-1">
                                             {d.visits.map((v, i) => {
-                                              const dateStr = v.date ? new Date(v.date).toLocaleDateString("th-TH", { year: "2-digit", month: "short", day: "numeric" }) : "";
+                                              let dateStr = "";
+                                              if (v.date) {
+                                                const dObj = new Date(v.date);
+                                                if (isNaN(dObj.getTime())) {
+                                                  // Already a formatted string (like "26/7/2569" or similar), so use it as is
+                                                  dateStr = v.date;
+                                                } else {
+                                                  dateStr = dObj.toLocaleDateString("th-TH", { year: "2-digit", month: "short", day: "numeric" });
+                                                }
+                                              }
                                               return (
                                               <span key={i} className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-semibold">ครั้งที่ {v.vNum} {dateStr && `(${dateStr})`}</span>
                                             )})}
