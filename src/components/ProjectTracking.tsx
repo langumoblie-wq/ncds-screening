@@ -180,7 +180,7 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
       
       const visitBreakdown: Record<number, Set<string>> = {};
       const nameCounts: Record<string, number> = {};
-      const duplicates: {name: string, count: number, visits: number[]}[] = [];
+      const duplicates: {name: string, count: number, visits: {vNum: number, date: string}[]}[] = [];
 
       data.records.forEach(r => {
         const vNum = r.visitNumber || 1;
@@ -193,7 +193,10 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
 
       for (const [name, count] of Object.entries(nameCounts)) {
         if (count > 1) {
-          const personVisits = data.records.filter(r => r.name === name).map(r => r.visitNumber || 1).sort((a,b)=>a-b);
+          const personVisits = data.records
+            .filter(r => r.name === name)
+            .map(r => ({ vNum: r.visitNumber || 1, date: r.date || "" }))
+            .sort((a,b) => a.vNum - b.vNum);
           duplicates.push({ name, count, visits: personVisits });
         }
       }
@@ -554,9 +557,11 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
                                         <td className="py-2 px-4 text-center font-bold text-amber-600">{d.count}</td>
                                         <td className="py-2 px-4">
                                           <div className="flex flex-wrap gap-1">
-                                            {d.visits.map((v, i) => (
-                                              <span key={i} className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-semibold">ครั้งที่ {v}</span>
-                                            ))}
+                                            {d.visits.map((v, i) => {
+                                              const dateStr = v.date ? new Date(v.date).toLocaleDateString("th-TH", { year: "2-digit", month: "short", day: "numeric" }) : "";
+                                              return (
+                                              <span key={i} className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-semibold">ครั้งที่ {v.vNum} {dateStr && `(${dateStr})`}</span>
+                                            )})}
                                           </div>
                                         </td>
                                       </tr>
