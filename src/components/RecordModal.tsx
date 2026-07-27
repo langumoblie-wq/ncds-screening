@@ -639,7 +639,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({ isAdmin = false, recor
                 </tr>
                 <tr>
                    <td style={{ padding: '12px 15px', width: '25%', fontWeight: 'bold' }}>ภายใต้โครงการ</td>
-                   <td style={{ padding: '12px 15px' }}>ร่วมสร้างต้นแบบลดกลุ่มเสี่ยงต่อโรค NCDs ด้วยแผนรายบุคคล ชุมชน ตำบล</td>
+                   <td style={{ padding: '12px 15px' }}>ลดโรคNcdsด้วยแผนปรับเปลี่ยนพฤติกรรมรายบุคคล โดยศูนย์คนไทยห่างไกล Ncds</td>
                 </tr>
                 <tr>
                    <td style={{ padding: '12px 15px', fontWeight: 'bold' }}>ดำเนินการโดย</td>

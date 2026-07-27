@@ -233,7 +233,7 @@ export default function App() {
                 </p>
                 <div className="text-[10px] sm:text-xs text-blue-700 font-extrabold uppercase tracking-wide flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-ping inline-block shrink-0" />
-                  <span>โครงการ "Mini Flag Ship Satun"</span>
+                  <span>โครงการลดโรคNcdsด้วยแผนปรับเปลี่ยนพฤติกรรมรายบุคคล โดยศูนย์คนไทยห่างไกล Ncds "Mini Flag Ship Satun"</span>
                 </div>
               </div>
             </div>

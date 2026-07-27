@@ -179,7 +179,7 @@ export const ConsentModal: React.FC<ConsentModalProps> = ({ isOpen, onClose, onA
              <p className="font-bold text-center text-lg mb-6">แบบเอกสารแสดงความยินยอม (Consent Form) (สำหรับบุคคลทั่วไป)</p>
              
              <div className="bg-slate-50 p-4 rounded-lg space-y-2 border border-slate-200">
-                <p><strong>ภายใต้โครงการ:</strong> ร่วมสร้างต้นแบบลดกลุ่มเสี่ยงต่อโรค NCDs ด้วยแผนรายบุคคล ชุมชน ตำบล</p>
+                <p><strong>ภายใต้โครงการ:</strong> ลดโรคNcdsด้วยแผนปรับเปลี่ยนพฤติกรรมรายบุคคล โดยศูนย์คนไทยห่างไกล Ncds</p>
                 <p><strong>ดำเนินการโดย:</strong> Mini Flag Ship Satun</p>
              </div>
 
@@ -246,7 +246,7 @@ export const ConsentModal: React.FC<ConsentModalProps> = ({ isOpen, onClose, onA
                 </tr>
                 <tr>
                    <td style={{ padding: '12px 15px', width: '25%', fontWeight: 'bold' }}>ภายใต้โครงการ</td>
-                   <td style={{ padding: '12px 15px' }}>ร่วมสร้างต้นแบบลดกลุ่มเสี่ยงต่อโรค NCDs ด้วยแผนรายบุคคล ชุมชน ตำบล</td>
+                   <td style={{ padding: '12px 15px' }}>ลดโรคNcdsด้วยแผนปรับเปลี่ยนพฤติกรรมรายบุคคล โดยศูนย์คนไทยห่างไกล Ncds</td>
                 </tr>
                 <tr>
                    <td style={{ padding: '12px 15px', fontWeight: 'bold' }}>ดำเนินการโดย</td>
