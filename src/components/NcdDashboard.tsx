@@ -1526,98 +1526,102 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
               </button>
             )}
 
-                        <button
-              onClick={async () => {
-                const { supabase } = await import('../lib/supabase');
-                alert("กำลังตรวจสอบและอัปเดตข้อมูลโมเดลตำบลเขาขาว...");
-                const { data, error } = await supabase.from('ncd_records').select('*');
-                if (error) {
-                  alert("เกิดข้อผิดพลาด: " + error.message);
-                  return;
-                }
-                let updated = 0;
-                const toUpdate = [];
-                data.forEach(row => {
-                  const r = row.data;
-                  if (r && r.district === "ละงู") {
-                    let needsUpdate = false;
-                    if (r.targetArea === "ม.1 สันติสุข" || r.targetArea === "บ้านสันติสุข") {
-                      r.targetArea = "ม.1 บ้านสันติสุข"; r.modelType = "หมู่บ้าน"; needsUpdate = true;
-                    } else if (r.targetArea === "ม.1 บ้านสันติสุข" && r.modelType !== "หมู่บ้าน") {
-                      r.modelType = "หมู่บ้าน"; needsUpdate = true;
-                    } else if (r.targetArea === "ม.5 ดาหลำ (ต.เขาขาว)") {
-                      r.targetArea = "ม.5 ดาหลำ"; r.modelType = "ตำบล"; needsUpdate = true;
-                    } else if (r.targetArea === "ม.5 ดาหลำ" && r.modelType !== "ตำบล") {
-                      r.modelType = "ตำบล"; needsUpdate = true;
-                    } else if (r.targetArea === "ม.6 ทุ่งเกาะปราบ" || r.targetArea === "ม.6. บ้านทุ่งเกาะปราบ (ต.เขาขาว)") {
-                      r.targetArea = "ม.6 ทุ่งเกาะปราบ"; r.modelType = "ตำบล"; needsUpdate = true;
-                    } else if (r.targetArea === "ม.7 นาข่าใต้" || r.targetArea === "ม.7 บ้านนาข่าใต้ (ต.เขาขาว)" || r.targetArea === "ม.7 บ้านนาข่าใต้") {
-                      r.targetArea = "ม.7 นาข่าใต้"; r.modelType = "ตำบล"; needsUpdate = true;
-                    } else if (r.targetArea === "ม.4 บ้านนาข่าเหนือ" && r.modelType !== "ตำบล") {
-                       r.modelType = "ตำบล"; needsUpdate = true;
+                        {isAdmin && (
+              <>
+              <button
+                onClick={async () => {
+                  const { supabase } = await import('../lib/supabase');
+                  alert("กำลังตรวจสอบและอัปเดตข้อมูลโมเดลตำบลเขาขาว...");
+                  const { data, error } = await supabase.from('ncd_records').select('*');
+                  if (error) {
+                    alert("เกิดข้อผิดพลาด: " + error.message);
+                    return;
+                  }
+                  let updated = 0;
+                  const toUpdate = [];
+                  data.forEach(row => {
+                    const r = row.data;
+                    if (r && r.district === "ละงู") {
+                      let needsUpdate = false;
+                      if (r.targetArea === "ม.1 สันติสุข" || r.targetArea === "บ้านสันติสุข") {
+                        r.targetArea = "ม.1 บ้านสันติสุข"; r.modelType = "หมู่บ้าน"; needsUpdate = true;
+                      } else if (r.targetArea === "ม.1 บ้านสันติสุข" && r.modelType !== "หมู่บ้าน") {
+                        r.modelType = "หมู่บ้าน"; needsUpdate = true;
+                      } else if (r.targetArea === "ม.5 ดาหลำ (ต.เขาขาว)") {
+                        r.targetArea = "ม.5 ดาหลำ"; r.modelType = "ตำบล"; needsUpdate = true;
+                      } else if (r.targetArea === "ม.5 ดาหลำ" && r.modelType !== "ตำบล") {
+                        r.modelType = "ตำบล"; needsUpdate = true;
+                      } else if (r.targetArea === "ม.6 ทุ่งเกาะปราบ" || r.targetArea === "ม.6. บ้านทุ่งเกาะปราบ (ต.เขาขาว)") {
+                        r.targetArea = "ม.6 ทุ่งเกาะปราบ"; r.modelType = "ตำบล"; needsUpdate = true;
+                      } else if (r.targetArea === "ม.7 นาข่าใต้" || r.targetArea === "ม.7 บ้านนาข่าใต้ (ต.เขาขาว)" || r.targetArea === "ม.7 บ้านนาข่าใต้") {
+                        r.targetArea = "ม.7 นาข่าใต้"; r.modelType = "ตำบล"; needsUpdate = true;
+                      } else if (r.targetArea === "ม.4 บ้านนาข่าเหนือ" && r.modelType !== "ตำบล") {
+                         r.modelType = "ตำบล"; needsUpdate = true;
+                      }
+                      if (needsUpdate) {
+                        toUpdate.push({ id: r.id, name: r.name, visit_number: r.visitNumber || 1, age: r.age, gender: r.gender, data: r });
+                      }
                     }
-                    if (needsUpdate) {
-                      toUpdate.push({ id: r.id, name: r.name, visit_number: r.visitNumber || 1, age: r.age, gender: r.gender, data: r });
+                  });
+                  
+                  if (toUpdate.length > 0) {
+                    const { error: err } = await supabase.from('ncd_records').upsert(toUpdate);
+                    if (err) alert("อัปเดตไม่สำเร็จ: " + err.message);
+                    else {
+                      alert("อัปเดตสำเร็จ " + toUpdate.length + " รายการ กรุณารีเฟรชหน้าต่างเบราว์เซอร์");
+                      window.location.reload();
                     }
+                  } else {
+                    alert("ข้อมูลถูกต้องแล้ว ไม่มีรายการต้องอัปเดต");
                   }
-                });
-                
-                if (toUpdate.length > 0) {
-                  const { error: err } = await supabase.from('ncd_records').upsert(toUpdate);
-                  if (err) alert("อัปเดตไม่สำเร็จ: " + err.message);
-                  else {
-                    alert("อัปเดตสำเร็จ " + toUpdate.length + " รายการ กรุณารีเฟรชหน้าต่างเบราว์เซอร์");
-                    window.location.reload();
+                }}
+                className="bg-amber-600 border border-amber-700 hover:bg-amber-700 text-white font-bold text-xs py-3 px-4 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shrink-0 transition-all shadow-xs"
+              >
+                <RefreshCw className="w-4 h-4" strokeWidth={3} />
+                ซิงค์โมเดลเขาขาว
+              </button>
+  
+              {/* Action: Backup JSON */}
+              <button
+                onClick={() => {
+                  if (isAdmin) {
+                    executeExportBackup();
+                  } else {
+                    alert("กรุณาเข้าสู่ระบบ (มุมบนขวา) ก่อนทำการสำรองข้อมูล");
                   }
-                } else {
-                  alert("ข้อมูลถูกต้องแล้ว ไม่มีรายการต้องอัปเดต");
-                }
-              }}
-              className="bg-amber-600 border border-amber-700 hover:bg-amber-700 text-white font-bold text-xs py-3 px-4 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shrink-0 transition-all shadow-xs"
-            >
-              <RefreshCw className="w-4 h-4" strokeWidth={3} />
-              ซิงค์โมเดลเขาขาว
-            </button>
-
-            {/* Action: Backup JSON */}
-            <button
-              onClick={() => {
-                if (isAdmin) {
-                  executeExportBackup();
-                } else {
-                  alert("กรุณาเข้าสู่ระบบ (มุมบนขวา) ก่อนทำการสำรองข้อมูล");
-                }
-              }}
-              disabled={records.length === 0}
-              className="bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 font-bold text-xs py-3 px-3.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0 transition-all"
-            >
-              <Download className="w-4 h-4" />
-              สำรองข้อมูล
-            </button>
-
-            {/* Action: Restore JSON */}
-            <button 
-              onClick={() => {
-                if (isAdmin) {
-                  if (fileInputRef.current) {
-                    fileInputRef.current.click();
+                }}
+                disabled={records.length === 0}
+                className="bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 font-bold text-xs py-3 px-3.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0 transition-all"
+              >
+                <Download className="w-4 h-4" />
+                สำรองข้อมูล
+              </button>
+  
+              {/* Action: Restore JSON */}
+              <button 
+                onClick={() => {
+                  if (isAdmin) {
+                    if (fileInputRef.current) {
+                      fileInputRef.current.click();
+                    }
+                  } else {
+                    alert("กรุณาเข้าสู่ระบบ (มุมบนขวา) ก่อนทำการนำเข้าข้อมูล");
                   }
-                } else {
-                  alert("กรุณาเข้าสู่ระบบ (มุมบนขวา) ก่อนทำการนำเข้าข้อมูล");
-                }
-              }}
-              className="bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 text-emerald-700 font-bold text-xs py-3 px-3.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shrink-0 transition-all"
-            >
-              <Upload className="w-4 h-4" />
-              นำเข้าข้อมูล
-            </button>
-            <input 
-              ref={fileInputRef}
-              type="file" 
-              accept=".json" 
-              onChange={handleImportBackup} 
-              className="hidden" 
-            />
+                }}
+                className="bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 text-emerald-700 font-bold text-xs py-3 px-3.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shrink-0 transition-all"
+              >
+                <Upload className="w-4 h-4" />
+                นำเข้าข้อมูล
+              </button>
+              <input 
+                ref={fileInputRef}
+                type="file" 
+                accept=".json" 
+                onChange={handleImportBackup} 
+                className="hidden" 
+              />
+              </>
+            )}
 
             {/* Action: Export CSV */}
             <button
