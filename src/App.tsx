@@ -15,7 +15,23 @@ import { ScreeningRecord } from "./types";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<"form" | "dash" | "individual" | "analytics" | "tracking">("form");
-  const [records, setRecords] = useState<ScreeningRecord[]>([]);
+  // Immediate localStorage initialization so mobile users NEVER see a blank screen or hang
+  const [records, setRecords] = useState<ScreeningRecord[]>(() => {
+    try {
+      if (typeof window !== "undefined") {
+        const localRecords = localStorage.getItem("ncd_records");
+        if (localRecords) {
+          const parsed = JSON.parse(localRecords);
+          if (Array.isArray(parsed)) {
+            return parsed.filter((r) => r !== null && r !== undefined && typeof r === "object" && "id" in r);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Error parsing localStorage records:", e);
+    }
+    return [];
+  });
   const [selectedRecord, setSelectedRecord] = useState<ScreeningRecord | null>(null);
   const [editingRecord, setEditingRecord] = useState<ScreeningRecord | null>(null);
   const [isFollowUpMode, setIsFollowUpMode] = useState(false);
@@ -29,68 +45,84 @@ export default function App() {
 
   const [showToast, setShowToast] = useState(false);
   const [toastContent, setToastContent] = useState({ title: "บันทึกข้อมูลสำเร็จ!", description: "ระบบได้เชื่อมต่อบันทึกข้อมูลเข้าฐานข้อมูลเซิร์ฟเวอร์เรียบร้อย" });
-  const [loading, setLoading] = useState(true);
-  const [dbStatus, setDbStatus] = useState({ connected: false, message: "กำลังเชื่อมต่อ..." });
+  const [loading, setLoading] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [dbStatus, setDbStatus] = useState({ connected: false, message: "กำลังตรวจสอบการเชื่อมต่อ..." });
 
   useEffect(() => {
+    let isMounted = true;
     async function checkDbStatus() {
       try {
-        const { error } = await supabase.from('ncd_records').select('id').limit(1);
-        if (error) {
-           setDbStatus({ connected: false, message: "ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้" });
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error("Timeout")), 2500)
+        );
+        const queryPromise = supabase.from('ncd_records').select('id').limit(1);
+        const res: any = await Promise.race([queryPromise, timeoutPromise]);
+        if (!isMounted) return;
+        if (res?.error) {
+           setDbStatus({ connected: false, message: "ฐานข้อมูลออฟไลน์ / ใช้ข้อมูลในเครื่อง" });
         } else {
            setDbStatus({ connected: true, message: "เชื่อมต่อฐานข้อมูล Supabase สำเร็จ และพร้อมใช้งาน!" });
         }
       } catch (error) {
-        setDbStatus({ connected: false, message: "ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้" });
+        if (!isMounted) return;
+        setDbStatus({ connected: false, message: "ฐานข้อมูลออฟไลน์ / ใช้ข้อมูลในเครื่อง" });
       }
     }
     checkDbStatus();
+    return () => { isMounted = false; };
   }, []);
 
-  // Fetch records from server database
+  // Fetch records from server database with timeout fallback to local storage
   useEffect(() => {
+    let isMounted = true;
     async function loadRecordsFromServer() {
-      let dataLoaded = false;
       try {
-        setLoading(true);
-        const { data, error } = await supabase.from('ncd_records').select('data').order('created_at', { ascending: false });
-        if (!error && data) {
-           const loadedRecords = data
+        setIsSyncing(true);
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error("Timeout")), 3000)
+        );
+        const queryPromise = supabase.from('ncd_records').select('data').order('created_at', { ascending: false });
+        const res: any = await Promise.race([queryPromise, timeoutPromise]);
+        
+        if (!isMounted) return;
+        if (!res?.error && res?.data && Array.isArray(res.data)) {
+           const loadedRecords = res.data
              .map((row: any) => row.data)
-             .filter((r) => r !== null && r !== undefined && typeof r === "object" && "id" in r);
-           setRecords(loadedRecords);
-           dataLoaded = true;
+             .filter((r: any) => r !== null && r !== undefined && typeof r === "object" && "id" in r);
+           if (loadedRecords.length > 0) {
+             setRecords(loadedRecords);
+             try {
+               localStorage.setItem("ncd_records", JSON.stringify(loadedRecords));
+             } catch (e) {
+               console.warn("Local storage write error:", e);
+             }
+           }
         }
       } catch (error) {
-        console.error("Error loading records from server:", error);
+        console.warn("Server sync skipped or timed out, using local records:", error);
       } finally {
-        if (!dataLoaded) {
-          const localRecords = localStorage.getItem("ncd_records");
-          if (localRecords) {
-            try {
-              const parsed = JSON.parse(localRecords);
-              if (Array.isArray(parsed)) {
-                setRecords(parsed.filter((r) => r !== null && r !== undefined && typeof r === "object" && "id" in r));
-              }
-            } catch (e) {
-              console.error("Error parsing localStorage records:", e);
-            }
-          }
+        if (isMounted) {
+          setIsSyncing(false);
+          setLoading(false);
         }
-        setLoading(false);
       }
     }
 
     loadRecordsFromServer();
+    return () => { isMounted = false; };
   }, []);
 
-  // Save to localStorage as secondary backup
+  // Save to localStorage as secondary backup safely
   useEffect(() => {
-    if (!loading && records !== undefined && records !== null) {
-      localStorage.setItem("ncd_records", JSON.stringify(records.filter(Boolean)));
+    if (records !== undefined && records !== null) {
+      try {
+        localStorage.setItem("ncd_records", JSON.stringify(records.filter(Boolean)));
+      } catch (e) {
+        console.warn("Storage quota or error:", e);
+      }
     }
-  }, [records, loading]);
+  }, [records]);
 
   // Sync / add or edit record
   const handleAddRecordSuccess = async (savedRecord: ScreeningRecord, isEdit: boolean) => {
@@ -214,37 +246,67 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] print:bg-white flex flex-col font-sans antialiased text-slate-800" style={{ WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}>
       
-      {/* Premium Header - Clean Minimalism */}
+      {/* Premium Header - Clean Minimalism & Mobile Optimized */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-xs print:hidden">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row py-3.5 items-center justify-between gap-4">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+          <div className="flex flex-col md:flex-row py-2.5 sm:py-3.5 items-stretch md:items-center justify-between gap-3">
             
-            {/* Logo / Branding - Clean Minimalist style */}
-            <div className="flex items-center gap-3 w-full md:w-auto">
-              <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-xs shrink-0">
-                <HeartPulse className="w-5.5 h-5.5 text-white" />
-              </div>
-              <div className="space-y-0.5">
-                <h1 className="text-xs sm:text-sm font-bold tracking-wider text-slate-800 uppercase leading-none">
-                  NCDs Screening
-                </h1>
-                <p className="text-[10px] text-slate-400 font-semibold tracking-wider uppercase leading-none">
-                  ระบบบันทึกและประเมินโรคไม่ติดต่อเรื้อรัง
-                </p>
-                <div className="text-[10px] sm:text-xs text-blue-700 font-extrabold uppercase tracking-wide flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-ping inline-block shrink-0" />
-                  <span>โครงการลดโรคNcdsด้วยแผนปรับเปลี่ยนพฤติกรรมรายบุคคล โดยศูนย์คนไทยห่างไกล Ncds "Mini Flag Ship Satun"</span>
+            {/* Logo / Branding & Mobile Quick Controls */}
+            <div className="flex items-center justify-between gap-3 w-full md:w-auto">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-xs shrink-0">
+                  <HeartPulse className="w-5 h-5 text-white" />
                 </div>
+                <div className="space-y-0.5 min-w-0">
+                  <h1 className="text-xs sm:text-sm font-bold tracking-wider text-slate-800 uppercase leading-none">
+                    NCDs Screening 35+
+                  </h1>
+                  <p className="text-[10px] text-slate-400 font-semibold tracking-wider uppercase leading-none truncate">
+                    ระบบบันทึกและประเมินโรคไม่ติดต่อเรื้อรัง
+                  </p>
+                </div>
+              </div>
+
+              {/* Mobile Quick Action Buttons (Admin & Sync status) */}
+              <div className="flex items-center gap-1.5 md:hidden shrink-0">
+                {isAdmin ? (
+                  <button
+                    onClick={() => setIsAdmin(false)}
+                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 text-[10px] font-bold"
+                  >
+                    ออกระบบ
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setShowLoginModal(true)}
+                    className="px-2.5 py-1.5 rounded-lg bg-blue-600 text-white text-[10px] font-bold"
+                  >
+                    เข้าสู่ระบบ
+                  </button>
+                )}
+                
+                <span 
+                  title={dbStatus.message}
+                  className={`w-2.5 h-2.5 rounded-full ${
+                    dbStatus.connected ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
+                  }`} 
+                />
               </div>
             </div>
 
-            {/* Tabs Selector - Clean Minimalism */}
-            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 p-1 rounded-xl w-full md:w-auto justify-center">
+            {/* Satun Project Title Pill */}
+            <div className="text-[10px] sm:text-xs text-blue-700 font-bold bg-blue-50/80 border border-blue-100 rounded-lg px-2.5 py-1 flex items-center gap-1.5 w-full md:w-auto overflow-hidden">
+              <span className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-ping inline-block shrink-0" />
+              <span className="truncate">โครงการลดโรค NCDs ด้วยแผนปรับเปลี่ยนพฤติกรรมรายบุคคล "Mini Flag Ship Satun"</span>
+            </div>
+
+            {/* Desktop & Tablet Tabs Selector with horizontal touch scroll */}
+            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 p-1 rounded-xl w-full md:w-auto overflow-x-auto no-scrollbar scroll-smooth whitespace-nowrap flex-nowrap">
               <button
                 onClick={() => setActiveTab("form")}
-                className={`px-4 py-2 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+                className={`px-3 sm:px-4 py-2 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all cursor-pointer shrink-0 whitespace-nowrap min-h-[38px] ${
                   activeTab === "form"
-                    ? "bg-blue-50 text-blue-700 shadow-2xs"
+                    ? "bg-blue-50 text-blue-700 shadow-2xs font-bold"
                     : "text-slate-600 hover:bg-slate-100/70 hover:text-slate-900"
                 }`}
               >
@@ -254,9 +316,9 @@ export default function App() {
 
               <button
                 onClick={() => setActiveTab("individual")}
-                className={`px-4 py-2 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+                className={`px-3 sm:px-4 py-2 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all cursor-pointer shrink-0 whitespace-nowrap min-h-[38px] ${
                   activeTab === "individual"
-                    ? "bg-blue-50 text-blue-700 shadow-2xs"
+                    ? "bg-blue-50 text-blue-700 shadow-2xs font-bold"
                     : "text-slate-600 hover:bg-slate-100/70 hover:text-slate-900"
                 }`}
               >
@@ -266,9 +328,9 @@ export default function App() {
               
               <button
                 onClick={() => setActiveTab("dash")}
-                className={`px-4 py-2 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+                className={`px-3 sm:px-4 py-2 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all cursor-pointer shrink-0 whitespace-nowrap min-h-[38px] ${
                   activeTab === "dash"
-                    ? "bg-blue-50 text-blue-700 shadow-2xs"
+                    ? "bg-blue-50 text-blue-700 shadow-2xs font-bold"
                     : "text-slate-600 hover:bg-slate-100/70 hover:text-slate-900"
                 }`}
               >
@@ -278,30 +340,31 @@ export default function App() {
 
               <button
                 onClick={() => setActiveTab("analytics")}
-                className={`px-4 py-2 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+                className={`px-3 sm:px-4 py-2 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all cursor-pointer shrink-0 whitespace-nowrap min-h-[38px] ${
                   activeTab === "analytics"
-                    ? "bg-blue-50 text-blue-700 shadow-2xs"
+                    ? "bg-blue-50 text-blue-700 shadow-2xs font-bold"
                     : "text-slate-600 hover:bg-slate-100/70 hover:text-slate-900"
                 }`}
               >
                 <Sparkles className="w-4 h-4 text-amber-500 animate-pulse" />
-                <span>วิเคราะห์ภาพรวม (ปัญหา-ความสำเร็จ)</span>
+                <span>วิเคราะห์ภาพรวม</span>
               </button>
+
               <button
                 onClick={() => setActiveTab("tracking")}
-                className={`px-4 py-2 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+                className={`px-3 sm:px-4 py-2 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all cursor-pointer shrink-0 whitespace-nowrap min-h-[38px] ${
                   activeTab === "tracking"
-                    ? "bg-indigo-50 text-indigo-700 shadow-2xs"
+                    ? "bg-indigo-50 text-indigo-700 shadow-2xs font-bold"
                     : "text-slate-600 hover:bg-slate-100/70 hover:text-slate-900"
                 }`}
               >
-                <BarChart3 className="w-4 h-4" />
+                <Activity className="w-4 h-4" />
                 <span>ติดตามโครงการ</span>
               </button>
             </div>
 
-            {/* Database Status Section */}
-            <div className="flex flex-wrap items-center gap-2.5 shrink-0 justify-center">
+            {/* Desktop Database & Admin Status Section */}
+            <div className="hidden md:flex items-center gap-2 shrink-0">
               {isAdmin ? (
                 <button
                   onClick={() => setIsAdmin(false)}
@@ -344,8 +407,8 @@ export default function App() {
         </div>
       </header>
 
-        {/* Main Container Area */}
-        <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      {/* Main Container Area */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-6 pb-24 md:pb-8">
           
           {loading ? (
           <div className="flex flex-col items-center justify-center h-64 text-slate-400 space-y-3">
@@ -568,14 +631,67 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Bottom Floating Success Toast */}
+      {/* Fixed Mobile Bottom Navigation Bar (Thumb Friendly) */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 py-1.5 px-2 flex items-center justify-around shadow-[0_-2px_10px_rgba(0,0,0,0.06)] print:hidden">
+        <button
+          onClick={() => setActiveTab("form")}
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer min-w-[56px] min-h-[44px] ${
+            activeTab === "form" ? "text-blue-600 font-bold" : "text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          <ClipboardList className={`w-5 h-5 ${activeTab === "form" ? "stroke-[2.5]" : "stroke-[1.75]"}`} />
+          <span className="text-[10px] mt-0.5">แบบฟอร์ม</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("individual")}
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer min-w-[56px] min-h-[44px] ${
+            activeTab === "individual" ? "text-blue-600 font-bold" : "text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          <User className={`w-5 h-5 ${activeTab === "individual" ? "stroke-[2.5]" : "stroke-[1.75]"}`} />
+          <span className="text-[10px] mt-0.5">7 สี</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("dash")}
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer min-w-[56px] min-h-[44px] ${
+            activeTab === "dash" ? "text-blue-600 font-bold" : "text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          <BarChart3 className={`w-5 h-5 ${activeTab === "dash" ? "stroke-[2.5]" : "stroke-[1.75]"}`} />
+          <span className="text-[10px] mt-0.5">สรุปผล</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("analytics")}
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer min-w-[56px] min-h-[44px] ${
+            activeTab === "analytics" ? "text-blue-600 font-bold" : "text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          <Sparkles className={`w-5 h-5 ${activeTab === "analytics" ? "text-amber-500 stroke-[2.5]" : "stroke-[1.75]"}`} />
+          <span className="text-[10px] mt-0.5">ภาพรวม</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("tracking")}
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer min-w-[56px] min-h-[44px] ${
+            activeTab === "tracking" ? "text-indigo-600 font-bold" : "text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          <Activity className={`w-5 h-5 ${activeTab === "tracking" ? "stroke-[2.5]" : "stroke-[1.75]"}`} />
+          <span className="text-[10px] mt-0.5">ติดตาม</span>
+        </button>
+      </nav>
+
+      {/* Floating Success Toast (Adjusted for mobile to avoid bottom nav bar) */}
       <AnimatePresence>
         {showToast && (
           <motion.div
             initial={{ opacity: 0, y: 50, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.9 }}
-            className="fixed bottom-6 right-6 z-50 bg-slate-900 border border-slate-800 text-white p-4 rounded-xl shadow-xl flex items-center gap-3"
+            className="fixed bottom-18 md:bottom-6 right-4 left-4 md:left-auto md:right-6 z-50 bg-slate-900 border border-slate-800 text-white p-3.5 sm:p-4 rounded-xl shadow-xl flex items-center gap-3"
           >
             <div className="bg-emerald-500/10 text-emerald-400 p-1.5 rounded-lg shrink-0">
               <CheckCircle2 className="w-5 h-5" />

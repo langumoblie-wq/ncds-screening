@@ -109,7 +109,7 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
     if (!latestVisit) return null;
     const ht = getHTPingPong(latestVisit.bpSys, latestVisit.bpDia, latestVisit.familyHistory);
     const dm = getDMPingPong(latestVisit.sugar, latestVisit.familyHistory);
-    const combined = getCombinedPingPong(latestVisit.bpSys, latestVisit.latestVisit?.bpDia || latestVisit.bpDia, latestVisit.sugar, latestVisit.familyHistory);
+    const combined = getCombinedPingPong(latestVisit.bpSys, latestVisit.bpDia, latestVisit.sugar, latestVisit.familyHistory);
 
     return { ht, dm, combined };
   }, [latestVisit]);

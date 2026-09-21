@@ -298,19 +298,19 @@ export const NcdForm: React.FC<NcdFormProps> = ({
   const liveDmResult = sugar ? calculateDMRisk(Number(sugar)) : null;
 
   // Cascading location helper arrays
-  const availableDistricts = (modelType && modelType !== "" && LOCATION_DATA[modelType as "หมู่บ้าน" | "ตำบล"])
-    ? (Object.keys(LOCATION_DATA[modelType as "หมู่บ้าน" | "ตำบล"]) as DistrictType[])
+  const availableDistricts = (modelType && LOCATION_DATA[modelType])
+    ? (Object.keys(LOCATION_DATA[modelType]) as DistrictType[])
     : (Object.keys(DISTRICT_SUBDISTRICT_MAP) as DistrictType[]);
 
   const availableSubdistricts = district
-    ? ((modelType && modelType !== "")
+    ? (modelType
         ? Object.keys((LOCATION_DATA[modelType] as any)?.[district] || {})
         : Object.keys(DISTRICT_SUBDISTRICT_MAP[district as DistrictType] || {})
       )
     : [];
 
   const availableAreas = district && subdistrict
-    ? ((modelType && modelType !== "")
+    ? (modelType
         ? (LOCATION_DATA[modelType] as any)?.[district]?.[subdistrict] || []
         : DISTRICT_SUBDISTRICT_MAP[district as DistrictType]?.[subdistrict] || []
       )
