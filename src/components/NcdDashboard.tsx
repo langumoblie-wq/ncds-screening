@@ -3,9 +3,11 @@ import { RefreshCw,
   Users, CheckCircle2, AlertTriangle, ShieldAlert, Search, Filter, 
   MapPin, Eye, Trash2, SlidersHorizontal, ArrowUpDown, ChevronDown, 
   Download, FileSpreadsheet, RotateCcw, Cigarette, Wine, Flame, EyeOff,
-  Pencil, PlusCircle, History, Apple, Dumbbell, Smile, Moon, Activity, Upload
+  Pencil, PlusCircle, History, Apple, Dumbbell, Smile, Moon, Activity, Upload,
+  Layers, UserCheck, Calendar, Check, GitBranch
 } from "lucide-react";
 import { ScreeningRecord, DistrictType, LOCATION_DATA } from "../types";
+import { BackupExportModal, BackupImportModal } from "./BackupRestoreModal";
 
 interface NcdDashboardProps {
   isAdmin?: boolean;
@@ -558,8 +560,14 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
   const [filterHtRisk, setFilterHtRisk] = useState<string[]>([]);
   const [filterDmRisk, setFilterDmRisk] = useState<string[]>([]);
   const [filterBehaviorRisk, setFilterBehaviorRisk] = useState<string[]>([]);
-  const [sortBy, setSortBy] = useState<"date" | "name" | "age" | "bmi">("date");
+  const [filterVisitScope, setFilterVisitScope] = useState<"all" | "latest_only" | "followup_only" | "initial_only">("all");
+  const [filterVisitNumbers, setFilterVisitNumbers] = useState<number[]>([]);
+  const [sortBy, setSortBy] = useState<"date" | "name" | "age" | "bmi" | "visitNumber">("date");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+
+  // Targeted Backup & Import Modal states
+  const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   // Password Modal state for Export/Import
   const [passwordModalConfig, setPasswordModalConfig] = useState<{
@@ -626,6 +634,69 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
     return Array.from(areaSet);
   }, [filterModel, filterDistrict, filterSubdistrict]);
 
+  // Patient visit mapping to determine latest record and multi-visit status
+  const patientVisitMapping = useMemo(() => {
+    const map: Record<string, { total: number; latestVisitNumber: number; latestRecordId: number; latestDate: string; records: ScreeningRecord[] }> = {};
+    (records || []).forEach(r => {
+      if (!r) return;
+      const key = `${r.name}_${r.phone || ""}`;
+      const vNum = r.visitNumber || 1;
+      if (!map[key]) {
+        map[key] = {
+          total: 1,
+          latestVisitNumber: vNum,
+          latestRecordId: r.id,
+          latestDate: r.date || "",
+          records: [r]
+        };
+      } else {
+        map[key].total += 1;
+        map[key].records.push(r);
+        if (vNum > map[key].latestVisitNumber || (vNum === map[key].latestVisitNumber && (r.date || "") >= map[key].latestDate)) {
+          map[key].latestVisitNumber = vNum;
+          map[key].latestRecordId = r.id;
+          map[key].latestDate = r.date || "";
+        }
+      }
+    });
+    return map;
+  }, [records]);
+
+  // Discover all distinct visit numbers in the dataset
+  const availableVisitNumbers = useMemo(() => {
+    const set = new Set<number>();
+    (records || []).forEach(r => {
+      if (r) set.add(r.visitNumber || 1);
+    });
+    const arr = Array.from(set).sort((a, b) => a - b);
+    return arr.length > 0 ? arr : [1];
+  }, [records]);
+
+  // Compute visit distribution counts across all records
+  const visitDistribution = useMemo(() => {
+    const counts: Record<number, number> = {};
+    let totalUniquePeople = 0;
+    let peopleWithFollowUp = 0;
+
+    Object.values(patientVisitMapping).forEach(p => {
+      totalUniquePeople++;
+      if (p.total > 1) peopleWithFollowUp++;
+    });
+
+    (records || []).forEach(r => {
+      if (!r) return;
+      const vNum = r.visitNumber || 1;
+      counts[vNum] = (counts[vNum] || 0) + 1;
+    });
+
+    return {
+      counts,
+      totalUniquePeople,
+      peopleWithFollowUp,
+      followUpPercentage: totalUniquePeople > 0 ? Math.round((peopleWithFollowUp / totalUniquePeople) * 100) : 0
+    };
+  }, [records, patientVisitMapping]);
+
   // Apply filters and sorting
   const filteredRecords = useMemo(() => {
     return (records || [])
@@ -656,6 +727,32 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
 
         // Target Area filter
         const matchesTargetArea = filterTargetArea.length > 0 ? filterTargetArea.includes(r.targetArea) : true;
+
+        // Visit Scope filter
+        const key = `${r.name}_${r.phone || ""}`;
+        const patientInfo = patientVisitMapping[key];
+        const vNum = r.visitNumber || 1;
+
+        if (filterVisitScope === "latest_only") {
+          if (patientInfo && patientInfo.latestRecordId !== r.id) {
+            return false;
+          }
+        } else if (filterVisitScope === "followup_only") {
+          if (!patientInfo || patientInfo.total < 2) {
+            return false;
+          }
+        } else if (filterVisitScope === "initial_only") {
+          if (vNum !== 1) {
+            return false;
+          }
+        }
+
+        // Specific Visit Numbers filter
+        if (filterVisitNumbers.length > 0) {
+          if (!filterVisitNumbers.includes(vNum)) {
+            return false;
+          }
+        }
 
         // Risk Level filter
         let rLevel = "normal";
@@ -703,13 +800,19 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
         } else if (sortBy === "bmi") {
           valA = parseFloat(a.bmi);
           valB = parseFloat(b.bmi);
+        } else if (sortBy === "visitNumber") {
+          valA = a.visitNumber || 1;
+          valB = b.visitNumber || 1;
+        } else if (sortBy === "date") {
+          valA = a.date || "";
+          valB = b.date || "";
         }
 
         if (valA < valB) return sortOrder === "asc" ? -1 : 1;
         if (valA > valB) return sortOrder === "asc" ? 1 : -1;
         return 0;
       });
-  }, [records, searchTerm, filterModel, filterDistrict, filterSubdistrict, filterTargetArea, filterHtRisk, filterDmRisk, filterBehaviorRisk, sortBy, sortOrder]);
+  }, [records, searchTerm, filterModel, filterDistrict, filterSubdistrict, filterTargetArea, filterVisitScope, filterVisitNumbers, filterHtRisk, filterDmRisk, filterBehaviorRisk, sortBy, sortOrder, patientVisitMapping]);
 
   // Stat computations based on filteredRecords
   const stats = useMemo(() => {
@@ -889,26 +992,36 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
   const handleExportCSV = () => {
     if (filteredRecords.length === 0) return;
     
-    // Construct rows
-    const headers = ["ID", "Date", "VisitNumber", "Name", "Age", "Gender", "Phone", "District", "TargetArea", "BMI", "BP_Systolic", "BP_Diastolic", "HT_Result", "BloodSugar", "DM_Result", "FollowUpAction"];
-    const rows = filteredRecords.map((r) => [
-      r.id,
-      r.date,
-      r.visitNumber,
-      `"${r.name}"`,
-      r.age,
-      r.gender,
-      r.phone,
-      r.district,
-      `"${r.targetArea}"`,
-      r.bmi,
-      r.bpSys,
-      r.bpDia,
-      r.htResult?.level || "",
-      r.sugar,
-      r.dmResult?.level || "",
-      `"${r.followUpAction}"`
-    ]);
+    // Construct rows with visit tracking metadata
+    const headers = ["ID", "Date", "VisitNumber", "VisitType", "IsLatestVisit", "TotalVisitsForPerson", "Name", "Age", "Gender", "Phone", "District", "TargetArea", "BMI", "BP_Systolic", "BP_Diastolic", "HT_Result", "BloodSugar", "DM_Result", "FollowUpAction"];
+    const rows = filteredRecords.map((r) => {
+      const key = `${r.name}_${r.phone || ""}`;
+      const pInfo = patientVisitMapping[key];
+      const isLatest = pInfo ? pInfo.latestRecordId === r.id : true;
+      const vNum = r.visitNumber || 1;
+      const visitType = vNum === 1 ? "คัดกรองแรกรับ" : `ติดตามครั้งที่ ${vNum - 1}`;
+      return [
+        r.id,
+        r.date,
+        vNum,
+        `"${visitType}"`,
+        isLatest ? "ใช่ (ผลล่าสุด)" : "ประวัติครั้งก่อน",
+        pInfo ? pInfo.total : 1,
+        `"${r.name}"`,
+        r.age,
+        r.gender,
+        r.phone,
+        r.district,
+        `"${r.targetArea}"`,
+        r.bmi,
+        r.bpSys,
+        r.bpDia,
+        r.htResult?.level || "",
+        r.sugar,
+        r.dmResult?.level || "",
+        `"${r.followUpAction || ""}"`
+      ];
+    });
 
     const csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
       + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
@@ -950,16 +1063,11 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
       const action = passwordModalConfig.action;
       
       if (action === 'export') {
-        executeExportBackup();
+        setIsBackupModalOpen(true);
         setPasswordModalConfig({ isOpen: false, action: null });
       } else if (action === 'import') {
-        if (fileInputRef.current) {
-          fileInputRef.current.click();
-        }
-        // Delay closing the modal slightly so the programmatic click works correctly
-        setTimeout(() => {
-          setPasswordModalConfig({ isOpen: false, action: null });
-        }, 100);
+        setIsImportModalOpen(true);
+        setPasswordModalConfig({ isOpen: false, action: null });
       }
       setPasswordInput("");
     } else {
@@ -1078,6 +1186,175 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
         </div>
       </div>
       
+      {/* Follow-up Visit Classifier & Filter Bar */}
+      <div className="bg-white p-5 rounded-2xl border border-indigo-100 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-indigo-50/80 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="bg-indigo-50 text-indigo-600 p-2 rounded-xl shrink-0">
+              <History className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-slate-800">จำแนกและคัดกรองครั้งที่ติดตาม (Follow-up Visits)</h3>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                  ติดตามต่อเนื่อง {visitDistribution.peopleWithFollowUp} คน ({visitDistribution.followUpPercentage}%)
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-500">
+                จำแนกดูข้อมูลตามรอบการตรวจ เพื่อติดตามการเปลี่ยนแปลงสุขภาพรายบุคคลและการดำเนินงานโครงการ
+              </p>
+            </div>
+          </div>
+
+          {/* Reset Visit Filter button */}
+          {(filterVisitScope !== "all" || filterVisitNumbers.length > 0) && (
+            <button 
+              onClick={() => {
+                setFilterVisitScope("all");
+                setFilterVisitNumbers([]);
+              }}
+              className="text-xs text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 bg-indigo-50/70 hover:bg-indigo-100/70 px-3 py-1.5 rounded-xl transition-all cursor-pointer self-start sm:self-auto"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              รีเซ็ตตัวกรองครั้งที่ติดตาม
+            </button>
+          )}
+        </div>
+
+        {/* Filter Controls Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
+          {/* Scope selection buttons */}
+          <div className="lg:col-span-7 space-y-1.5">
+            <label className="block text-[10px] font-bold text-slate-400">
+              ขอบเขตการดูข้อมูล (Cohort Scope):
+            </label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <button
+                type="button"
+                onClick={() => setFilterVisitScope("all")}
+                className={`text-xs px-3 py-2 rounded-xl font-bold transition-all flex flex-col items-center justify-center gap-0.5 border cursor-pointer ${
+                  filterVisitScope === "all"
+                    ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                    : "bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200"
+                }`}
+              >
+                <span>ทุกครั้งที่ตรวจ</span>
+                <span className={`text-[10px] font-medium ${filterVisitScope === "all" ? "text-indigo-100" : "text-slate-400"}`}>
+                  {records.length} บันทึก
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setFilterVisitScope("latest_only")}
+                className={`text-xs px-3 py-2 rounded-xl font-bold transition-all flex flex-col items-center justify-center gap-0.5 border cursor-pointer ${
+                  filterVisitScope === "latest_only"
+                    ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                    : "bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200"
+                }`}
+              >
+                <span>ผลล่าสุดรายบุคคล</span>
+                <span className={`text-[10px] font-medium ${filterVisitScope === "latest_only" ? "text-indigo-100" : "text-slate-400"}`}>
+                  {visitDistribution.totalUniquePeople} คน (ไม่นับซ้ำ)
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setFilterVisitScope("followup_only")}
+                className={`text-xs px-3 py-2 rounded-xl font-bold transition-all flex flex-col items-center justify-center gap-0.5 border cursor-pointer ${
+                  filterVisitScope === "followup_only"
+                    ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                    : "bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200"
+                }`}
+              >
+                <span>ติดตามต่อเนื่อง</span>
+                <span className={`text-[10px] font-medium ${filterVisitScope === "followup_only" ? "text-indigo-100" : "text-slate-400"}`}>
+                  ตรวจ ≥ 2 ครั้ง ({visitDistribution.peopleWithFollowUp} คน)
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setFilterVisitScope("initial_only")}
+                className={`text-xs px-3 py-2 rounded-xl font-bold transition-all flex flex-col items-center justify-center gap-0.5 border cursor-pointer ${
+                  filterVisitScope === "initial_only"
+                    ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                    : "bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200"
+                }`}
+              >
+                <span>คัดกรองแรกรับ</span>
+                <span className={`text-[10px] font-medium ${filterVisitScope === "initial_only" ? "text-indigo-100" : "text-slate-400"}`}>
+                  เฉพาะครั้งที่ 1 ({visitDistribution.counts[1] || 0} ราย)
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {/* Specific Visit Pills */}
+          <div className="lg:col-span-5 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="block text-[10px] font-bold text-slate-400">
+                เลือกเจาะจงครั้งที่ (Visit Number):
+              </label>
+              {filterVisitNumbers.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setFilterVisitNumbers([])}
+                  className="text-[10px] text-indigo-600 hover:underline cursor-pointer"
+                >
+                  ล้างเจาะจง
+                </button>
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-1.5 items-center">
+              <button
+                type="button"
+                onClick={() => setFilterVisitNumbers([])}
+                className={`text-xs px-2.5 py-1.5 rounded-lg font-bold transition-all border cursor-pointer ${
+                  filterVisitNumbers.length === 0
+                    ? "bg-slate-800 text-white border-slate-800"
+                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                }`}
+              >
+                ทุกครั้ง
+              </button>
+
+              {availableVisitNumbers.map(vNum => {
+                const isSelected = filterVisitNumbers.includes(vNum);
+                const count = visitDistribution.counts[vNum] || 0;
+                return (
+                  <button
+                    key={vNum}
+                    type="button"
+                    onClick={() => {
+                      setFilterVisitNumbers(prev => 
+                        prev.includes(vNum) 
+                          ? prev.filter(n => n !== vNum) 
+                          : [...prev, vNum]
+                      );
+                    }}
+                    className={`text-xs px-2.5 py-1.5 rounded-lg font-bold transition-all border flex items-center gap-1 cursor-pointer ${
+                      isSelected
+                        ? "bg-indigo-600 text-white border-indigo-600 shadow-2xs"
+                        : "bg-white text-slate-700 border-slate-200 hover:bg-indigo-50/50 hover:border-indigo-200"
+                    }`}
+                  >
+                    <span>{vNum === 1 ? "ครั้งที่ 1 (แรกรับ)" : `ครั้งที่ ${vNum}`}</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                      isSelected ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"
+                    }`}>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+      
       {/* Metric Scorecards Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         
@@ -1088,8 +1365,23 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
             <Users className="w-5 h-5" />
           </div>
           <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">คัดกรองสะสม</span>
-            <span className="text-2xl font-black text-slate-800">{stats.total} <span className="text-xs font-normal text-slate-400">ราย</span></span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+              {filterVisitScope === "latest_only" 
+                ? "บุคคลที่คัดกรอง (คน)" 
+                : filterVisitScope === "followup_only"
+                ? "ผู้รับการติดตามต่อเนื่อง"
+                : filterVisitScope === "initial_only"
+                ? "คัดกรองแรกรับ (ครั้งที่ 1)"
+                : filterVisitNumbers.length > 0
+                ? `คัดกรองครั้งที่ ${filterVisitNumbers.join(", ")}`
+                : "คัดกรองสะสม"}
+            </span>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-2xl font-black text-slate-800">{stats.total}</span>
+              <span className="text-xs font-normal text-slate-400">
+                {filterVisitScope === "latest_only" ? "คน" : "บันทึก"}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -1451,6 +1743,20 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
             />
           </div>
 
+          {/* Visit Number Selector */}
+          <div className="w-52 shrink-0">
+            <MultiSelectDropdown 
+              options={availableVisitNumbers.map(n => n.toString())}
+              selected={filterVisitNumbers.map(n => n.toString())}
+              onChange={(vals) => setFilterVisitNumbers(vals.map(v => parseInt(v, 10)))}
+              placeholder="แสดงทุกครั้งที่ตรวจ"
+              labelKey={(v) => {
+                const n = parseInt(v, 10);
+                return n === 1 ? "ครั้งที่ 1 (แรกรับ)" : `ครั้งที่ ${n} (ติดตาม #${n - 1})`;
+              }}
+            />
+          </div>
+
           {/* Behavior Risk Selector (3อ. 2ส.) */}
           <div className="w-56 shrink-0">
             <MultiSelectDropdown 
@@ -1581,45 +1887,38 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
                 ซิงค์โมเดลเขาขาว
               </button>
   
-              {/* Action: Backup JSON */}
+              {/* Action: Backup JSON with Selective Scope */}
               <button
                 onClick={() => {
                   if (isAdmin) {
-                    executeExportBackup();
+                    setIsBackupModalOpen(true);
                   } else {
-                    alert("กรุณาเข้าสู่ระบบ (มุมบนขวา) ก่อนทำการสำรองข้อมูล");
+                    openPasswordModal('export');
                   }
                 }}
                 disabled={records.length === 0}
-                className="bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 font-bold text-xs py-3 px-3.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0 transition-all"
+                className="bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 font-bold text-xs py-3 px-3.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0 transition-all shadow-3xs"
+                title="สำรองข้อมูลทั้งหมด หรือเลือกเฉพาะเจาะจงตามโมเดล/พื้นที่"
               >
                 <Download className="w-4 h-4" />
                 สำรองข้อมูล
               </button>
   
-              {/* Action: Restore JSON */}
+              {/* Action: Restore JSON with Selective Scope */}
               <button 
                 onClick={() => {
                   if (isAdmin) {
-                    if (fileInputRef.current) {
-                      fileInputRef.current.click();
-                    }
+                    setIsImportModalOpen(true);
                   } else {
-                    alert("กรุณาเข้าสู่ระบบ (มุมบนขวา) ก่อนทำการนำเข้าข้อมูล");
+                    openPasswordModal('import');
                   }
                 }}
-                className="bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 text-emerald-700 font-bold text-xs py-3 px-3.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shrink-0 transition-all"
+                className="bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 text-emerald-700 font-bold text-xs py-3 px-3.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shrink-0 transition-all shadow-3xs"
+                title="นำเข้าข้อมูลจากไฟล์ พร้อมเลือกกรองตามโมเดล/พื้นที่"
               >
                 <Upload className="w-4 h-4" />
                 นำเข้าข้อมูล
               </button>
-              <input 
-                ref={fileInputRef}
-                type="file" 
-                accept=".json" 
-                onChange={handleImportBackup} 
-                className="hidden" 
-              />
               </>
             )}
 
@@ -1640,7 +1939,27 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
         <div className="flex flex-wrap gap-2 text-[10px] text-slate-400 font-semibold border-t border-slate-100 pt-2">
           <span>พบรายชื่อทั้งหมด: {filteredRecords.length} เคส</span>
           <span>•</span>
-          <span>เรียงลำดับโดย: {sortBy === "date" ? "วันที่คัดกรอง" : sortBy === "name" ? "ชื่อ-สกุล" : sortBy === "age" ? "อายุ" : "BMI"} ({sortOrder === "desc" ? "ล่าสุด" : "แรกสุด"})</span>
+          <span>
+            เรียงลำดับโดย: {
+              sortBy === "date" ? "วันที่คัดกรอง" : 
+              sortBy === "visitNumber" ? "ครั้งที่ตรวจ/ติดตาม" :
+              sortBy === "name" ? "ชื่อ-สกุล" : 
+              sortBy === "age" ? "อายุ" : "BMI"
+            } ({sortOrder === "desc" ? "มากไปน้อย / ล่าสุด" : "น้อยไปมาก / แรกสุด"})
+          </span>
+          {(filterVisitScope !== "all" || filterVisitNumbers.length > 0) && (
+            <>
+              <span>•</span>
+              <span className="text-indigo-600 font-bold">
+                ตัวกรองครั้งที่: {
+                  filterVisitScope === "latest_only" ? "เฉพาะผลล่าสุดรายบุคคล" :
+                  filterVisitScope === "followup_only" ? "เฉพาะติดตามต่อเนื่อง" :
+                  filterVisitScope === "initial_only" ? "เฉพาะคัดกรองแรกรับ (ครั้งที่ 1)" : ""
+                }
+                {filterVisitNumbers.length > 0 && ` [เจาะจงครั้งที่: ${filterVisitNumbers.join(", ")}]`}
+              </span>
+            </>
+          )}
         </div>
 
       </div>
@@ -1651,13 +1970,27 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-slate-50/50 border-b border-slate-150 text-slate-500 uppercase tracking-wider font-bold text-[10px]">
-                <th 
-                  className="py-3 px-5 cursor-pointer hover:bg-slate-100 transition-colors"
-                  onClick={() => handleSort("date")}
-                >
-                  <div className="flex items-center gap-1">
-                    วันที่ตรวจ / ครั้งที่
-                    <ArrowUpDown className="w-3.5 h-3.5 text-slate-400" />
+                <th className="py-3 px-5 transition-colors">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleSort("date")}
+                      className="hover:text-blue-600 flex items-center gap-1 cursor-pointer"
+                      title="คลิกเพื่อเรียงตามวันที่"
+                    >
+                      <span>วันที่</span>
+                      <ArrowUpDown className="w-3 h-3 text-slate-400" />
+                    </button>
+                    <span className="text-slate-300">/</span>
+                    <button
+                      type="button"
+                      onClick={() => handleSort("visitNumber")}
+                      className="hover:text-indigo-600 flex items-center gap-1 text-indigo-700 font-bold cursor-pointer"
+                      title="คลิกเพื่อเรียงตามครั้งที่ตรวจ"
+                    >
+                      <span>ครั้งที่</span>
+                      <ArrowUpDown className="w-3 h-3 text-indigo-400" />
+                    </button>
                   </div>
                 </th>
                 <th 
@@ -1708,8 +2041,42 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
                       
                       {/* Date & Visit */}
                       <td className="py-4 px-5">
-                        <span className="font-semibold text-slate-800">{r.date}</span>
-                        <span className="text-[10px] text-blue-600 font-bold block">ครั้งที่ {r.visitNumber}</span>
+                        <span className="font-semibold text-slate-800 block">{r.date}</span>
+                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                            (r.visitNumber || 1) === 1
+                              ? "bg-blue-50 text-blue-700 border border-blue-200"
+                              : (r.visitNumber || 1) === 2
+                              ? "bg-indigo-50 text-indigo-700 border border-indigo-200"
+                              : "bg-purple-50 text-purple-700 border border-purple-200"
+                          }`}>
+                            ครั้งที่ {r.visitNumber || 1}
+                            {(r.visitNumber || 1) === 1 ? " (แรกรับ)" : ` (ติดตาม #${(r.visitNumber || 1) - 1})`}
+                          </span>
+
+                          {patientVisitMapping[`${r.name}_${r.phone || ""}`]?.latestRecordId === r.id && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200" title="การตรวจรอบล่าสุดของบุคคลนี้">
+                              ล่าสุด
+                            </span>
+                          )}
+
+                          {patientVisitMapping[`${r.name}_${r.phone || ""}`]?.total > 1 && (
+                            <button 
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSearchTerm(r.name);
+                                setFilterVisitScope("all");
+                                setFilterVisitNumbers([]);
+                              }}
+                              title={`คลิกเพื่อกรองดูประวัติทั้งหมด ${patientVisitMapping[`${r.name}_${r.phone || ""}`]?.total} ครั้งของบุคคลนี้`}
+                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium text-slate-600 hover:text-indigo-600 bg-slate-100 hover:bg-indigo-50 border border-slate-200 transition-colors cursor-pointer"
+                            >
+                              <History className="w-2.5 h-2.5" />
+                              รวม {patientVisitMapping[`${r.name}_${r.phone || ""}`]?.total} ครั้ง
+                            </button>
+                          )}
+                        </div>
                       </td>
 
                       {/* Name & Location */}
@@ -1958,6 +2325,25 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
           </div>
         </div>
       )}
+
+      {/* Targeted Backup Modal */}
+      <BackupExportModal
+        isOpen={isBackupModalOpen}
+        onClose={() => setIsBackupModalOpen(false)}
+        records={records}
+      />
+
+      {/* Targeted Import Modal with Pre-import Filters and Summary */}
+      <BackupImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        existingRecords={records}
+        onConfirmImport={(recordsToImport) => {
+          if (onImportRecords) {
+            onImportRecords(recordsToImport);
+          }
+        }}
+      />
     </div>
   );
 };

@@ -1,5 +1,6 @@
 import { CustomTrendChart } from "./TrendChart";
-import React, { useState, useMemo } from "react";
+import { BloodPressureTrendRecharts } from "./BloodPressureTrendRecharts";
+import React, { useState, useMemo, useEffect } from "react";
 import { 
   Search, ArrowRight, Activity, Calendar, MapPin, 
   Heart, User, Phone, Sparkles, TrendingUp, ChevronRight,
@@ -33,6 +34,8 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPatientId, setSelectedPatientId] = useState<string>("");
+  const [patientVisitCohortFilter, setPatientVisitCohortFilter] = useState<"all" | "multi" | "single">("all");
+  const [selectedVisitId, setSelectedVisitId] = useState<number | null>(null);
 
   // Group records by unique patient (Key: name + phone)
   const uniquePatients = useMemo(() => {
@@ -63,14 +66,21 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
     }));
   }, [records]);
 
-  // Filter patients based on query
+  // Filter patients based on query and visit count
   const filteredPatients = useMemo(() => {
-    if (!searchQuery.trim()) return uniquePatients;
-    return uniquePatients.filter(p => 
+    let list = uniquePatients;
+    if (patientVisitCohortFilter === "multi") {
+      list = list.filter(p => p.count > 1);
+    } else if (patientVisitCohortFilter === "single") {
+      list = list.filter(p => p.count === 1);
+    }
+
+    if (!searchQuery.trim()) return list;
+    return list.filter(p => 
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.phone.includes(searchQuery)
     );
-  }, [uniquePatients, searchQuery]);
+  }, [uniquePatients, searchQuery, patientVisitCohortFilter]);
 
   // Set first patient as default when selectedPatientId is empty and patients exist
   useState(() => {
@@ -87,6 +97,11 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
     return uniquePatients.length > 0 ? uniquePatients[0].id : "";
   }, [selectedPatientId, uniquePatients]);
 
+  // Reset selectedVisitId when activePatientId changes
+  useEffect(() => {
+    setSelectedVisitId(null);
+  }, [activePatientId]);
+
   // Get all visits of the active patient sorted by visitNumber
   const patientVisits = useMemo(() => {
     if (!activePatientId) return [];
@@ -99,12 +114,24 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
   }, [activePatientId, uniquePatients, records]);
 
   // Latest record for the active patient
-  const latestVisit = useMemo(() => {
+  const latestVisitRecord = useMemo(() => {
     if (patientVisits.length === 0) return null;
     return patientVisits[patientVisits.length - 1];
   }, [patientVisits]);
 
-  // 7-Color Ping Pong calculations for latest visit
+  // Currently inspected visit (either user-selected or latest)
+  const activeVisit = useMemo(() => {
+    if (selectedVisitId) {
+      const found = patientVisits.find(v => v.id === selectedVisitId);
+      if (found) return found;
+    }
+    return latestVisitRecord;
+  }, [patientVisits, selectedVisitId, latestVisitRecord]);
+
+  // Alias for backward compatibility in components
+  const latestVisit = activeVisit;
+
+  // 7-Color Ping Pong calculations for active visit
   const pingPongInfo = useMemo(() => {
     if (!latestVisit) return null;
     const ht = getHTPingPong(latestVisit.bpSys, latestVisit.bpDia, latestVisit.familyHistory);
@@ -153,6 +180,43 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full text-xs rounded-xl border border-slate-250 pl-9 pr-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all"
             />
+          </div>
+
+          {/* Cohort Tabs: All / Follow-up / Single */}
+          <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-xl text-center text-[10px] font-bold shrink-0">
+            <button
+              type="button"
+              onClick={() => setPatientVisitCohortFilter("all")}
+              className={`py-1.5 px-1.5 rounded-lg transition-all cursor-pointer ${
+                patientVisitCohortFilter === "all"
+                  ? "bg-white text-slate-800 shadow-2xs font-extrabold"
+                  : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              ทั้งหมด ({uniquePatients.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setPatientVisitCohortFilter("multi")}
+              className={`py-1.5 px-1.5 rounded-lg transition-all cursor-pointer ${
+                patientVisitCohortFilter === "multi"
+                  ? "bg-indigo-600 text-white shadow-2xs font-extrabold"
+                  : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              ติดตาม ≥2 ครั้ง ({uniquePatients.filter(p => p.count > 1).length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setPatientVisitCohortFilter("single")}
+              className={`py-1.5 px-1.5 rounded-lg transition-all cursor-pointer ${
+                patientVisitCohortFilter === "single"
+                  ? "bg-white text-slate-800 shadow-2xs font-extrabold"
+                  : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              ตรวจ 1 ครั้ง ({uniquePatients.filter(p => p.count === 1).length})
+            </button>
           </div>
 
           {/* List of Patients */}
@@ -322,6 +386,58 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
                     )}
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* Visit Selector Bar for Active Patient */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="bg-indigo-50 text-indigo-600 p-2 rounded-xl shrink-0">
+                  <History className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-800">เลือกรอบการตรวจประเมิน</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                      รวม {patientVisits.length} ครั้ง
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-500">
+                    คลิกเลือกรอบการตรวจเพื่อดูค่าสุขภาพและพฤติกรรมในแต่ละช่วงเวลา
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-1.5 items-center">
+                {patientVisits.map((v) => {
+                  const isSelected = v.id === latestVisit?.id;
+                  const vNum = v.visitNumber || 1;
+                  const isLatest = v.id === latestVisitRecord?.id;
+                  return (
+                    <button
+                      key={v.id}
+                      type="button"
+                      onClick={() => setSelectedVisitId(v.id)}
+                      className={`text-xs px-3 py-1.5 rounded-xl font-bold transition-all border flex items-center gap-1.5 cursor-pointer ${
+                        isSelected
+                          ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                          : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
+                      }`}
+                    >
+                      <span>{vNum === 1 ? "ครั้งที่ 1 (แรกรับ)" : `ครั้งที่ ${vNum} (ติดตาม #${vNum - 1})`}</span>
+                      {isLatest && (
+                        <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
+                          isSelected ? "bg-white/20 text-white" : "bg-emerald-100 text-emerald-800"
+                        }`}>
+                          ล่าสุด
+                        </span>
+                      )}
+                      <span className={`text-[10px] ${isSelected ? "text-indigo-100" : "text-slate-400"}`}>
+                        {v.date}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -554,31 +670,19 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
               </div>
             </div>
 
-            {/* Individual Clinical Trend Graphs Row */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* Individual Clinical Trend Graphs: BP using Recharts & Blood Sugar */}
+            <div className="space-y-5">
               
-              {/* BP Trend Graph */}
-              <CustomTrendChart 
-                data={bpChartData}
-                title="แนวโน้มความดันโลหิตสะสม"
-                unit="mmHg"
-                minVal={60}
-                maxVal={210}
-                color="#f87171" // red-400 for Systolic
-                color2="#fb7185" // pink-400 for Diastolic
-                label1="Systolic (ความดันบน)"
-                label2="Diastolic (ความดันล่าง)"
-                thresholds={[
-                  { value: 120, label: "เกณฑ์ปกติ", color: "#10b981" },
-                  { value: 140, label: "เกณฑ์ป่วยเริ่มต้น", color: "#f59e0b" },
-                  { value: 180, label: "วิกฤต", color: "#ef4444" }
-                ]}
+              {/* BP Comparison & Trend using Recharts */}
+              <BloodPressureTrendRecharts 
+                visits={patientVisits}
+                patientName={latestVisit?.name}
               />
 
               {/* Sugar Trend Graph */}
               <CustomTrendChart 
                 data={dmChartData}
-                title="แนวโน้มระดับน้ำตาลในเลือด (FBS)"
+                title="แนวโน้มระดับน้ำตาลในเลือด (FBS) สะสมในแต่ละครั้งที่ตรวจ"
                 unit="mg/dL"
                 minVal={70}
                 maxVal={250}

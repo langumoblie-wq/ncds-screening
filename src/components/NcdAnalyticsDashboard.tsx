@@ -34,6 +34,7 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
   const [filterDistrict, setFilterDistrict] = useState<string>("");
   const [filterSubdistrict, setFilterSubdistrict] = useState<string>("");
   const [filterTargetArea, setFilterTargetArea] = useState<string>("");
+  const [filterVisitMode, setFilterVisitMode] = useState<"all" | "latest_only" | "visit_1" | "visit_2_plus">("all");
 
   // Sync / reset filters on model change
   useEffect(() => {
@@ -89,6 +90,25 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
     return Array.from(areaSet);
   }, [filterModel, filterDistrict, filterSubdistrict]);
 
+  // Patient latest visit map for deduplication and visit mode
+  const latestPatientMap = useMemo(() => {
+    const map: Record<string, { latestId: number; maxVisit: number; count: number }> = {};
+    records.forEach(r => {
+      const key = `${r.name}_${r.phone || ""}`;
+      const vNum = r.visitNumber || 1;
+      if (!map[key]) {
+        map[key] = { latestId: r.id, maxVisit: vNum, count: 1 };
+      } else {
+        map[key].count += 1;
+        if (vNum >= map[key].maxVisit) {
+          map[key].maxVisit = vNum;
+          map[key].latestId = r.id;
+        }
+      }
+    });
+    return map;
+  }, [records]);
+
   // Apply filters to records
   const filteredRecords = useMemo(() => {
     return records.filter((r) => {
@@ -107,9 +127,24 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
       const matchesSubdistrict = filterSubdistrict ? r.subdistrict === filterSubdistrict : true;
       const matchesTargetArea = filterTargetArea ? r.targetArea === filterTargetArea : true;
 
+      // Visit Mode filter
+      const key = `${r.name}_${r.phone || ""}`;
+      const pInfo = latestPatientMap[key];
+      const vNum = r.visitNumber || 1;
+
+      if (filterVisitMode === "latest_only" && pInfo && pInfo.latestId !== r.id) {
+        return false;
+      }
+      if (filterVisitMode === "visit_1" && vNum !== 1) {
+        return false;
+      }
+      if (filterVisitMode === "visit_2_plus" && vNum < 2) {
+        return false;
+      }
+
       return matchesModel && matchesDistrict && matchesSubdistrict && matchesTargetArea;
     });
-  }, [records, filterModel, filterDistrict, filterSubdistrict, filterTargetArea]);
+  }, [records, filterModel, filterDistrict, filterSubdistrict, filterTargetArea, filterVisitMode, latestPatientMap]);
 
   // Comprehensive analysis calculations
   const analysis = useMemo(() => {
@@ -443,13 +478,14 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
               <Printer className="w-4 h-4" />
               พิมพ์รายงาน
             </button>
-            {(filterModel || filterDistrict || filterSubdistrict || filterTargetArea) && (
+            {(filterModel || filterDistrict || filterSubdistrict || filterTargetArea || filterVisitMode !== "all") && (
               <button 
                 onClick={() => {
                   setFilterModel("");
                   setFilterDistrict("");
                   setFilterSubdistrict("");
                   setFilterTargetArea("");
+                  setFilterVisitMode("all");
                 }}
                 className="text-[10px] font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
               >
@@ -459,7 +495,7 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
           </div>
         </div>
         
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           {/* Model */}
           <div className="space-y-1">
             <label className="block text-[10px] font-bold text-slate-400">โมเดลโครงการ</label>
@@ -518,6 +554,21 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
               {availableTargetAreas.map((area, idx) => (
                 <option key={idx} value={area}>{area}</option>
               ))}
+            </select>
+          </div>
+
+          {/* Visit Mode */}
+          <div className="space-y-1">
+            <label className="block text-[10px] font-bold text-indigo-600">รอบการตรวจ / ครั้งที่ติดตาม</label>
+            <select 
+              value={filterVisitMode} 
+              onChange={(e) => setFilterVisitMode(e.target.value as any)}
+              className="w-full text-xs border border-indigo-200 rounded-xl px-3 py-2.5 bg-indigo-50/40 outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-700"
+            >
+              <option value="all">ทุกครั้งที่ตรวจ ({records.length} บันทึก)</option>
+              <option value="latest_only">ผลล่าสุดรายบุคคล (ไม่นับซ้ำ)</option>
+              <option value="visit_1">เฉพาะคัดกรองแรกรับ (ครั้งที่ 1)</option>
+              <option value="visit_2_plus">เฉพาะติดตามต่อเนื่อง (ครั้งที่ ≥ 2)</option>
             </select>
           </div>
         </div>

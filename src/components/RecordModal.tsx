@@ -4,10 +4,11 @@ import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { 
   X, Activity, Heart, User, MapPin, Phone, Calendar, ClipboardList, 
-  Trash2, Check, ShieldAlert, Printer, Download, FileCheck, Loader2
+  Trash2, Check, ShieldAlert, Printer, Download, FileCheck, Loader2, History
 } from "lucide-react";
 import { ScreeningRecord } from "../types";
 import { CustomTrendChart } from "./TrendChart";
+import { BloodPressureTrendRecharts } from "./BloodPressureTrendRecharts";
 
 interface RecordModalProps {
   isAdmin?: boolean;
@@ -18,11 +19,35 @@ interface RecordModalProps {
   onDeleteRecord?: (id: number) => void;
 }
 
-export const RecordModal: React.FC<RecordModalProps> = ({ isAdmin = false, record, allRecords = [], onClose, onUpdateRecord, onDeleteRecord }) => {
-
+export const RecordModal: React.FC<RecordModalProps> = ({ 
+  isAdmin = false, 
+  record: initialRecord, 
+  allRecords = [], 
+  onClose, 
+  onUpdateRecord, 
+  onDeleteRecord 
+}) => {
+  const [activeRecordId, setActiveRecordId] = useState<number>(initialRecord.id);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [isGeneratingReportPdf, setIsGeneratingReportPdf] = useState(false);
   const pdfRef = useRef<HTMLDivElement>(null);
+  const reportPdfRef = useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    setActiveRecordId(initialRecord.id);
+  }, [initialRecord.id]);
+
+  // Filter all records for the same patient to build the chart data
+  const patientVisits = React.useMemo(() => {
+    return allRecords
+      .filter(r => r.name === initialRecord.name && (!initialRecord.phone || !r.phone || r.phone === initialRecord.phone))
+      .sort((a, b) => a.visitNumber - b.visitNumber);
+  }, [allRecords, initialRecord.name, initialRecord.phone]);
+
+  const record = React.useMemo(() => {
+    return patientVisits.find(v => v.id === activeRecordId) || initialRecord;
+  }, [patientVisits, activeRecordId, initialRecord]);
   
   // Format Thai date
   const getThaiDate = (dateString?: string) => {
@@ -58,13 +83,6 @@ export const RecordModal: React.FC<RecordModalProps> = ({ isAdmin = false, recor
     }
   };
   const recordDate = getThaiDate(record.date);
-
-  // Filter all records for the same patient to build the chart data
-  const patientVisits = React.useMemo(() => {
-    return allRecords
-      .filter(r => r.name === record.name)
-      .sort((a, b) => a.visitNumber - b.visitNumber);
-  }, [allRecords, record.name]);
 
   const bpChartData = React.useMemo(() => {
     return patientVisits.map(v => ({
@@ -124,6 +142,65 @@ export const RecordModal: React.FC<RecordModalProps> = ({ isAdmin = false, recor
     }
   };
 
+  const getBmiLabel = (bmiStr?: string) => {
+    const val = parseFloat(bmiStr || "0");
+    if (isNaN(val) || val <= 0) return "-";
+    if (val >= 25) return "อ้วน (Obese)";
+    if (val >= 23) return "น้ำหนักเกิน (Overweight)";
+    if (val >= 18.5) return "ปกติ (Normal)";
+    return "ผอม (Underweight)";
+  };
+
+  const handleDownloadReportPdf = async () => {
+    try {
+      setIsGeneratingReportPdf(true);
+      
+      const element = reportPdfRef.current;
+      if (!element) throw new Error("Could not find Report PDF element");
+
+      // Render the HTML to canvas with high resolution
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff'
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const imgWidth = 210; // A4 width in mm
+      const pageHeight = 297; // A4 height in mm
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight;
+
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      });
+
+      let position = 0;
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft > 0) {
+        position -= pageHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      const dateStr = new Date().toISOString().split("T")[0];
+      const filename = `รายงานคัดกรอง_${record.name}_ครั้งที่${record.visitNumber || 1}_${dateStr}.pdf`;
+      pdf.save(filename);
+      
+    } catch (err) {
+      console.error("Error generating report PDF:", err);
+      alert("เกิดข้อผิดพลาดในการสร้างไฟล์ PDF รายงาน");
+    } finally {
+      setIsGeneratingReportPdf(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
       <motion.div 
@@ -145,9 +222,18 @@ export const RecordModal: React.FC<RecordModalProps> = ({ isAdmin = false, recor
           </div>
           <div className="flex items-center gap-2">
             <button
+              onClick={handleDownloadReportPdf}
+              disabled={isGeneratingReportPdf}
+              className="p-2 text-blue-700 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-1.5 text-sm font-semibold border border-blue-200 bg-white shadow-xs disabled:opacity-50 cursor-pointer"
+              title="ดาวน์โหลดข้อมูลการคัดกรองรายบุคคลในรูปแบบ PDF สำหรับพิมพ์เก็บไว้เป็นเอกสาร"
+            >
+              {isGeneratingReportPdf ? <Loader2 className="w-4 h-4 animate-spin text-blue-600" /> : <Download className="w-4 h-4 text-blue-600" />}
+              <span className="hidden sm:inline">ดาวน์โหลดรายงาน</span>
+            </button>
+            <button
               onClick={handleDownloadConsent}
               disabled={isGeneratingPdf}
-              className="p-2 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition-colors flex items-center gap-1.5 text-sm font-medium border border-indigo-200 bg-white shadow-sm disabled:opacity-50"
+              className="p-2 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition-colors flex items-center gap-1.5 text-sm font-medium border border-indigo-200 bg-white shadow-sm disabled:opacity-50 cursor-pointer"
               title="ดาวน์โหลดแบบแสดงความยินยอม (Consent Form)"
             >
               {isGeneratingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileCheck className="w-4 h-4" />}
@@ -155,7 +241,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({ isAdmin = false, recor
             </button>
             <button
               onClick={handlePrint}
-              className="p-2 text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors flex items-center gap-1.5 text-sm font-medium"
+              className="p-2 text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors flex items-center gap-1.5 text-sm font-medium cursor-pointer"
               title="พิมพ์เอกสารรายงาน"
             >
               <Printer className="w-4 h-4" />
@@ -163,12 +249,55 @@ export const RecordModal: React.FC<RecordModalProps> = ({ isAdmin = false, recor
             </button>
             <button 
               onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+              className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
             >
               <X className="w-6 h-6" />
             </button>
           </div>
         </div>
+
+        {/* Visit Switcher Bar when patient has multiple visits */}
+        {patientVisits.length > 1 && (
+          <div className="bg-indigo-50/70 px-6 py-2.5 border-b border-indigo-150 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 print:hidden">
+            <div className="flex items-center gap-2">
+              <History className="w-4 h-4 text-indigo-600" />
+              <span className="text-xs font-bold text-indigo-900">
+                ประวัติการตรวจของผู้รับการตรวจรายนี้ (รวม {patientVisits.length} ครั้ง):
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {patientVisits.map((v) => {
+                const isSelected = v.id === record.id;
+                const vNum = v.visitNumber || 1;
+                const isLatest = v.id === patientVisits[patientVisits.length - 1].id;
+                return (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => setActiveRecordId(v.id)}
+                    className={`text-xs px-2.5 py-1 rounded-lg font-bold transition-all border flex items-center gap-1.5 cursor-pointer ${
+                      isSelected
+                        ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                        : "bg-white hover:bg-indigo-100/60 text-slate-700 border-slate-200"
+                    }`}
+                  >
+                    <span>{vNum === 1 ? "ครั้งที่ 1 (แรกรับ)" : `ครั้งที่ ${vNum} (ติดตาม #${vNum - 1})`}</span>
+                    {isLatest && (
+                      <span className={`text-[9px] px-1 py-0.1 rounded font-bold ${
+                        isSelected ? "bg-white/20 text-white" : "bg-emerald-100 text-emerald-800"
+                      }`}>
+                        ล่าสุด
+                      </span>
+                    )}
+                    <span className={`text-[10px] ${isSelected ? "text-indigo-100" : "text-slate-400"}`}>
+                      {v.date}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Modal Scrollable Content */}
         <div className="p-6 overflow-y-auto space-y-6 flex-1 print:p-0 print:overflow-visible" id="print-area">
@@ -542,29 +671,17 @@ export const RecordModal: React.FC<RecordModalProps> = ({ isAdmin = false, recor
 
           {/* Section: Trend Charts (if multiple visits) */}
           {patientVisits.length > 1 && (
-            <div className="bg-white p-5 rounded-xl border border-slate-200 space-y-4">
-              <h4 className="font-bold text-slate-700 flex items-center gap-2 text-sm uppercase tracking-wider mb-2">
-                <Activity className="w-4 h-4 text-blue-500" />
-                แนวโน้มผลการตรวจติดตาม (Trend Analysis)
-              </h4>
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              {/* Blood Pressure Comparative Trend using Recharts */}
+              <BloodPressureTrendRecharts
+                visits={patientVisits}
+                patientName={record.name}
+              />
+
+              {/* Blood Sugar Trend Chart */}
+              <div className="bg-white p-5 rounded-xl border border-slate-200">
                 <CustomTrendChart 
-                  title="ประวัติความดันโลหิต (Blood Pressure)"
-                  unit="mmHg"
-                  data={bpChartData}
-                  minVal={60}
-                  maxVal={200}
-                  color="#ef4444" 
-                  color2="#3b82f6" 
-                  label1="ค่าบน (Systolic)"
-                  label2="ค่าล่าง (Diastolic)"
-                  thresholds={[
-                    { value: 140, label: "อันตราย", color: "#ef4444" },
-                    { value: 120, label: "เสี่ยง", color: "#f59e0b" }
-                  ]}
-                />
-                <CustomTrendChart 
-                  title="ประวัติน้ำตาลในเลือด (Blood Sugar)"
+                  title="ประวัติระดับน้ำตาลในเลือดสะสม (Blood Sugar FBS)"
                   unit="mg/dL"
                   data={dmChartData}
                   minVal={50}
@@ -616,12 +733,23 @@ export const RecordModal: React.FC<RecordModalProps> = ({ isAdmin = false, recor
               )}
             </div>
           )}
-          <button 
-            onClick={onClose}
-            className="px-5 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 border border-slate-300 rounded-xl hover:bg-slate-100 transition-colors ml-auto"
-          >
-            ปิดหน้าต่าง
-          </button>
+          <div className="flex items-center gap-2.5 ml-auto">
+            <button
+              onClick={handleDownloadReportPdf}
+              disabled={isGeneratingReportPdf}
+              className="px-4 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              title="ดาวน์โหลดข้อมูลการคัดกรองรายบุคคลในรูปแบบ PDF สำหรับพิมพ์เก็บไว้เป็นเอกสาร"
+            >
+              {isGeneratingReportPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              <span>ดาวน์โหลดรายงาน (PDF)</span>
+            </button>
+            <button 
+              onClick={onClose}
+              className="px-5 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 border border-slate-300 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+            >
+              ปิดหน้าต่าง
+            </button>
+          </div>
         </div>
       </motion.div>
 
@@ -682,6 +810,326 @@ export const RecordModal: React.FC<RecordModalProps> = ({ isAdmin = false, recor
                   </div>
                 </div>
              </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Hidden element for Individual Screening Report PDF rendering */}
+      <div className="absolute top-[-9999px] left-[-9999px]">
+        <div 
+          ref={reportPdfRef} 
+          style={{ 
+            width: '794px', 
+            minHeight: '1123px', 
+            padding: '36px 42px', 
+            backgroundColor: '#ffffff', 
+            fontFamily: '"Sarabun", "Kanit", system-ui, -apple-system, sans-serif', 
+            color: '#1e293b', 
+            boxSizing: 'border-box',
+            fontSize: '12px',
+            lineHeight: '1.45'
+          }}
+        >
+          {/* Header Banner */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '2.5px solid #2563eb', paddingBottom: '14px', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ width: '44px', height: '44px', backgroundColor: '#2563eb', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff', fontWeight: 'bold', fontSize: '24px' }}>
+                +
+              </div>
+              <div>
+                <h1 style={{ fontSize: '17px', fontWeight: 'bold', color: '#1e3a8a', margin: 0, lineHeight: 1.25 }}>
+                  แบบรายงานผลการคัดกรองและการประเมินสุขภาพส่วนบุคคล
+                </h1>
+                <p style={{ fontSize: '12px', color: '#334155', margin: '3px 0 0 0', fontWeight: '600' }}>
+                  โครงการลดโรค NCDs ด้วยแผนปรับเปลี่ยนพฤติกรรมรายบุคคล "Mini Flag Ship Satun"
+                </p>
+                <p style={{ fontSize: '11px', color: '#64748b', margin: '2px 0 0 0' }}>
+                  ศูนย์คนไทยห่างไกล NCDs • สำนักงานสาธารณสุขจังหวัดสตูล
+                </p>
+              </div>
+            </div>
+            <div style={{ textAlign: 'right', fontSize: '11px', color: '#475569', backgroundColor: '#f8fafc', padding: '8px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', minWidth: '150px' }}>
+              <div><strong style={{ color: '#0f172a' }}>รหัสเอกสาร:</strong> #{record.id}</div>
+              <div style={{ marginTop: '2px' }}><strong style={{ color: '#0f172a' }}>วันที่ตรวจ:</strong> {recordDate}</div>
+              <div style={{ marginTop: '2px', color: '#2563eb', fontWeight: 'bold' }}>
+                รอบที่ตรวจ: ครั้งที่ {record.visitNumber || 1} {record.visitNumber && record.visitNumber > 1 ? `(ติดตามผล #${record.visitNumber - 1})` : "(แรกรับ)"}
+              </div>
+            </div>
+          </div>
+
+          {/* Section 1: ข้อมูลผู้รับการตรวจ (Profile & Demographics) */}
+          <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 14px', marginBottom: '14px' }}>
+            <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#1e3a8a', marginBottom: '6px' }}>
+              👤 ข้อมูลทั่วไปของผู้รับการตรวจ
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+              <tbody>
+                <tr>
+                  <td style={{ padding: '3px 6px', width: '15%', color: '#64748b' }}>ชื่อ-นามสกุล:</td>
+                  <td style={{ padding: '3px 6px', width: '35%', fontWeight: 'bold', color: '#0f172a' }}>{record.name}</td>
+                  <td style={{ padding: '3px 6px', width: '15%', color: '#64748b' }}>อายุ / เพศ:</td>
+                  <td style={{ padding: '3px 6px', width: '35%', fontWeight: 'bold', color: '#0f172a' }}>{record.age} ปี / {record.gender}</td>
+                </tr>
+                <tr>
+                  <td style={{ padding: '3px 6px', color: '#64748b' }}>เบอร์โทรศัพท์:</td>
+                  <td style={{ padding: '3px 6px', fontWeight: 'bold', color: '#0f172a' }}>{record.phone || "-"}</td>
+                  <td style={{ padding: '3px 6px', color: '#64748b' }}>ที่อยู่ / ชุมชน:</td>
+                  <td style={{ padding: '3px 6px', fontWeight: 'bold', color: '#0f172a' }}>{record.address || "-"}</td>
+                </tr>
+                <tr>
+                  <td style={{ padding: '3px 6px', color: '#64748b' }}>อำเภอ / ตำบล:</td>
+                  <td style={{ padding: '3px 6px', fontWeight: 'bold', color: '#0f172a' }}>{record.district} / {record.subdistrict || "-"}</td>
+                  <td style={{ padding: '3px 6px', color: '#64748b' }}>พื้นที่ / โมเดล:</td>
+                  <td style={{ padding: '3px 6px', fontWeight: 'bold', color: '#0f172a' }}>{record.targetArea} {record.modelType ? `(${record.modelType})` : ""}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Section 2: ผลตรวจทางคลินิก (Clinical Vitals) */}
+          <div style={{ marginBottom: '14px' }}>
+            <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#1e3a8a', marginBottom: '6px' }}>
+              🩺 ข้อมูลการตรวจทางคลินิกและสัญญาณชีพ
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px' }}>
+              {/* Weight & Height */}
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px', textAlign: 'center', backgroundColor: '#ffffff' }}>
+                <div style={{ fontSize: '10px', color: '#64748b' }}>น้ำหนัก / ส่วนสูง</div>
+                <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#0f172a', marginTop: '2px' }}>
+                  {record.weight} <span style={{ fontSize: '10px', fontWeight: 'normal' }}>กก.</span>
+                </div>
+                <div style={{ fontSize: '10px', color: '#64748b' }}>{record.height} ซม.</div>
+              </div>
+
+              {/* BMI */}
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px', textAlign: 'center', backgroundColor: '#ffffff' }}>
+                <div style={{ fontSize: '10px', color: '#64748b' }}>ดัชนีมวลกาย (BMI)</div>
+                <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#2563eb', marginTop: '2px' }}>
+                  {record.bmi}
+                </div>
+                <div style={{ fontSize: '10px', fontWeight: 'bold', color: parseFloat(record.bmi) >= 23 ? '#dc2626' : '#16a34a' }}>
+                  {getBmiLabel(record.bmi)}
+                </div>
+              </div>
+
+              {/* Blood Pressure */}
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px', textAlign: 'center', backgroundColor: '#ffffff' }}>
+                <div style={{ fontSize: '10px', color: '#64748b' }}>ความดันโลหิต</div>
+                <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#0f172a', marginTop: '2px' }}>
+                  {record.bpSys}/{record.bpDia} <span style={{ fontSize: '9px', fontWeight: 'normal' }}>mmHg</span>
+                </div>
+                <div style={{ fontSize: '10px', fontWeight: 'bold', color: record.htResult?.level === 'danger' ? '#dc2626' : record.htResult?.level === 'risk' ? '#d97706' : '#16a34a' }}>
+                  {record.htResult?.label?.split(' ')[0] || "ปกติ"}
+                </div>
+              </div>
+
+              {/* Blood Sugar */}
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px', textAlign: 'center', backgroundColor: '#ffffff' }}>
+                <div style={{ fontSize: '10px', color: '#64748b' }}>ระดับน้ำตาล (DTX)</div>
+                <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#0f172a', marginTop: '2px' }}>
+                  {record.sugar && record.sugar > 0 ? (
+                    <>{record.sugar} <span style={{ fontSize: '9px', fontWeight: 'normal' }}>mg/dL</span></>
+                  ) : "-"}
+                </div>
+                <div style={{ fontSize: '10px', fontWeight: 'bold', color: !record.sugar ? '#64748b' : record.dmResult?.level === 'danger' ? '#dc2626' : record.dmResult?.level === 'risk' ? '#d97706' : '#16a34a' }}>
+                  {!record.sugar ? "ไม่ได้ตรวจ" : (record.dmResult?.label?.split(' ')[0] || "ปกติ")}
+                </div>
+              </div>
+
+              {/* Muscle Mass */}
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px', textAlign: 'center', backgroundColor: '#ffffff' }}>
+                <div style={{ fontSize: '10px', color: '#64748b' }}>มวลกล้ามเนื้อ</div>
+                <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#0f172a', marginTop: '2px' }}>
+                  {record.muscleMass && record.muscleMass > 0 ? `${record.muscleMass} กก.` : "-"}
+                </div>
+                <div style={{ fontSize: '10px', color: '#64748b' }}>
+                  {record.muscleMass && record.muscleMass > 0 ? "มวลกายวิทยา" : "ไม่ได้ระบุ"}
+                </div>
+              </div>
+            </div>
+
+            {/* Risk Summary Banner */}
+            <div style={{ marginTop: '8px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px' }}>
+              <div>
+                <span style={{ color: '#1e40af', fontWeight: 'bold' }}>ผลสรุปความเสี่ยงหลัก: </span>
+                <span style={{ fontWeight: 'bold', color: '#1e293b' }}>
+                  ความดัน: {record.htResult?.label || "-"} | เบาหวาน: {record.dmResult?.label || "-"}
+                </span>
+              </div>
+              <div>
+                <span style={{ color: '#1e40af', fontWeight: 'bold' }}>การจัดการหลัก: </span>
+                <span style={{ fontWeight: 'bold', color: '#0f172a' }}>{record.followUpAction || "-"}</span>
+                {record.followUpNote && (
+                  <span style={{ color: '#64748b', marginLeft: '6px' }}>({record.followUpNote})</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Section 3: ประวัติสุขภาพครอบครัว & พฤติกรรมเสี่ยง */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
+            {/* Family history */}
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px 12px', backgroundColor: '#ffffff' }}>
+              <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#1e3a8a', marginBottom: '4px' }}>
+                ❤️ ประวัติโรคสายตรงในครอบครัว
+              </div>
+              <div style={{ fontSize: '11px', color: '#334155' }}>
+                {record.familyHistory && record.familyHistory.length > 0 ? record.familyHistory.join(", ") : "ไม่มีโรคประจำตัว"}
+              </div>
+            </div>
+
+            {/* Lifestyle */}
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px 12px', backgroundColor: '#ffffff' }}>
+              <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#1e3a8a', marginBottom: '4px' }}>
+                🏃‍♂️ พฤติกรรมในชีวิตประจำวัน
+              </div>
+              <table style={{ width: '100%', fontSize: '10px' }}>
+                <tbody>
+                  <tr>
+                    <td style={{ color: '#64748b', width: '50%' }}>การสูบบุหรี่: <strong style={{ color: '#0f172a' }}>{record.smoking}</strong></td>
+                    <td style={{ color: '#64748b', width: '50%' }}>แอลกอฮอล์: <strong style={{ color: '#0f172a' }}>{record.alcohol}</strong></td>
+                  </tr>
+                  <tr>
+                    <td style={{ color: '#64748b', paddingTop: '3px' }}>ออกกำลังกาย: <strong style={{ color: '#0f172a' }}>{record.exercise}</strong></td>
+                    <td style={{ color: '#64748b', paddingTop: '3px' }}>การนอนหลับ: <strong style={{ color: '#0f172a' }}>{record.sleep}</strong></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Section 4: การประเมินพฤติกรรมการบริโภคอาหาร (หวาน มัน เค็ม) */}
+          <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px 12px', backgroundColor: '#ffffff', marginBottom: '14px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#1e3a8a', marginBottom: '6px' }}>
+              🍽️ ผลประเมินพฤติกรรมการกินอาหาร (หวาน มัน เค็ม)
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', textAlign: 'left' }}>
+                  <th style={{ padding: '5px 6px', width: '20%' }}>หมวดอาหาร</th>
+                  <th style={{ padding: '5px 6px', width: '15%' }}>คะแนน</th>
+                  <th style={{ padding: '5px 6px', width: '18%' }}>ระดับความเสี่ยง</th>
+                  <th style={{ padding: '5px 6px' }}>ข้อแนะนำในการปรับเปลี่ยน</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  <td style={{ padding: '5px 6px', fontWeight: 'bold', color: '#0f172a' }}>ความหวาน (Sweet)</td>
+                  <td style={{ padding: '5px 6px' }}>{record.foodHabit?.sweet?.score ?? "-"} คะแนน</td>
+                  <td style={{ padding: '5px 6px', fontWeight: 'bold' }}>{record.foodHabit?.sweet?.level || "-"}</td>
+                  <td style={{ padding: '5px 6px', color: '#475569' }}>{record.foodHabit?.sweet?.description || "-"}</td>
+                </tr>
+                <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  <td style={{ padding: '5px 6px', fontWeight: 'bold', color: '#0f172a' }}>ความมัน (Fat)</td>
+                  <td style={{ padding: '5px 6px' }}>{record.foodHabit?.fat?.score ?? "-"} คะแนน</td>
+                  <td style={{ padding: '5px 6px', fontWeight: 'bold' }}>{record.foodHabit?.fat?.level || "-"}</td>
+                  <td style={{ padding: '5px 6px', color: '#475569' }}>{record.foodHabit?.fat?.description || "-"}</td>
+                </tr>
+                <tr>
+                  <td style={{ padding: '5px 6px', fontWeight: 'bold', color: '#0f172a' }}>ความเค็ม (Salt)</td>
+                  <td style={{ padding: '5px 6px' }}>{record.foodHabit?.salt?.score ?? "-"} คะแนน</td>
+                  <td style={{ padding: '5px 6px', fontWeight: 'bold' }}>{record.foodHabit?.salt?.level || "-"}</td>
+                  <td style={{ padding: '5px 6px', color: '#475569' }}>{record.foodHabit?.salt?.description || "-"}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Section 5: สรุปแผนปรับเปลี่ยนพฤติกรรมรายบุคคล (Personal Plan) */}
+          {record.personalPlan && (
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px 12px', backgroundColor: '#ffffff', marginBottom: '14px' }}>
+              <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#1e3a8a', marginBottom: '6px' }}>
+                📋 สรุปแผนปรับเปลี่ยนพฤติกรรมรายบุคคล (Personal Plan 6 ด้าน)
+              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', textAlign: 'left' }}>
+                    <th style={{ padding: '4px 6px', width: '22%' }}>ด้านพฤติกรรม</th>
+                    <th style={{ padding: '4px 6px', width: '58%' }}>เป้าหมาย / แผนที่ตั้งไว้</th>
+                    <th style={{ padding: '4px 6px', width: '20%', textAlign: 'center' }}>ผลการทำตามแผน</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    { key: "sweet", label: "ลดหวาน" },
+                    { key: "fat", label: "ลดมัน" },
+                    { key: "salt", label: "ลดเค็ม" },
+                    { key: "sleep", label: "การนอนหลับ" },
+                    { key: "water", label: "การดื่มน้ำ" },
+                    { key: "exercise", label: "การออกกำลังกาย" },
+                  ].map((item, idx) => {
+                    const planData = record.personalPlan?.[item.key as keyof typeof record.personalPlan];
+                    return (
+                      <tr key={item.key} style={{ borderBottom: idx < 5 ? '1px solid #f1f5f9' : 'none' }}>
+                        <td style={{ padding: '4px 6px', fontWeight: 'bold', color: '#0f172a' }}>{item.label}</td>
+                        <td style={{ padding: '4px 6px', color: '#334155' }}>{planData?.plan || "-"}</td>
+                        <td style={{ padding: '4px 6px', textAlign: 'center', fontWeight: 'bold' }}>
+                          {planData?.achieved === true ? (
+                            <span style={{ color: '#16a34a' }}>✓ ทำได้</span>
+                          ) : planData?.achieved === false ? (
+                            <span style={{ color: '#dc2626' }}>✗ ทำไม่ได้</span>
+                          ) : (
+                            <span style={{ color: '#94a3b8' }}>-</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Section 6: ประวัติการตรวจติดตามผล (ถ้ามีมากกว่า 1 ครั้ง) */}
+          {patientVisits.length > 1 && (
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px 12px', backgroundColor: '#ffffff', marginBottom: '14px' }}>
+              <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#1e3a8a', marginBottom: '6px' }}>
+                📈 ประวัติการตรวจติดตามผลเปรียบเทียบในแต่ละครั้ง (รวม {patientVisits.length} ครั้ง)
+              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px', textAlign: 'center' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                    <th style={{ padding: '4px 6px' }}>รอบการตรวจ</th>
+                    <th style={{ padding: '4px 6px' }}>วันที่ตรวจ</th>
+                    <th style={{ padding: '4px 6px' }}>น้ำหนัก (กก.)</th>
+                    <th style={{ padding: '4px 6px' }}>BMI</th>
+                    <th style={{ padding: '4px 6px' }}>ความดัน (mmHg)</th>
+                    <th style={{ padding: '4px 6px' }}>น้ำตาล (mg/dL)</th>
+                    <th style={{ padding: '4px 6px' }}>สถานะความเสี่ยง HT</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {patientVisits.map((v) => (
+                    <tr key={v.id} style={{ borderBottom: '1px solid #f1f5f9', backgroundColor: v.id === record.id ? '#f0fdf4' : 'transparent' }}>
+                      <td style={{ padding: '4px 6px', fontWeight: 'bold' }}>ครั้งที่ {v.visitNumber || 1} {v.id === record.id ? "(ฉบับนี้)" : ""}</td>
+                      <td style={{ padding: '4px 6px' }}>{v.date}</td>
+                      <td style={{ padding: '4px 6px' }}>{v.weight}</td>
+                      <td style={{ padding: '4px 6px' }}>{v.bmi}</td>
+                      <td style={{ padding: '4px 6px', fontWeight: 'bold', color: '#0f172a' }}>{v.bpSys}/{v.bpDia}</td>
+                      <td style={{ padding: '4px 6px' }}>{v.sugar && v.sugar > 0 ? v.sugar : "-"}</td>
+                      <td style={{ padding: '4px 6px', fontWeight: 'bold' }}>{v.htResult?.label?.split(' ')[0] || "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Section 7: ส่วนลงนามรับรอง */}
+          <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'space-between', padding: '0 30px', fontSize: '11px' }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ marginBottom: '40px' }}>ลงชื่อ............................................................</div>
+              <div style={{ fontWeight: 'bold', color: '#0f172a' }}>({record.name})</div>
+              <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px' }}>ผู้เข้าร่วมโครงการ / ผู้รับการตรวจ</div>
+              <div style={{ fontSize: '10px', color: '#64748b', marginTop: '3px' }}>วันที่ {recordDate}</div>
+            </div>
+
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ marginBottom: '40px' }}>ลงชื่อ............................................................</div>
+              <div style={{ fontWeight: 'bold', color: '#0f172a' }}>(............................................................)</div>
+              <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px' }}>เจ้าหน้าที่สาธารณสุข / ผู้ประเมินผล</div>
+              <div style={{ fontSize: '10px', color: '#64748b', marginTop: '3px' }}>ศูนย์คนไทยห่างไกล NCDs สตูล</div>
+            </div>
           </div>
         </div>
       </div>

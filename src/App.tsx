@@ -221,9 +221,6 @@ export default function App() {
         const newIds = new Set(importedRecords.map(r => r.id));
         return [...prev.filter(r => !newIds.has(r.id)), ...importedRecords].sort((a, b) => b.id - a.id);
       });
-
-      alert(`นำเข้าข้อมูลสำเร็จจำนวน ${importedRecords.length} เคส`);
-
     } catch (error) {
        console.error("Error importing records:", error);
        alert("เกิดข้อผิดพลาดในการนำเข้าข้อมูล");
