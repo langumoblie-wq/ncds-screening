@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { ScreeningRecord } from "../types";
-import { getRecordModel, getRecordSubdistrict } from "./BackupRestoreModal";
 import { Target, Users, Activity, Filter, Map, ChevronRight, ChevronDown, BarChart3, Edit2, Check, AlertCircle, TrendingUp, Trophy, Printer } from "lucide-react";
 
 interface ProjectTrackingProps {
@@ -151,9 +150,8 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
     }> = {};
 
     filteredRecords.forEach(r => {
-      const mType = r.modelType || getRecordModel(r) || "ไม่ระบุโมเดล";
-      const sub = r.subdistrict || getRecordSubdistrict(r);
-      const area = (mType === "หมู่บ้าน" ? (r.targetArea || sub) : (sub ? `ต.${sub}` : r.targetArea)) || "ไม่ระบุพื้นที่";
+      const area = (r.modelType === "หมู่บ้าน" ? r.targetArea : r.subdistrict) || "ไม่ระบุพื้นที่";
+      const mType = r.modelType || "ไม่ระบุโมเดล";
       const dist = r.district || "ไม่ระบุอำเภอ";
       const key = `${mType}|${dist}|${area}`;
       

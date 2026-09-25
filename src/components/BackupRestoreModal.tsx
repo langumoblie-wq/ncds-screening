@@ -21,76 +21,41 @@ import {
   HelpCircle,
   FileCheck
 } from "lucide-react";
-import { ScreeningRecord, DistrictType, LOCATION_DATA, DISTRICT_SUBDISTRICT_MAP } from "../types";
+import { ScreeningRecord, DistrictType, LOCATION_DATA } from "../types";
 
-// Helper: Determine model for a record with full compatibility and preserving explicit choices
+// Helper: Determine model for a record
 export const getRecordModel = (r: Partial<ScreeningRecord>): "หมู่บ้าน" | "ตำบล" | "ทั่วไป" => {
-  // 1. If explicitly set, ALWAYS prioritize and respect it
-  if (r.modelType === "หมู่บ้าน" || r.modelType === "ตำบล") {
-    return r.modelType;
-  }
-  if (typeof r.modelType === "string" && r.modelType.includes("หมู่บ้าน")) {
-    return "หมู่บ้าน";
-  }
-  if (typeof r.modelType === "string" && r.modelType.includes("ตำบล")) {
-    return "ตำบล";
-  }
-
-  // 2. Check LOCATION_DATA mapping
+  if (!r.district || !r.targetArea) return "ทั่วไป";
   const sub = r.subdistrict || "";
-  if (r.district && r.targetArea) {
-    if ((LOCATION_DATA["หมู่บ้าน"] as any)?.[r.district]?.[sub]?.includes(r.targetArea)) {
-      return "หมู่บ้าน";
-    }
-    if ((LOCATION_DATA["ตำบล"] as any)?.[r.district]?.[sub]?.includes(r.targetArea)) {
-      return "ตำบล";
-    }
-
-    // Scan across subdistricts if subdistrict string mismatch
-    const mbDistrict = (LOCATION_DATA["หมู่บ้าน"] as any)?.[r.district];
-    if (mbDistrict) {
-      for (const s of Object.keys(mbDistrict)) {
-        if (mbDistrict[s]?.includes(r.targetArea)) return "หมู่บ้าน";
-      }
-    }
-    const tbDistrict = (LOCATION_DATA["ตำบล"] as any)?.[r.district];
-    if (tbDistrict) {
-      for (const s of Object.keys(tbDistrict)) {
-        if (tbDistrict[s]?.includes(r.targetArea)) return "ตำบล";
-      }
-    }
-  }
-
-  // 3. Keyword heuristic if model still undetermined
-  const area = r.targetArea || "";
-  if (area.includes("ม.") || area.includes("หมู่") || area.includes("บ้าน") || area.includes("ชุมชน")) {
+  
+  if ((LOCATION_DATA["หมู่บ้าน"] as any)?.[r.district]?.[sub]?.includes(r.targetArea)) {
     return "หมู่บ้าน";
   }
-  if (area.includes("ตำบล") || area.includes("ต.")) {
+  if ((LOCATION_DATA["ตำบล"] as any)?.[r.district]?.[sub]?.includes(r.targetArea)) {
     return "ตำบล";
   }
 
+  // Scan across subdistricts if subdistrict string mismatch
+  const mbDistrict = (LOCATION_DATA["หมู่บ้าน"] as any)?.[r.district];
+  if (mbDistrict) {
+    for (const s of Object.keys(mbDistrict)) {
+      if (mbDistrict[s]?.includes(r.targetArea)) return "หมู่บ้าน";
+    }
+  }
+  const tbDistrict = (LOCATION_DATA["ตำบล"] as any)?.[r.district];
+  if (tbDistrict) {
+    for (const s of Object.keys(tbDistrict)) {
+      if (tbDistrict[s]?.includes(r.targetArea)) return "ตำบล";
+    }
+  }
   return "ทั่วไป";
 };
 
 // Helper: Infer subdistrict if not explicitly saved
 export const getRecordSubdistrict = (r: Partial<ScreeningRecord>): string => {
-  if (r.subdistrict && r.subdistrict.trim() !== "") {
-    return r.subdistrict.replace(/^ต\./, "").trim();
-  }
+  if (r.subdistrict) return r.subdistrict;
   if (!r.district || !r.targetArea) return "";
   
-  // 1. Check comprehensive DISTRICT_SUBDISTRICT_MAP first
-  const distMap = DISTRICT_SUBDISTRICT_MAP[r.district as DistrictType];
-  if (distMap) {
-    for (const [sub, areas] of Object.entries(distMap)) {
-      if (areas.some(a => a === r.targetArea || r.targetArea?.includes(a) || a.includes(r.targetArea || ""))) {
-        return sub;
-      }
-    }
-  }
-
-  // 2. Fallback to LOCATION_DATA
   for (const model of ["หมู่บ้าน", "ตำบล"] as const) {
     const distData = (LOCATION_DATA[model] as any)?.[r.district];
     if (distData) {
