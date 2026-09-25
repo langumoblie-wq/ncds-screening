@@ -1,7 +1,1160 @@
 [
   {
-    "id": 1,
-    "name": "test",
-    "createdAt": "2026-07-04T07:01:46.902Z"
+    "id": 1719810001001,
+    "date": "10/06/2567",
+    "visitNumber": 1,
+    "name": "นายวิชัย สันติราษฎร์",
+    "age": 54,
+    "gender": "ชาย",
+    "address": "12 ม.1 ต.เขาขาว อ.ละงู จ.สตูล",
+    "district": "ละงู",
+    "subdistrict": "เขาขาว",
+    "targetArea": "ม.1 บ้านสันติสุข",
+    "modelType": "หมู่บ้าน",
+    "phone": "081-123-4567",
+    "familyHistory": [
+      "ความดันโลหิตสูง"
+    ],
+    "smoking": "ไม่สูบ",
+    "alcohol": "ไม่ดื่มเลย",
+    "water": "6-8 แก้ว",
+    "exercise": "3 วันขึ้นไป/สัปดาห์",
+    "sleep": "6-8 ชั่วโมง",
+    "sodium": "ไม่ค่อยทานเค็ม",
+    "weight": 68,
+    "height": 165,
+    "bpSys": 128,
+    "bpDia": 82,
+    "sugar": 104,
+    "bmi": "24.98",
+    "followUpAction": "ให้คำแนะนำ 3อ. 2ส.",
+    "followUpNote": "แนะนำควบคุมอาหารหวานมัน และออกกำลังกายสม่ำเสมอ",
+    "htResult": {
+      "level": "risk",
+      "label": "กลุ่มเสี่ยง",
+      "color": "text-amber-700",
+      "class": "bg-amber-100 text-amber-800"
+    },
+    "dmResult": {
+      "level": "risk",
+      "label": "กลุ่มเสี่ยง",
+      "color": "text-amber-700",
+      "class": "bg-amber-100 text-amber-800"
+    },
+    "foodHabit": {
+      "sweet": {
+        "score": 7,
+        "level": "เสี่ยงน้อย",
+        "color": "text-emerald-600",
+        "class": "bg-emerald-50",
+        "description": ""
+      },
+      "fat": {
+        "score": 9,
+        "level": "เสี่ยงปานกลาง",
+        "color": "text-amber-600",
+        "class": "bg-amber-50",
+        "description": ""
+      },
+      "salt": {
+        "score": 6,
+        "level": "เสี่ยงน้อย",
+        "color": "text-emerald-600",
+        "class": "bg-emerald-50",
+        "description": ""
+      }
+    },
+    "createdAt": "2024-06-10T08:30:00.000Z",
+    "hasConsented": true
+  },
+  {
+    "id": 1719810001002,
+    "date": "15/08/2567",
+    "visitNumber": 2,
+    "name": "นายวิชัย สันติราษฎร์",
+    "age": 54,
+    "gender": "ชาย",
+    "address": "12 ม.1 ต.เขาขาว อ.ละงู จ.สตูล",
+    "district": "ละงู",
+    "subdistrict": "เขาขาว",
+    "targetArea": "ม.1 บ้านสันติสุข",
+    "modelType": "หมู่บ้าน",
+    "phone": "081-123-4567",
+    "familyHistory": [
+      "ความดันโลหิตสูง"
+    ],
+    "smoking": "ไม่สูบ",
+    "alcohol": "ไม่ดื่มเลย",
+    "water": "6-8 แก้ว",
+    "exercise": "3 วันขึ้นไป/สัปดาห์",
+    "sleep": "6-8 ชั่วโมง",
+    "sodium": "ไม่ค่อยทานเค็ม",
+    "weight": 66,
+    "height": 165,
+    "bpSys": 122,
+    "bpDia": 80,
+    "sugar": 98,
+    "bmi": "24.24",
+    "followUpAction": "ให้คำแนะนำ 3อ. 2ส.",
+    "followUpNote": "ความดันและน้ำตาลลดลง พฤติกรรมดีขึ้นมาก",
+    "htResult": {
+      "level": "normal",
+      "label": "ปกติ",
+      "color": "text-emerald-700",
+      "class": "bg-emerald-100 text-emerald-800"
+    },
+    "dmResult": {
+      "level": "normal",
+      "label": "ปกติ",
+      "color": "text-emerald-700",
+      "class": "bg-emerald-100 text-emerald-800"
+    },
+    "foodHabit": {
+      "sweet": {
+        "score": 5,
+        "level": "เสี่ยงน้อย",
+        "color": "text-emerald-600",
+        "class": "bg-emerald-50",
+        "description": ""
+      },
+      "fat": {
+        "score": 6,
+        "level": "เสี่ยงน้อย",
+        "color": "text-emerald-600",
+        "class": "bg-emerald-50",
+        "description": ""
+      },
+      "salt": {
+        "score": 5,
+        "level": "เสี่ยงน้อย",
+        "color": "text-emerald-600",
+        "class": "bg-emerald-50",
+        "description": ""
+      }
+    },
+    "createdAt": "2024-08-15T09:00:00.000Z",
+    "hasConsented": true
+  },
+  {
+    "id": 1719810002001,
+    "date": "12/06/2567",
+    "visitNumber": 1,
+    "name": "นางมารียะห์ ดาหลำ",
+    "age": 48,
+    "gender": "หญิง",
+    "address": "45 ม.5 ต.เขาขาว อ.ละงู จ.สตูล",
+    "district": "ละงู",
+    "subdistrict": "เขาขาว",
+    "targetArea": "ม.5 ดาหลำ",
+    "modelType": "ตำบล",
+    "phone": "089-234-5678",
+    "familyHistory": [
+      "เบาหวาน"
+    ],
+    "smoking": "ไม่สูบ",
+    "alcohol": "ไม่ดื่มเลย",
+    "water": "6-8 แก้ว",
+    "exercise": "1-2 วัน/สัปดาห์",
+    "sleep": "น้อยกว่า 6 ชั่วโมง",
+    "sodium": "ทานเค็มปานกลาง",
+    "weight": 62,
+    "height": 156,
+    "bpSys": 136,
+    "bpDia": 88,
+    "sugar": 118,
+    "bmi": "25.48",
+    "followUpAction": "ให้คำแนะนำ 3อ. 2ส.",
+    "followUpNote": "กลุ่มเสี่ยงเบาหวานและความดัน แนะนำปรับอาหารและพักผ่อน",
+    "htResult": {
+      "level": "risk",
+      "label": "กลุ่มเสี่ยง",
+      "color": "text-amber-700",
+      "class": "bg-amber-100 text-amber-800"
+    },
+    "dmResult": {
+      "level": "risk",
+      "label": "กลุ่มเสี่ยง",
+      "color": "text-amber-700",
+      "class": "bg-amber-100 text-amber-800"
+    },
+    "foodHabit": {
+      "sweet": {
+        "score": 11,
+        "level": "เสี่ยงสูง",
+        "color": "text-rose-600",
+        "class": "bg-rose-50",
+        "description": ""
+      },
+      "fat": {
+        "score": 8,
+        "level": "เสี่ยงปานกลาง",
+        "color": "text-amber-600",
+        "class": "bg-amber-50",
+        "description": ""
+      },
+      "salt": {
+        "score": 8,
+        "level": "เสี่ยงปานกลาง",
+        "color": "text-amber-600",
+        "class": "bg-amber-50",
+        "description": ""
+      }
+    },
+    "createdAt": "2024-06-12T10:15:00.000Z",
+    "hasConsented": true
+  },
+  {
+    "id": 1719810003001,
+    "date": "14/06/2567",
+    "visitNumber": 1,
+    "name": "นายดลเลาะฮ์ เกาะปราบ",
+    "age": 62,
+    "gender": "ชาย",
+    "address": "78 ม.6 ต.เขาขาว อ.ละงู จ.สตูล",
+    "district": "ละงู",
+    "subdistrict": "เขาขาว",
+    "targetArea": "ม.6 ทุ่งเกาะปราบ",
+    "modelType": "ตำบล",
+    "phone": "084-345-6789",
+    "familyHistory": [
+      "ความดันโลหิตสูง",
+      "หลอดเลือดสมอง"
+    ],
+    "smoking": "สูบเป็นประจำ",
+    "alcohol": "ไม่ดื่มเลย",
+    "water": "มากกว่า 8 แก้ว",
+    "exercise": "ไม่ออกกำลังกาย",
+    "sleep": "6-8 ชั่วโมง",
+    "sodium": "ชอบทานเค็ม",
+    "weight": 74,
+    "height": 168,
+    "bpSys": 146,
+    "bpDia": 94,
+    "sugar": 132,
+    "bmi": "26.22",
+    "followUpAction": "ส่งต่อพบแพทย์ รพ.สต.",
+    "followUpNote": "ความดันและน้ำตาลสูง สงสัยป่วยรายใหม่ ส่งต่อตรวจยืนยัน",
+    "htResult": {
+      "level": "danger",
+      "label": "สงสัยป่วย",
+      "color": "text-rose-700",
+      "class": "bg-rose-100 text-rose-800"
+    },
+    "dmResult": {
+      "level": "danger",
+      "label": "สงสัยป่วย",
+      "color": "text-rose-700",
+      "class": "bg-rose-100 text-rose-800"
+    },
+    "foodHabit": {
+      "sweet": {
+        "score": 10,
+        "level": "เสี่ยงสูง",
+        "color": "text-rose-600",
+        "class": "bg-rose-50",
+        "description": ""
+      },
+      "fat": {
+        "score": 12,
+        "level": "เสี่ยงสูงมาก",
+        "color": "text-rose-700",
+        "class": "bg-rose-100",
+        "description": ""
+      },
+      "salt": {
+        "score": 13,
+        "level": "เสี่ยงสูงมาก",
+        "color": "text-rose-700",
+        "class": "bg-rose-100",
+        "description": ""
+      }
+    },
+    "createdAt": "2024-06-14T11:00:00.000Z",
+    "hasConsented": true
+  },
+  {
+    "id": 1719810004001,
+    "date": "16/06/2567",
+    "visitNumber": 1,
+    "name": "นางรอเบียะ นาข่า",
+    "age": 51,
+    "gender": "หญิง",
+    "address": "23 ม.7 ต.เขาขาว อ.ละงู จ.สตูล",
+    "district": "ละงู",
+    "subdistrict": "เขาขาว",
+    "targetArea": "ม.7 นาข่าใต้",
+    "modelType": "ตำบล",
+    "phone": "086-456-7890",
+    "familyHistory": [
+      "ไม่มีโรคประจำตัว"
+    ],
+    "smoking": "ไม่สูบ",
+    "alcohol": "ไม่ดื่มเลย",
+    "water": "6-8 แก้ว",
+    "exercise": "3 วันขึ้นไป/สัปดาห์",
+    "sleep": "6-8 ชั่วโมง",
+    "sodium": "ไม่ค่อยทานเค็ม",
+    "weight": 55,
+    "height": 158,
+    "bpSys": 118,
+    "bpDia": 78,
+    "sugar": 92,
+    "bmi": "22.03",
+    "followUpAction": "ให้คำแนะนำ 3อ. 2ส.",
+    "followUpNote": "สุขภาพแข็งแรงดี แนะนำรักษาระดับพฤติกรรมนี้ต่อไป",
+    "htResult": {
+      "level": "normal",
+      "label": "ปกติ",
+      "color": "text-emerald-700",
+      "class": "bg-emerald-100 text-emerald-800"
+    },
+    "dmResult": {
+      "level": "normal",
+      "label": "ปกติ",
+      "color": "text-emerald-700",
+      "class": "bg-emerald-100 text-emerald-800"
+    },
+    "foodHabit": {
+      "sweet": {
+        "score": 5,
+        "level": "เสี่ยงน้อย",
+        "color": "text-emerald-600",
+        "class": "bg-emerald-50",
+        "description": ""
+      },
+      "fat": {
+        "score": 5,
+        "level": "เสี่ยงน้อย",
+        "color": "text-emerald-600",
+        "class": "bg-emerald-50",
+        "description": ""
+      },
+      "salt": {
+        "score": 5,
+        "level": "เสี่ยงน้อย",
+        "color": "text-emerald-600",
+        "class": "bg-emerald-50",
+        "description": ""
+      }
+    },
+    "createdAt": "2024-06-16T13:30:00.000Z",
+    "hasConsented": true
+  },
+  {
+    "id": 1719810005001,
+    "date": "18/06/2567",
+    "visitNumber": 1,
+    "name": "นายประสิทธิ์ วังยาว",
+    "age": 46,
+    "gender": "ชาย",
+    "address": "56 ม.11 ต.น้ำผุด อ.ละงู จ.สตูล",
+    "district": "ละงู",
+    "subdistrict": "น้ำผุด",
+    "targetArea": "ม.11 บ้านวังยาว",
+    "modelType": "หมู่บ้าน",
+    "phone": "087-567-8901",
+    "familyHistory": [
+      "ความดันโลหิตสูง"
+    ],
+    "smoking": "ไม่สูบ",
+    "alcohol": "ดื่มครั้งคราว",
+    "water": "6-8 แก้ว",
+    "exercise": "3 วันขึ้นไป/สัปดาห์",
+    "sleep": "6-8 ชั่วโมง",
+    "sodium": "ทานเค็มปานกลาง",
+    "weight": 71,
+    "height": 172,
+    "bpSys": 130,
+    "bpDia": 85,
+    "sugar": 108,
+    "bmi": "23.99",
+    "followUpAction": "ให้คำแนะนำ 3อ. 2ส.",
+    "followUpNote": "กลุ่มเสี่ยงความดันโลหิตสูง แนะนำลดดื่มแอลกอฮอล์และลดเค็ม",
+    "htResult": {
+      "level": "risk",
+      "label": "กลุ่มเสี่ยง",
+      "color": "text-amber-700",
+      "class": "bg-amber-100 text-amber-800"
+    },
+    "dmResult": {
+      "level": "risk",
+      "label": "กลุ่มเสี่ยง",
+      "color": "text-amber-700",
+      "class": "bg-amber-100 text-amber-800"
+    },
+    "foodHabit": {
+      "sweet": {
+        "score": 6,
+        "level": "เสี่ยงน้อย",
+        "color": "text-emerald-600",
+        "class": "bg-emerald-50",
+        "description": ""
+      },
+      "fat": {
+        "score": 9,
+        "level": "เสี่ยงปานกลาง",
+        "color": "text-amber-600",
+        "class": "bg-amber-50",
+        "description": ""
+      },
+      "salt": {
+        "score": 8,
+        "level": "เสี่ยงปานกลาง",
+        "color": "text-amber-600",
+        "class": "bg-amber-50",
+        "description": ""
+      }
+    },
+    "createdAt": "2024-06-18T09:20:00.000Z",
+    "hasConsented": true
+  },
+  {
+    "id": 1719810006001,
+    "date": "20/06/2567",
+    "visitNumber": 1,
+    "name": "นางวรรณา ควนไสน",
+    "age": 58,
+    "gender": "หญิง",
+    "address": "88 ม.1 ต.กำแพง อ.ละงู จ.สตูล",
+    "district": "ละงู",
+    "subdistrict": "กำแพง",
+    "targetArea": "ม.1 บ้านควนไสน",
+    "modelType": "หมู่บ้าน",
+    "phone": "083-678-9012",
+    "familyHistory": [
+      "เบาหวาน"
+    ],
+    "smoking": "ไม่สูบ",
+    "alcohol": "ไม่ดื่มเลย",
+    "water": "6-8 แก้ว",
+    "exercise": "1-2 วัน/สัปดาห์",
+    "sleep": "6-8 ชั่วโมง",
+    "sodium": "ทานเค็มปานกลาง",
+    "weight": 65,
+    "height": 154,
+    "bpSys": 134,
+    "bpDia": 86,
+    "sugar": 122,
+    "bmi": "27.41",
+    "followUpAction": "ให้คำแนะนำ 3อ. 2ส.",
+    "followUpNote": "น้ำหนักเกิน เสี่ยงเบาหวาน แนะนำคุมอาหารหวานมัน",
+    "htResult": {
+      "level": "risk",
+      "label": "กลุ่มเสี่ยง",
+      "color": "text-amber-700",
+      "class": "bg-amber-100 text-amber-800"
+    },
+    "dmResult": {
+      "level": "risk",
+      "label": "กลุ่มเสี่ยง",
+      "color": "text-amber-700",
+      "class": "bg-amber-100 text-amber-800"
+    },
+    "foodHabit": {
+      "sweet": {
+        "score": 10,
+        "level": "เสี่ยงสูง",
+        "color": "text-rose-600",
+        "class": "bg-rose-50",
+        "description": ""
+      },
+      "fat": {
+        "score": 10,
+        "level": "เสี่ยงสูง",
+        "color": "text-rose-600",
+        "class": "bg-rose-50",
+        "description": ""
+      },
+      "salt": {
+        "score": 7,
+        "level": "เสี่ยงน้อย",
+        "color": "text-emerald-600",
+        "class": "bg-emerald-50",
+        "description": ""
+      }
+    },
+    "createdAt": "2024-06-20T14:10:00.000Z",
+    "hasConsented": true
+  },
+  {
+    "id": 1719810007001,
+    "date": "05/07/2567",
+    "visitNumber": 1,
+    "name": "นายสมชาย ใจดี",
+    "age": 45,
+    "gender": "ชาย",
+    "address": "109 ถ.สตูลธานี ต.พิมาน อ.เมืองสตูล จ.สตูล",
+    "district": "เมือง",
+    "subdistrict": "พิมาน",
+    "targetArea": "ท่านายเนาว์",
+    "modelType": "หมู่บ้าน",
+    "phone": "081-234-5678",
+    "familyHistory": [
+      "ความดันโลหิตสูง"
+    ],
+    "smoking": "ไม่สูบ",
+    "alcohol": "ไม่ดื่มเลย",
+    "water": "6-8 แก้ว",
+    "exercise": "1-2 วัน/สัปดาห์",
+    "sleep": "6-8 ชั่วโมง",
+    "sodium": "ปรุงเพิ่มบางครั้ง",
+    "weight": 75,
+    "height": 170,
+    "bpSys": 135,
+    "bpDia": 85,
+    "sugar": 110,
+    "bmi": "25.95",
+    "followUpAction": "ให้คำแนะนำ 3อ. 2ส.",
+    "followUpNote": "ตรวจพบระดับความดันและน้ำตาลในเกณฑ์กลุ่มเสี่ยง",
+    "htResult": {
+      "level": "risk",
+      "label": "กลุ่มเสี่ยง",
+      "color": "text-amber-700",
+      "class": "bg-amber-100 text-amber-800"
+    },
+    "dmResult": {
+      "level": "risk",
+      "label": "กลุ่มเสี่ยง",
+      "color": "text-amber-700",
+      "class": "bg-amber-100 text-amber-800"
+    },
+    "foodHabit": {
+      "sweet": {
+        "score": 8,
+        "level": "เสี่ยงปานกลาง",
+        "color": "text-amber-600",
+        "class": "bg-amber-50",
+        "description": ""
+      },
+      "fat": {
+        "score": 10,
+        "level": "เสี่ยงสูง",
+        "color": "text-rose-600",
+        "class": "bg-rose-50",
+        "description": ""
+      },
+      "salt": {
+        "score": 7,
+        "level": "เสี่ยงน้อย",
+        "color": "text-emerald-600",
+        "class": "bg-emerald-50",
+        "description": ""
+      }
+    },
+    "createdAt": "2024-07-05T08:00:00.000Z",
+    "hasConsented": true
+  },
+  {
+    "id": 1719810008001,
+    "date": "06/07/2567",
+    "visitNumber": 1,
+    "name": "นางอำไพ ปานชูสุข",
+    "age": 50,
+    "gender": "หญิง",
+    "address": "33 ถ.ปานชู ต.พิมาน อ.เมืองสตูล จ.สตูล",
+    "district": "เมือง",
+    "subdistrict": "พิมาน",
+    "targetArea": "ปานชู",
+    "modelType": "ตำบล",
+    "phone": "082-345-6789",
+    "familyHistory": [
+      "ความดันโลหิตสูง"
+    ],
+    "smoking": "ไม่สูบ",
+    "alcohol": "ไม่ดื่มเลย",
+    "water": "6-8 แก้ว",
+    "exercise": "3 วันขึ้นไป/สัปดาห์",
+    "sleep": "6-8 ชั่วโมง",
+    "sodium": "ไม่ค่อยทานเค็ม",
+    "weight": 58,
+    "height": 160,
+    "bpSys": 124,
+    "bpDia": 82,
+    "sugar": 96,
+    "bmi": "22.66",
+    "followUpAction": "ให้คำแนะนำ 3อ. 2ส.",
+    "followUpNote": "ความดันปกติ น้ำตาลปกติ รักษาสุขภาพต่อเนื่อง",
+    "htResult": {
+      "level": "normal",
+      "label": "ปกติ",
+      "color": "text-emerald-700",
+      "class": "bg-emerald-100 text-emerald-800"
+    },
+    "dmResult": {
+      "level": "normal",
+      "label": "ปกติ",
+      "color": "text-emerald-700",
+      "class": "bg-emerald-100 text-emerald-800"
+    },
+    "foodHabit": {
+      "sweet": {
+        "score": 5,
+        "level": "เสี่ยงน้อย",
+        "color": "text-emerald-600",
+        "class": "bg-emerald-50",
+        "description": ""
+      },
+      "fat": {
+        "score": 6,
+        "level": "เสี่ยงน้อย",
+        "color": "text-emerald-600",
+        "class": "bg-emerald-50",
+        "description": ""
+      },
+      "salt": {
+        "score": 5,
+        "level": "เสี่ยงน้อย",
+        "color": "text-emerald-600",
+        "class": "bg-emerald-50",
+        "description": ""
+      }
+    },
+    "createdAt": "2024-07-06T09:30:00.000Z",
+    "hasConsented": true
+  },
+  {
+    "id": 1719810009001,
+    "date": "08/07/2567",
+    "visitNumber": 1,
+    "name": "นายการุณย์ ท่าจีน",
+    "age": 56,
+    "gender": "ชาย",
+    "address": "15 ม.2 ต.คลองขุด อ.เมืองสตูล จ.สตูล",
+    "district": "เมือง",
+    "subdistrict": "คลองขุด",
+    "targetArea": "ม.2 บ้านท่าจีน",
+    "modelType": "หมู่บ้าน",
+    "phone": "085-678-1234",
+    "familyHistory": [
+      "เบาหวาน"
+    ],
+    "smoking": "สูบเป็นประจำ",
+    "alcohol": "ดื่มครั้งคราว",
+    "water": "6-8 แก้ว",
+    "exercise": "ไม่ออกกำลังกาย",
+    "sleep": "น้อยกว่า 6 ชั่วโมง",
+    "sodium": "ชอบทานเค็ม",
+    "weight": 78,
+    "height": 167,
+    "bpSys": 142,
+    "bpDia": 92,
+    "sugar": 128,
+    "bmi": "27.97",
+    "followUpAction": "ส่งต่อ รพ.สต. คลองขุด",
+    "followUpNote": "ความดัน 142/92 น้ำตาล 128 ส่งต่อตรวจทางห้องปฏิบัติการ",
+    "htResult": {
+      "level": "danger",
+      "label": "สงสัยป่วย",
+      "color": "text-rose-700",
+      "class": "bg-rose-100 text-rose-800"
+    },
+    "dmResult": {
+      "level": "danger",
+      "label": "สงสัยป่วย",
+      "color": "text-rose-700",
+      "class": "bg-rose-100 text-rose-800"
+    },
+    "foodHabit": {
+      "sweet": {
+        "score": 11,
+        "level": "เสี่ยงสูง",
+        "color": "text-rose-600",
+        "class": "bg-rose-50",
+        "description": ""
+      },
+      "fat": {
+        "score": 12,
+        "level": "เสี่ยงสูงมาก",
+        "color": "text-rose-700",
+        "class": "bg-rose-100",
+        "description": ""
+      },
+      "salt": {
+        "score": 11,
+        "level": "เสี่ยงสูง",
+        "color": "text-rose-600",
+        "class": "bg-rose-50",
+        "description": ""
+      }
+    },
+    "createdAt": "2024-07-08T10:00:00.000Z",
+    "hasConsented": true
+  },
+  {
+    "id": 1719810010001,
+    "date": "10/07/2567",
+    "visitNumber": 1,
+    "name": "นางสุมาลี เกาะนก",
+    "age": 49,
+    "gender": "หญิง",
+    "address": "72 ต.คลองขุด อ.เมืองสตูล จ.สตูล",
+    "district": "เมือง",
+    "subdistrict": "คลองขุด",
+    "targetArea": "บ้านเกาะนก",
+    "modelType": "ตำบล",
+    "phone": "086-789-2345",
+    "familyHistory": [
+      "ไม่มีโรคประจำตัว"
+    ],
+    "smoking": "ไม่สูบ",
+    "alcohol": "ไม่ดื่มเลย",
+    "water": "มากกว่า 8 แก้ว",
+    "exercise": "3 วันขึ้นไป/สัปดาห์",
+    "sleep": "6-8 ชั่วโมง",
+    "sodium": "ไม่ค่อยทานเค็ม",
+    "weight": 59,
+    "height": 161,
+    "bpSys": 116,
+    "bpDia": 76,
+    "sugar": 90,
+    "bmi": "22.76",
+    "followUpAction": "ให้คำแนะนำ 3อ. 2ส.",
+    "followUpNote": "ตรวจสุขภาพปกติ แนะนำดูแลตนเองต่อเนื่อง",
+    "htResult": {
+      "level": "normal",
+      "label": "ปกติ",
+      "color": "text-emerald-700",
+      "class": "bg-emerald-100 text-emerald-800"
+    },
+    "dmResult": {
+      "level": "normal",
+      "label": "ปกติ",
+      "color": "text-emerald-700",
+      "class": "bg-emerald-100 text-emerald-800"
+    },
+    "foodHabit": {
+      "sweet": {
+        "score": 5,
+        "level": "เสี่ยงน้อย",
+        "color": "text-emerald-600",
+        "class": "bg-emerald-50",
+        "description": ""
+      },
+      "fat": {
+        "score": 6,
+        "level": "เสี่ยงน้อย",
+        "color": "text-emerald-600",
+        "class": "bg-emerald-50",
+        "description": ""
+      },
+      "salt": {
+        "score": 5,
+        "level": "เสี่ยงน้อย",
+        "color": "text-emerald-600",
+        "class": "bg-emerald-50",
+        "description": ""
+      }
+    },
+    "createdAt": "2024-07-10T11:30:00.000Z",
+    "hasConsented": true
+  },
+  {
+    "id": 1719810011001,
+    "date": "12/07/2567",
+    "visitNumber": 1,
+    "name": "นางสมศรี มีสุข",
+    "age": 52,
+    "gender": "หญิง",
+    "address": "99 ม.1 ต.ควนโดน อ.ควนโดน จ.สตูล",
+    "district": "ควนโดน",
+    "subdistrict": "ควนโดน",
+    "targetArea": "บ้านควนโดน (ต.ควนโดน)",
+    "modelType": "ตำบล",
+    "phone": "089-876-5432",
+    "familyHistory": [
+      "ความดันโลหิตสูง"
+    ],
+    "smoking": "ไม่สูบ",
+    "alcohol": "ไม่ดื่มเลย",
+    "water": "มากกว่า 8 แก้ว",
+    "exercise": "3 วันขึ้นไป/สัปดาห์",
+    "sleep": "6-8 ชั่วโมง",
+    "sodium": "ไม่ปรุงเพิ่ม",
+    "weight": 60,
+    "height": 155,
+    "bpSys": 120,
+    "bpDia": 80,
+    "sugar": 95,
+    "bmi": "24.97",
+    "followUpAction": "ให้คำแนะนำ 3อ. 2ส.",
+    "followUpNote": "ความดันและน้ำตาลปกติ ติดตามรอบถัดไป",
+    "htResult": {
+      "level": "normal",
+      "label": "ปกติ",
+      "color": "text-emerald-700",
+      "class": "bg-emerald-100 text-emerald-800"
+    },
+    "dmResult": {
+      "level": "normal",
+      "label": "ปกติ",
+      "color": "text-emerald-700",
+      "class": "bg-emerald-100 text-emerald-800"
+    },
+    "foodHabit": {
+      "sweet": {
+        "score": 5,
+        "level": "เสี่ยงน้อย",
+        "color": "text-emerald-600",
+        "class": "bg-emerald-50",
+        "description": ""
+      },
+      "fat": {
+        "score": 5,
+        "level": "เสี่ยงน้อย",
+        "color": "text-emerald-600",
+        "class": "bg-emerald-50",
+        "description": ""
+      },
+      "salt": {
+        "score": 5,
+        "level": "เสี่ยงน้อย",
+        "color": "text-emerald-600",
+        "class": "bg-emerald-50",
+        "description": ""
+      }
+    },
+    "createdAt": "2024-07-12T09:00:00.000Z",
+    "hasConsented": true
+  },
+  {
+    "id": 1719810011002,
+    "date": "14/09/2567",
+    "visitNumber": 2,
+    "name": "นางสมศรี มีสุข",
+    "age": 52,
+    "gender": "หญิง",
+    "address": "99 ม.1 ต.ควนโดน อ.ควนโดน จ.สตูล",
+    "district": "ควนโดน",
+    "subdistrict": "ควนโดน",
+    "targetArea": "บ้านควนโดน (ต.ควนโดน)",
+    "modelType": "ตำบล",
+    "phone": "089-876-5432",
+    "familyHistory": [
+      "ความดันโลหิตสูง"
+    ],
+    "smoking": "ไม่สูบ",
+    "alcohol": "ไม่ดื่มเลย",
+    "water": "มากกว่า 8 แก้ว",
+    "exercise": "3 วันขึ้นไป/สัปดาห์",
+    "sleep": "6-8 ชั่วโมง",
+    "sodium": "ไม่ปรุงเพิ่ม",
+    "weight": 59,
+    "height": 155,
+    "bpSys": 118,
+    "bpDia": 78,
+    "sugar": 92,
+    "bmi": "24.56",
+    "followUpAction": "ให้คำแนะนำ 3อ. 2ส.",
+    "followUpNote": "ตรวจติดตามครั้งที่ 2 สุขภาพคงที่ ผลปกติ",
+    "htResult": {
+      "level": "normal",
+      "label": "ปกติ",
+      "color": "text-emerald-700",
+      "class": "bg-emerald-100 text-emerald-800"
+    },
+    "dmResult": {
+      "level": "normal",
+      "label": "ปกติ",
+      "color": "text-emerald-700",
+      "class": "bg-emerald-100 text-emerald-800"
+    },
+    "foodHabit": {
+      "sweet": {
+        "score": 5,
+        "level": "เสี่ยงน้อย",
+        "color": "text-emerald-600",
+        "class": "bg-emerald-50",
+        "description": ""
+      },
+      "fat": {
+        "score": 5,
+        "level": "เสี่ยงน้อย",
+        "color": "text-emerald-600",
+        "class": "bg-emerald-50",
+        "description": ""
+      },
+      "salt": {
+        "score": 5,
+        "level": "เสี่ยงน้อย",
+        "color": "text-emerald-600",
+        "class": "bg-emerald-50",
+        "description": ""
+      }
+    },
+    "createdAt": "2024-09-14T09:30:00.000Z",
+    "hasConsented": true
+  },
+  {
+    "id": 1719810012001,
+    "date": "15/07/2567",
+    "visitNumber": 1,
+    "name": "นายอดุลย์ สายควน",
+    "age": 57,
+    "gender": "ชาย",
+    "address": "24 ม.3 ต.ท่าแพ อ.ท่าแพ จ.สตูล",
+    "district": "ท่าแพ",
+    "subdistrict": "ท่าแพ",
+    "targetArea": "สายควน (ต.ท่าแพ)",
+    "modelType": "หมู่บ้าน",
+    "phone": "087-890-3456",
+    "familyHistory": [
+      "ความดันโลหิตสูง"
+    ],
+    "smoking": "ไม่สูบ",
+    "alcohol": "ไม่ดื่มเลย",
+    "water": "6-8 แก้ว",
+    "exercise": "1-2 วัน/สัปดาห์",
+    "sleep": "6-8 ชั่วโมง",
+    "sodium": "ทานเค็มปานกลาง",
+    "weight": 69,
+    "height": 166,
+    "bpSys": 132,
+    "bpDia": 84,
+    "sugar": 114,
+    "bmi": "25.04",
+    "followUpAction": "ให้คำแนะนำ 3อ. 2ส.",
+    "followUpNote": "ความดัน 132/84 กลุ่มเสี่ยง แนะนำลดเค็มและลดของทอด",
+    "htResult": {
+      "level": "risk",
+      "label": "กลุ่มเสี่ยง",
+      "color": "text-amber-700",
+      "class": "bg-amber-100 text-amber-800"
+    },
+    "dmResult": {
+      "level": "risk",
+      "label": "กลุ่มเสี่ยง",
+      "color": "text-amber-700",
+      "class": "bg-amber-100 text-amber-800"
+    },
+    "foodHabit": {
+      "sweet": {
+        "score": 7,
+        "level": "เสี่ยงน้อย",
+        "color": "text-emerald-600",
+        "class": "bg-emerald-50",
+        "description": ""
+      },
+      "fat": {
+        "score": 9,
+        "level": "เสี่ยงปานกลาง",
+        "color": "text-amber-600",
+        "class": "bg-amber-50",
+        "description": ""
+      },
+      "salt": {
+        "score": 9,
+        "level": "เสี่ยงปานกลาง",
+        "color": "text-amber-600",
+        "class": "bg-amber-50",
+        "description": ""
+      }
+    },
+    "createdAt": "2024-07-15T10:00:00.000Z",
+    "hasConsented": true
+  },
+  {
+    "id": 1719810013001,
+    "date": "18/07/2567",
+    "visitNumber": 1,
+    "name": "นางอำนวย เจริญสุข",
+    "age": 63,
+    "gender": "หญิง",
+    "address": "51 ม.5 ต.อุใดเจริญ อ.ควนกาหลง จ.สตูล",
+    "district": "ควนกาหลง",
+    "subdistrict": "อุใดเจริญ",
+    "targetArea": "ม.5 ผัง 31 (อุใดใต้,คลองโลน)",
+    "modelType": "ตำบล",
+    "phone": "088-901-4567",
+    "familyHistory": [
+      "เบาหวาน",
+      "ความดันโลหิตสูง"
+    ],
+    "smoking": "ไม่สูบ",
+    "alcohol": "ไม่ดื่มเลย",
+    "water": "6-8 แก้ว",
+    "exercise": "ไม่ออกกำลังกาย",
+    "sleep": "น้อยกว่า 6 ชั่วโมง",
+    "sodium": "ชอบทานเค็ม",
+    "weight": 70,
+    "height": 153,
+    "bpSys": 148,
+    "bpDia": 96,
+    "sugar": 140,
+    "bmi": "29.90",
+    "followUpAction": "ส่งต่อ รพ.ควนกาหลง",
+    "followUpNote": "ความดัน 148/96 น้ำตาล 140 ส่งต่อเพื่อรับการรักษา",
+    "htResult": {
+      "level": "danger",
+      "label": "สงสัยป่วย",
+      "color": "text-rose-700",
+      "class": "bg-rose-100 text-rose-800"
+    },
+    "dmResult": {
+      "level": "danger",
+      "label": "สงสัยป่วย",
+      "color": "text-rose-700",
+      "class": "bg-rose-100 text-rose-800"
+    },
+    "foodHabit": {
+      "sweet": {
+        "score": 12,
+        "level": "เสี่ยงสูงมาก",
+        "color": "text-rose-700",
+        "class": "bg-rose-100",
+        "description": ""
+      },
+      "fat": {
+        "score": 11,
+        "level": "เสี่ยงสูง",
+        "color": "text-rose-600",
+        "class": "bg-rose-50",
+        "description": ""
+      },
+      "salt": {
+        "score": 12,
+        "level": "เสี่ยงสูงมาก",
+        "color": "text-rose-700",
+        "class": "bg-rose-100",
+        "description": ""
+      }
+    },
+    "createdAt": "2024-07-18T13:40:00.000Z",
+    "hasConsented": true
+  },
+  {
+    "id": 1719810014001,
+    "date": "22/07/2567",
+    "visitNumber": 1,
+    "name": "นายบรรจง ขอนคลาน",
+    "age": 47,
+    "gender": "ชาย",
+    "address": "18 ม.1 ต.ขอนคลาน อ.ทุ่งหว้า จ.สตูล",
+    "district": "ทุ่งหว้า",
+    "subdistrict": "ขอนคลาน",
+    "targetArea": "ม.1 ขอนคลานตะวันออก",
+    "modelType": "ตำบล",
+    "phone": "089-012-5678",
+    "familyHistory": [
+      "ไม่มีโรคประจำตัว"
+    ],
+    "smoking": "สูบเป็นประจำ",
+    "alcohol": "ดื่มครั้งคราว",
+    "water": "6-8 แก้ว",
+    "exercise": "3 วันขึ้นไป/สัปดาห์",
+    "sleep": "6-8 ชั่วโมง",
+    "sodium": "ทานเค็มปานกลาง",
+    "weight": 64,
+    "height": 169,
+    "bpSys": 126,
+    "bpDia": 82,
+    "sugar": 102,
+    "bmi": "22.41",
+    "followUpAction": "ให้คำแนะนำ 3อ. 2ส.",
+    "followUpNote": "ความดันและน้ำตาลกลุ่มเสี่ยง แนะนำลดละเลิกบุหรี่",
+    "htResult": {
+      "level": "risk",
+      "label": "กลุ่มเสี่ยง",
+      "color": "text-amber-700",
+      "class": "bg-amber-100 text-amber-800"
+    },
+    "dmResult": {
+      "level": "risk",
+      "label": "กลุ่มเสี่ยง",
+      "color": "text-amber-700",
+      "class": "bg-amber-100 text-amber-800"
+    },
+    "foodHabit": {
+      "sweet": {
+        "score": 6,
+        "level": "เสี่ยงน้อย",
+        "color": "text-emerald-600",
+        "class": "bg-emerald-50",
+        "description": ""
+      },
+      "fat": {
+        "score": 8,
+        "level": "เสี่ยงปานกลาง",
+        "color": "text-amber-600",
+        "class": "bg-amber-50",
+        "description": ""
+      },
+      "salt": {
+        "score": 7,
+        "level": "เสี่ยงน้อย",
+        "color": "text-emerald-600",
+        "class": "bg-emerald-50",
+        "description": ""
+      }
+    },
+    "createdAt": "2024-07-22T08:50:00.000Z",
+    "hasConsented": true
+  },
+  {
+    "id": 1719810015001,
+    "date": "25/07/2567",
+    "visitNumber": 1,
+    "name": "นางกานดา ผังทอง",
+    "age": 53,
+    "gender": "หญิง",
+    "address": "62 ม.8 ต.นิคมพัฒนา อ.มะนัง จ.สตูล",
+    "district": "มะนัง",
+    "subdistrict": "นิคมพัฒนา",
+    "targetArea": "ม.8 บ้านผัง 16,17,19,20",
+    "modelType": "หมู่บ้าน",
+    "phone": "080-123-6789",
+    "familyHistory": [
+      "ความดันโลหิตสูง"
+    ],
+    "smoking": "ไม่สูบ",
+    "alcohol": "ไม่ดื่มเลย",
+    "water": "6-8 แก้ว",
+    "exercise": "3 วันขึ้นไป/สัปดาห์",
+    "sleep": "6-8 ชั่วโมง",
+    "sodium": "ไม่ค่อยทานเค็ม",
+    "weight": 57,
+    "height": 157,
+    "bpSys": 122,
+    "bpDia": 80,
+    "sugar": 94,
+    "bmi": "23.12",
+    "followUpAction": "ให้คำแนะนำ 3อ. 2ส.",
+    "followUpNote": "ผลตรวจสุขภาพปกติ รักษาระดับการดูแลตนเองต่อเนื่อง",
+    "htResult": {
+      "level": "normal",
+      "label": "ปกติ",
+      "color": "text-emerald-700",
+      "class": "bg-emerald-100 text-emerald-800"
+    },
+    "dmResult": {
+      "level": "normal",
+      "label": "ปกติ",
+      "color": "text-emerald-700",
+      "class": "bg-emerald-100 text-emerald-800"
+    },
+    "foodHabit": {
+      "sweet": {
+        "score": 5,
+        "level": "เสี่ยงน้อย",
+        "color": "text-emerald-600",
+        "class": "bg-emerald-50",
+        "description": ""
+      },
+      "fat": {
+        "score": 6,
+        "level": "เสี่ยงน้อย",
+        "color": "text-emerald-600",
+        "class": "bg-emerald-50",
+        "description": ""
+      },
+      "salt": {
+        "score": 5,
+        "level": "เสี่ยงน้อย",
+        "color": "text-emerald-600",
+        "class": "bg-emerald-50",
+        "description": ""
+      }
+    },
+    "createdAt": "2024-07-25T11:15:00.000Z",
+    "hasConsented": true
   }
 ]

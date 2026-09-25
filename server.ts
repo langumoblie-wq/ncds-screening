@@ -1,16 +1,112 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 
 dotenv.config();
 
+const RECORDS_FILE_PATH = path.join(process.cwd(), "records.json");
+
+function getStoredRecords(): any[] {
+  try {
+    if (fs.existsSync(RECORDS_FILE_PATH)) {
+      const data = fs.readFileSync(RECORDS_FILE_PATH, "utf-8");
+      const parsed = JSON.parse(data);
+      if (Array.isArray(parsed)) {
+        return parsed.filter(r => r && typeof r === "object" && "id" in r);
+      }
+    }
+  } catch (err) {
+    console.error("Error reading records.json:", err);
+  }
+  return [];
+}
+
+function saveStoredRecords(records: any[]): boolean {
+  try {
+    const valid = records.filter(r => r && typeof r === "object" && "id" in r);
+    fs.writeFileSync(RECORDS_FILE_PATH, JSON.stringify(valid, null, 2), "utf-8");
+    return true;
+  } catch (err) {
+    console.error("Error writing records.json:", err);
+    return false;
+  }
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: "50mb" }));
+  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+  // API Routes for Persistent Records Storage
+  app.get("/api/records", (_req, res) => {
+    try {
+      const records = getStoredRecords();
+      res.json({ success: true, count: records.length, records });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to load records" });
+    }
+  });
+
+  app.post("/api/records", (req, res) => {
+    try {
+      const { record } = req.body;
+      if (!record || !record.id) {
+        return res.status(400).json({ error: "Missing valid record data" });
+      }
+
+      const existing = getStoredRecords();
+      const existingIdx = existing.findIndex(r => r.id === record.id);
+      if (existingIdx !== -1) {
+        existing[existingIdx] = record;
+      } else {
+        existing.unshift(record);
+      }
+
+      saveStoredRecords(existing);
+      res.json({ success: true, record });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to save record" });
+    }
+  });
+
+  app.post("/api/records/bulk", (req, res) => {
+    try {
+      const { records } = req.body;
+      if (!Array.isArray(records)) {
+        return res.status(400).json({ error: "Records must be an array" });
+      }
+
+      const current = getStoredRecords();
+      const recordMap = new Map();
+      current.forEach(r => recordMap.set(r.id, r));
+      records.forEach(r => {
+        if (r && r.id) recordMap.set(r.id, r);
+      });
+
+      const merged = Array.from(recordMap.values()).sort((a, b) => (b.id || 0) - (a.id || 0));
+      saveStoredRecords(merged);
+      res.json({ success: true, count: merged.length, records: merged });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to bulk save records" });
+    }
+  });
+
+  app.delete("/api/records/:id", (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const current = getStoredRecords();
+      const filtered = current.filter(r => r.id !== id);
+      saveStoredRecords(filtered);
+      res.json({ success: true, count: filtered.length });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to delete record" });
+    }
+  });
 
   // Initialize Gemini Client
   const apiKey = process.env.GEMINI_API_KEY;

@@ -525,9 +525,40 @@ export const NcdForm: React.FC<NcdFormProps> = ({
       createdAt: (initialRecord && !isFollowUp) ? (initialRecord.createdAt || new Date().toISOString()) : new Date().toISOString()
     };
 
-    // Attempt backup save to server
+    // 1. Save to persistent server API
     try {
-      const { data, error } = await supabase.from('ncd_records').upsert({
+      const res = await fetch("/api/records", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ record: finalRecordObj })
+      });
+      if (res.ok) {
+        savedRecord = finalRecordObj;
+      }
+    } catch (err) {
+      console.warn("Server API save error:", err);
+    }
+
+    // 2. Persist to localStorage
+    try {
+      const local = localStorage.getItem("ncd_records");
+      let currentRecords: any[] = [];
+      if (local) {
+        currentRecords = JSON.parse(local);
+      }
+      if (initialRecord && !isFollowUp) {
+        currentRecords = currentRecords.map((r) => r.id === recordId ? finalRecordObj : r);
+      } else {
+        currentRecords = [finalRecordObj, ...currentRecords.filter(r => r.id !== recordId)];
+      }
+      localStorage.setItem("ncd_records", JSON.stringify(currentRecords));
+    } catch (storageError) {
+      console.error("Failed to save to localStorage:", storageError);
+    }
+
+    // 3. Background sync to Supabase if available
+    try {
+      supabase.from('ncd_records').upsert({
          id: finalRecordObj.id,
          name: finalRecordObj.name,
          visit_number: finalRecordObj.visitNumber,
@@ -535,40 +566,10 @@ export const NcdForm: React.FC<NcdFormProps> = ({
          gender: finalRecordObj.gender,
          data: finalRecordObj,
          created_at: finalRecordObj.createdAt
-      }).select().single();
+      }).then(() => {});
+    } catch (error) {}
 
-      if (!error && data) {
-         savedRecord = data.data;
-      } else {
-         console.warn("Supabase upsert failed:", error);
-      }
-    } catch (error) {
-      console.warn("Server backup failed:", error);
-    }
-
-    // If Server failed, fall back to localStorage
-    if (!savedRecord) {
-      isOfflineMode = true;
-      savedRecord = finalRecordObj;
-
-      // Manually persist to localStorage as backup
-      try {
-        const local = localStorage.getItem("ncd_records");
-        let currentRecords: any[] = [];
-        if (local) {
-          currentRecords = JSON.parse(local);
-        }
-        
-        if (initialRecord && !isFollowUp) {
-          currentRecords = currentRecords.map((r) => r.id === recordId ? savedRecord : r);
-        } else {
-          currentRecords = [...currentRecords, savedRecord];
-        }
-        localStorage.setItem("ncd_records", JSON.stringify(currentRecords));
-      } catch (storageError) {
-        console.error("Failed to save to localStorage:", storageError);
-      }
-    }
+    savedRecord = finalRecordObj;
 
     // Clear Form Fields only if not editing and not in follow-up mode
     if (!initialRecord || isFollowUp) {

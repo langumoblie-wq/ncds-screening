@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { ScreeningRecord, LOCATION_DATA, DistrictType } from "../types";
+import { ScreeningRecord, LOCATION_DATA, DistrictType, DISTRICT_SUBDISTRICT_MAP } from "../types";
+import { getRecordModel, getRecordSubdistrict } from "./BackupRestoreModal";
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -52,43 +53,76 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
     setFilterTargetArea("");
   }, [filterSubdistrict]);
 
-  // Dynamic dropdown options
+  // Dynamic dropdown options combining records, LOCATION_DATA, and DISTRICT_SUBDISTRICT_MAP
   const availableDistricts = useMemo(() => {
-    if (filterModel) {
-      return Object.keys(LOCATION_DATA[filterModel]) as DistrictType[];
-    }
     const districtsSet = new Set<string>();
-    Object.keys(LOCATION_DATA["หมู่บ้าน"]).forEach(d => districtsSet.add(d));
-    Object.keys(LOCATION_DATA["ตำบล"]).forEach(d => districtsSet.add(d));
+    (records || []).forEach(r => {
+      if (r?.district) districtsSet.add(r.district);
+    });
+    if (filterModel && LOCATION_DATA[filterModel]) {
+      Object.keys(LOCATION_DATA[filterModel]).forEach(d => districtsSet.add(d));
+    } else {
+      Object.keys(DISTRICT_SUBDISTRICT_MAP).forEach(d => districtsSet.add(d));
+    }
     return Array.from(districtsSet) as DistrictType[];
-  }, [filterModel]);
+  }, [records, filterModel]);
 
   const availableSubdistricts = useMemo(() => {
-    if (!filterDistrict) return [];
+    const subdistSet = new Set<string>();
+    if (!filterDistrict) {
+      (records || []).forEach(r => {
+        const sub = r.subdistrict || getRecordSubdistrict(r);
+        if (sub) subdistSet.add(sub);
+      });
+      Object.values(DISTRICT_SUBDISTRICT_MAP).forEach(dMap => {
+        Object.keys(dMap).forEach(s => subdistSet.add(s));
+      });
+      return Array.from(subdistSet);
+    }
+
+    (records || []).forEach(r => {
+      if (r && r.district === filterDistrict) {
+        const sub = r.subdistrict || getRecordSubdistrict(r);
+        if (sub) subdistSet.add(sub);
+      }
+    });
+
+    const dMap = DISTRICT_SUBDISTRICT_MAP[filterDistrict as DistrictType];
+    if (dMap) {
+      Object.keys(dMap).forEach(s => subdistSet.add(s));
+    }
     if (filterModel) {
       const subdistMap = (LOCATION_DATA[filterModel] as any)?.[filterDistrict] || {};
-      return Object.keys(subdistMap);
+      Object.keys(subdistMap).forEach(s => subdistSet.add(s));
     }
-    const subdistSet = new Set<string>();
-    const mbSubdists = (LOCATION_DATA["หมู่บ้าน"] as any)?.[filterDistrict] || {};
-    const tbSubdists = (LOCATION_DATA["ตำบล"] as any)?.[filterDistrict] || {};
-    Object.keys(mbSubdists).forEach(s => subdistSet.add(s));
-    Object.keys(tbSubdists).forEach(s => subdistSet.add(s));
+
     return Array.from(subdistSet);
-  }, [filterModel, filterDistrict]);
+  }, [records, filterModel, filterDistrict]);
 
   const availableTargetAreas = useMemo(() => {
-    if (!filterDistrict || !filterSubdistrict) return [];
-    if (filterModel) {
-      return (LOCATION_DATA[filterModel] as any)?.[filterDistrict]?.[filterSubdistrict] || [];
-    }
     const areaSet = new Set<string>();
-    const mbAreas = (LOCATION_DATA["หมู่บ้าน"] as any)?.[filterDistrict]?.[filterSubdistrict] || [];
-    const tbAreas = (LOCATION_DATA["ตำบล"] as any)?.[filterDistrict]?.[filterSubdistrict] || [];
-    mbAreas.forEach((a: string) => areaSet.add(a));
-    tbAreas.forEach((a: string) => areaSet.add(a));
+    (records || []).forEach(r => {
+      if (!r) return;
+      if (filterDistrict && r.district !== filterDistrict) return;
+      const sub = r.subdistrict || getRecordSubdistrict(r);
+      if (filterSubdistrict && sub !== filterSubdistrict && r.subdistrict !== filterSubdistrict) return;
+      if (r.targetArea) areaSet.add(r.targetArea);
+    });
+
+    const targetDistricts = filterDistrict ? [filterDistrict] : Object.keys(DISTRICT_SUBDISTRICT_MAP);
+    targetDistricts.forEach(d => {
+      const dMap = DISTRICT_SUBDISTRICT_MAP[d as DistrictType];
+      if (dMap) {
+        Object.entries(dMap).forEach(([sub, areas]) => {
+          if (!filterSubdistrict || filterSubdistrict === sub) {
+            areas.forEach(a => areaSet.add(a));
+          }
+        });
+      }
+    });
+
     return Array.from(areaSet);
-  }, [filterModel, filterDistrict, filterSubdistrict]);
+  }, [records, filterModel, filterDistrict, filterSubdistrict]);
 
   // Patient latest visit map for deduplication and visit mode
   const latestPatientMap = useMemo(() => {
@@ -112,19 +146,11 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
   // Apply filters to records
   const filteredRecords = useMemo(() => {
     return records.filter((r) => {
-      // Model Type inference for compatibility
-      let recordModel = r.modelType || "";
-      if (!recordModel && r.district && r.targetArea) {
-        if ((LOCATION_DATA["หมู่บ้าน"] as any)?.[r.district]?.[r.subdistrict || ""]?.includes(r.targetArea)) {
-          recordModel = "หมู่บ้าน";
-        } else if ((LOCATION_DATA["ตำบล"] as any)?.[r.district]?.[r.subdistrict || ""]?.includes(r.targetArea)) {
-          recordModel = "ตำบล";
-        }
-      }
-
-      const matchesModel = filterModel ? recordModel === filterModel : true;
+      const recordModel = getRecordModel(r);
+      const matchesModel = filterModel ? (r.modelType === filterModel || recordModel === filterModel) : true;
       const matchesDistrict = filterDistrict ? r.district === filterDistrict : true;
-      const matchesSubdistrict = filterSubdistrict ? r.subdistrict === filterSubdistrict : true;
+      const recordSub = r.subdistrict || getRecordSubdistrict(r);
+      const matchesSubdistrict = filterSubdistrict ? (r.subdistrict === filterSubdistrict || recordSub === filterSubdistrict) : true;
       const matchesTargetArea = filterTargetArea ? r.targetArea === filterTargetArea : true;
 
       // Visit Mode filter
