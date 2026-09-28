@@ -55,6 +55,21 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [dbStatus, setDbStatus] = useState({ connected: false, message: "กำลังตรวจสอบการเชื่อมต่อ..." });
 
+  // Normalizer for legacy location names (e.g. ปานชู -> ชุมชนปานชูรำลึก, model: ตำบล)
+  const normalizeLegacyRecord = (r: any): ScreeningRecord => {
+    if (!r || typeof r !== "object") return r;
+    if (r.targetArea === "ปานชู") {
+      return {
+        ...r,
+        targetArea: "ชุมชนปานชูรำลึก",
+        modelType: "ตำบล",
+        district: r.district || "เมือง",
+        subdistrict: r.subdistrict || "พิมาน"
+      };
+    }
+    return r;
+  };
+
   // Initial load and bi-directional sync with persistent server API (/api/records) + localStorage
   useEffect(() => {
     let isMounted = true;
@@ -69,7 +84,9 @@ export default function App() {
           if (res.ok) {
             const json = await res.json();
             if (json.success && Array.isArray(json.records)) {
-              serverRecords = json.records.filter((r: any) => r && typeof r === "object" && "id" in r);
+              serverRecords = json.records
+                .filter((r: any) => r && typeof r === "object" && "id" in r)
+                .map(normalizeLegacyRecord);
             }
           }
         } catch (apiErr) {
@@ -109,7 +126,7 @@ export default function App() {
 
           if (allSbData.length > 0) {
             supabaseRecords = allSbData
-              .map((row: any) => row.data)
+              .map((row: any) => normalizeLegacyRecord(row.data))
               .filter((r: any) => r && typeof r === "object" && "id" in r);
             setDbStatus({ 
               connected: true, 
@@ -133,7 +150,9 @@ export default function App() {
           if (raw) {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed)) {
-              localRecords = parsed.filter((r: any) => r && typeof r === "object" && ("id" in r || "name" in r));
+              localRecords = parsed
+                .filter((r: any) => r && typeof r === "object" && ("id" in r || "name" in r))
+                .map(normalizeLegacyRecord);
             }
           }
         } catch (storageErr) {
@@ -237,7 +256,7 @@ export default function App() {
           { event: '*', schema: 'public', table: 'ncd_records' },
           (payload: any) => {
             if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-              const rowData = payload.new?.data;
+              const rowData = normalizeLegacyRecord(payload.new?.data);
               if (rowData && rowData.id) {
                 setRecords(prev => {
                   const map = new Map<number, ScreeningRecord>();
@@ -304,7 +323,7 @@ export default function App() {
 
       if (allSbData.length > 0) {
         const cloudRecords: ScreeningRecord[] = allSbData
-          .map((row: any) => row.data)
+          .map((row: any) => normalizeLegacyRecord(row.data))
           .filter((r: any) => r && typeof r === "object" && "id" in r);
 
         const sbIdSet = new Set<number>();
@@ -489,7 +508,8 @@ export default function App() {
       setLoading(true);
 
       // 1. Sanitize and normalize all imported records
-      const sanitizedImported: ScreeningRecord[] = importedRecords.map((r, idx) => {
+      const sanitizedImported: ScreeningRecord[] = importedRecords.map((origR, idx) => {
+        const r = normalizeLegacyRecord(origR);
         const id = Number(r.id) || (Date.now() + idx);
         const model = r.modelType || getRecordModel(r) || "หมู่บ้าน";
         const sub = cleanSubdistrict(r.subdistrict || getRecordSubdistrict(r));

@@ -26,7 +26,20 @@ function getStoredRecords(): any[] {
 
 function saveStoredRecords(records: any[]): boolean {
   try {
-    const valid = records.filter(r => r && typeof r === "object" && "id" in r);
+    const valid = records
+      .filter(r => r && typeof r === "object" && "id" in r)
+      .map(r => {
+        if (r.targetArea === "ปานชู") {
+          return {
+            ...r,
+            targetArea: "ชุมชนปานชูรำลึก",
+            modelType: "ตำบล",
+            district: r.district || "เมือง",
+            subdistrict: r.subdistrict || "พิมาน"
+          };
+        }
+        return r;
+      });
     fs.writeFileSync(RECORDS_FILE_PATH, JSON.stringify(valid, null, 2), "utf-8");
     return true;
   } catch (err) {
