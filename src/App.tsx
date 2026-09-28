@@ -187,6 +187,31 @@ export default function App() {
               console.warn("Bulk sync error:", syncErr);
             }
           }
+          // CRITICAL: If local has records that are NOT in Supabase, upload them to Supabase!
+          const supabaseIdSet = new Set(supabaseRecords.map(r => Number(r.id)));
+          const missingInSupabase = mergedRecords.filter(r => r && r.id != null && !supabaseIdSet.has(Number(r.id)));
+          if (missingInSupabase.length > 0) {
+            try {
+              console.log(`Syncing ${missingInSupabase.length} missing local records to Supabase Cloud...`);
+              const BATCH_SIZE = 50;
+              for (let i = 0; i < missingInSupabase.length; i += BATCH_SIZE) {
+                const chunk = missingInSupabase.slice(i, i + BATCH_SIZE);
+                const formatted = chunk.map(r => ({
+                  id: Number(r.id),
+                  name: r.name,
+                  visit_number: r.visitNumber || 1,
+                  age: r.age,
+                  gender: r.gender,
+                  data: r,
+                  created_at: r.createdAt || new Date().toISOString()
+                }));
+                await supabase.from('ncd_records').upsert(formatted);
+              }
+              console.log("Uploaded missing records to Supabase Cloud successfully!");
+            } catch (upErr) {
+              console.warn("Error uploading local records to Supabase:", upErr);
+            }
+          }
         }
       } catch (error) {
         console.warn("Sync error:", error);
@@ -200,6 +225,49 @@ export default function App() {
 
     syncRecords();
     return () => { isMounted = false; };
+  }, []);
+
+  // Real-time listener for multi-device sync
+  useEffect(() => {
+    try {
+      const channel = supabase
+        .channel('ncd_records_realtime')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'ncd_records' },
+          (payload: any) => {
+            if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+              const rowData = payload.new?.data;
+              if (rowData && rowData.id) {
+                setRecords(prev => {
+                  const map = new Map<number, ScreeningRecord>();
+                  (prev || []).forEach(r => { if (r?.id) map.set(Number(r.id), r); });
+                  map.set(Number(rowData.id), rowData);
+                  const updated = Array.from(map.values()).sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
+                  try { localStorage.setItem("ncd_records", JSON.stringify(updated)); } catch (e) {}
+                  return updated;
+                });
+              }
+            } else if (payload.eventType === 'DELETE') {
+              const deletedId = payload.old?.id;
+              if (deletedId) {
+                setRecords(prev => {
+                  const updated = (prev || []).filter(r => Number(r.id) !== Number(deletedId));
+                  try { localStorage.setItem("ncd_records", JSON.stringify(updated)); } catch (e) {}
+                  return updated;
+                });
+              }
+            }
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    } catch (e) {
+      console.warn("Realtime subscription warning:", e);
+    }
   }, []);
 
   // Function to manually re-sync records with Supabase & server
@@ -239,6 +307,9 @@ export default function App() {
           .map((row: any) => row.data)
           .filter((r: any) => r && typeof r === "object" && "id" in r);
 
+        const sbIdSet = new Set<number>();
+        cloudRecords.forEach(r => { if (r?.id) sbIdSet.add(Number(r.id)); });
+
         // Merge with local state
         const map = new Map<number, ScreeningRecord>();
         (records || []).forEach(r => { if (r?.id) map.set(Number(r.id), r); });
@@ -247,10 +318,31 @@ export default function App() {
         const merged = Array.from(map.values()).sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
         setRecords(merged);
         localStorage.setItem("ncd_records", JSON.stringify(merged));
+
+        // Upload any local records that were missing on Cloud
+        const missingOnCloud = (records || []).filter(r => r && r.id != null && !sbIdSet.has(Number(r.id)));
+        if (missingOnCloud.length > 0) {
+          const BATCH_SIZE = 50;
+          for (let i = 0; i < missingOnCloud.length; i += BATCH_SIZE) {
+            const chunk = missingOnCloud.slice(i, i + BATCH_SIZE);
+            const formatted = chunk.map(r => ({
+              id: Number(r.id),
+              name: r.name,
+              visit_number: r.visitNumber || 1,
+              age: r.age,
+              gender: r.gender,
+              data: r,
+              created_at: r.createdAt || new Date().toISOString()
+            }));
+            await supabase.from('ncd_records').upsert(formatted);
+          }
+        }
         
         setToastContent({
           title: "ซิงค์ข้อมูล Cloud สำเร็จ!",
-          description: `ดึงข้อมูลจาก Cloud อัปเดตข้อมูลทั้งหมดเป็น ${merged.length.toLocaleString()} รายการเรียบร้อย`
+          description: missingOnCloud.length > 0
+            ? `นำข้อมูลในเครื่องขึ้น Cloud ${missingOnCloud.length} รายการ และรวมข้อมูลทั้งหมดเป็น ${merged.length.toLocaleString()} รายการตรงกันแล้ว`
+            : `ดึงข้อมูลจาก Cloud ล่าสุด รวมทั้งหมด ${merged.length.toLocaleString()} รายการเรียบร้อย`
         });
         setShowToast(true);
         setTimeout(() => setShowToast(false), 3500);
