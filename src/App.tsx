@@ -453,22 +453,18 @@ export default function App() {
 
       const fullMergedList = Array.from(recordMap.values()).sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
 
-      // 5. Persist to server backend API if available (Node.js runtime environment)
-      try {
-        const saveRes = await fetch("/api/records/bulk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ records: fullMergedList })
-        });
-        if (!saveRes.ok) {
-          console.warn("Server API returned non-OK status on bulk save, proceeding with Cloud and LocalStorage fallback");
-        }
-      } catch (apiErr) {
-        // Expected on static hosting environments like GitHub Pages where /api/records does not exist
-        console.info("Static host environment detected (no backend /api/records), syncing via Supabase and LocalStorage");
+      // 5. Persist to server backend API first and WAIT for disk save to complete
+      const saveRes = await fetch("/api/records/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ records: fullMergedList })
+      });
+
+      if (!saveRes.ok) {
+        throw new Error("เซิร์ฟเวอร์ตอบกลับสถานะไม่สำเร็จในการบันทึก");
       }
 
-      // 6. Save immediately to localStorage as local persistence
+      // 6. Save immediately to localStorage as secondary backup
       try {
         localStorage.setItem("ncd_records", JSON.stringify(fullMergedList));
       } catch (e) {
@@ -478,8 +474,7 @@ export default function App() {
       // 7. Update active state
       setRecords(fullMergedList);
 
-      // 8. Sync to Supabase Cloud in chunks to guarantee persistence on Cloud
-      let cloudSavedCount = 0;
+      // 8. Sync to Supabase in chunks to guarantee persistence on Cloud
       try {
         const formattedData = sanitizedImported.map(record => ({
           id: record.id,
@@ -495,12 +490,7 @@ export default function App() {
         const BATCH_SIZE = 100;
         for (let i = 0; i < formattedData.length; i += BATCH_SIZE) {
           const chunk = formattedData.slice(i, i + BATCH_SIZE);
-          const { error: upsertErr } = await supabase.from('ncd_records').upsert(chunk);
-          if (upsertErr) {
-            console.warn("Supabase chunk upsert error:", upsertErr);
-          } else {
-            cloudSavedCount += chunk.length;
-          }
+          await supabase.from('ncd_records').upsert(chunk);
         }
       } catch (sbErr) {
         console.warn("Supabase upsert warning during import:", sbErr);
@@ -508,14 +498,15 @@ export default function App() {
 
       setToastContent({
         title: "นำเข้าข้อมูลสำเร็จ!",
-        description: `นำเข้า ${sanitizedImported.length.toLocaleString()} รายการ (บันทึก Cloud ${cloudSavedCount.toLocaleString()} รายการ) และรวมเป็น ${fullMergedList.length.toLocaleString()} รายการเรียบร้อย`
+        description: `นำเข้า ${sanitizedImported.length.toLocaleString()} รายการ และรวมข้อมูลในระบบเป็น ${fullMergedList.length.toLocaleString()} รายการเรียบร้อย (รีเฟรชข้อมูลจะไม่หาย)`
       });
       setShowToast(true);
       setTimeout(() => setShowToast(false), 4000);
       return true;
     } catch (error: any) {
       console.error("Error importing records:", error);
-      throw error;
+      alert("เกิดข้อผิดพลาดในการนำเข้าข้อมูล: " + (error.message || "กรุณาลองใหม่อีกครั้ง"));
+      return false;
     } finally {
       setLoading(false);
     }
