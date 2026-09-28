@@ -21,43 +21,148 @@ import {
   HelpCircle,
   FileCheck
 } from "lucide-react";
-import { ScreeningRecord, DistrictType, LOCATION_DATA } from "../types";
+import { ScreeningRecord, DistrictType, LOCATION_DATA, DISTRICT_SUBDISTRICT_MAP } from "../types";
 
-// Helper: Determine model for a record
+// Normalization Helpers
+export const cleanDistrict = (d?: string): string => {
+  if (!d) return "";
+  let clean = d.replace(/^(อ\.|อำเภอ)/, "").trim();
+  if (clean === "เมืองสตูล") clean = "เมือง";
+  return clean;
+};
+
+export const cleanSubdistrict = (s?: string): string => {
+  if (!s) return "";
+  return s.replace(/^(ต\.|ตำบล)/, "").trim();
+};
+
+export const cleanTargetArea = (a?: string): string => {
+  if (!a) return "";
+  let clean = a.trim();
+  // Remove suffix like (ต.xxx) or (xxx)
+  clean = clean.replace(/\s*\([^)]*\)\s*$/, "").trim();
+  // Remove prefix like "หมู่ที่ X" or "ม.X"
+  clean = clean.replace(/^(หมู่ที่|หมู่|ม\.)\s*\d+\s*/, "").trim();
+  // Remove prefix like "ชุมชน" or "บ้าน"
+  clean = clean.replace(/^(ชุมชน|บ้าน)\s*/, "").trim();
+  return clean;
+};
+
+export const matchesDistrictFilter = (recordDistrict?: string, filterDistricts: string[] = []): boolean => {
+  if (!filterDistricts || filterDistricts.length === 0) return true;
+  const recD = cleanDistrict(recordDistrict);
+  return filterDistricts.some(fd => {
+    if (fd === "all") return true;
+    const cleanFd = cleanDistrict(fd);
+    return cleanFd === recD || cleanFd === recordDistrict || fd === recordDistrict;
+  });
+};
+
+export const matchesSubdistrictFilter = (recordSubdistrict?: string, filterSubdistricts: string[] = []): boolean => {
+  if (!filterSubdistricts || filterSubdistricts.length === 0) return true;
+  const recSub = cleanSubdistrict(recordSubdistrict);
+  return filterSubdistricts.some(fs => {
+    if (fs === "all") return true;
+    const cleanFs = cleanSubdistrict(fs);
+    return cleanFs === recSub || cleanFs === recordSubdistrict || fs === recordSubdistrict ||
+      (cleanFs && recSub && (cleanFs.includes(recSub) || recSub.includes(cleanFs)));
+  });
+};
+
+export const matchesTargetAreaFilter = (recordArea?: string, filterAreas: string[] = []): boolean => {
+  if (!filterAreas || filterAreas.length === 0) return true;
+  if (!recordArea) return false;
+  const cleanRec = cleanTargetArea(recordArea);
+  return filterAreas.some(fa => {
+    if (fa === "all") return true;
+    if (fa === recordArea) return true;
+    const cleanFa = cleanTargetArea(fa);
+    if (cleanFa && (cleanFa === cleanRec || cleanRec.includes(cleanFa) || cleanFa.includes(cleanRec))) return true;
+    return false;
+  });
+};
+
+export const matchesModelFilter = (record: Partial<ScreeningRecord>, filterModels: string[] = []): boolean => {
+  if (!filterModels || filterModels.length === 0) return true;
+  const model = getRecordModel(record);
+  const rawModel = record.modelType || "";
+  return filterModels.some(fm => {
+    if (fm === "all") return true;
+    if (fm === model) return true;
+    if (rawModel && (rawModel.includes(fm) || fm.includes(rawModel))) return true;
+    // Allow legacy records or general category to show when filtering
+    if ((rawModel as any) === "ปิงปอง 7 สี" || (model as any) === "ทั่วไป") return true;
+    return false;
+  });
+};
+
+// Helper: Determine model for a record with full compatibility and preserving explicit choices
 export const getRecordModel = (r: Partial<ScreeningRecord>): "หมู่บ้าน" | "ตำบล" | "ทั่วไป" => {
-  if (!r.district || !r.targetArea) return "ทั่วไป";
-  const sub = r.subdistrict || "";
-  
-  if ((LOCATION_DATA["หมู่บ้าน"] as any)?.[r.district]?.[sub]?.includes(r.targetArea)) {
+  // 1. If explicitly set, ALWAYS prioritize and respect it
+  if (r.modelType === "หมู่บ้าน" || r.modelType === "ตำบล") {
+    return r.modelType;
+  }
+  if (typeof r.modelType === "string" && r.modelType.includes("หมู่บ้าน")) {
     return "หมู่บ้าน";
   }
-  if ((LOCATION_DATA["ตำบล"] as any)?.[r.district]?.[sub]?.includes(r.targetArea)) {
+  if (typeof r.modelType === "string" && r.modelType.includes("ตำบล")) {
     return "ตำบล";
   }
 
-  // Scan across subdistricts if subdistrict string mismatch
-  const mbDistrict = (LOCATION_DATA["หมู่บ้าน"] as any)?.[r.district];
-  if (mbDistrict) {
-    for (const s of Object.keys(mbDistrict)) {
-      if (mbDistrict[s]?.includes(r.targetArea)) return "หมู่บ้าน";
+  // 2. Check LOCATION_DATA mapping
+  const sub = cleanSubdistrict(r.subdistrict || "");
+  const dist = cleanDistrict(r.district);
+  if (dist && r.targetArea) {
+    const cleanA = cleanTargetArea(r.targetArea);
+    const mbDistrict = (LOCATION_DATA["หมู่บ้าน"] as any)?.[dist];
+    if (mbDistrict) {
+      if (mbDistrict[sub]?.some((a: string) => cleanTargetArea(a) === cleanA || a.includes(cleanA))) return "หมู่บ้าน";
+      for (const s of Object.keys(mbDistrict)) {
+        if (mbDistrict[s]?.some((a: string) => cleanTargetArea(a) === cleanA || a.includes(cleanA))) return "หมู่บ้าน";
+      }
+    }
+    const tbDistrict = (LOCATION_DATA["ตำบล"] as any)?.[dist];
+    if (tbDistrict) {
+      if (tbDistrict[sub]?.some((a: string) => cleanTargetArea(a) === cleanA || a.includes(cleanA))) return "ตำบล";
+      for (const s of Object.keys(tbDistrict)) {
+        if (tbDistrict[s]?.some((a: string) => cleanTargetArea(a) === cleanA || a.includes(cleanA))) return "ตำบล";
+      }
     }
   }
-  const tbDistrict = (LOCATION_DATA["ตำบล"] as any)?.[r.district];
-  if (tbDistrict) {
-    for (const s of Object.keys(tbDistrict)) {
-      if (tbDistrict[s]?.includes(r.targetArea)) return "ตำบล";
-    }
+
+  // 3. Keyword heuristic if model still undetermined
+  const area = r.targetArea || "";
+  if (area.includes("ม.") || area.includes("หมู่") || area.includes("บ้าน") || area.includes("ชุมชน")) {
+    return "หมู่บ้าน";
   }
-  return "ทั่วไป";
+  if (area.includes("ตำบล") || area.includes("ต.")) {
+    return "ตำบล";
+  }
+
+  return "หมู่บ้าน";
 };
 
 // Helper: Infer subdistrict if not explicitly saved
 export const getRecordSubdistrict = (r: Partial<ScreeningRecord>): string => {
-  if (r.subdistrict) return r.subdistrict;
+  if (r.subdistrict && r.subdistrict.trim() !== "") {
+    return cleanSubdistrict(r.subdistrict);
+  }
   if (!r.district || !r.targetArea) return "";
   
+  const dist = cleanDistrict(r.district);
+  // 1. Check comprehensive DISTRICT_SUBDISTRICT_MAP first
+  const distMap = DISTRICT_SUBDISTRICT_MAP[dist as DistrictType] || DISTRICT_SUBDISTRICT_MAP[r.district as DistrictType];
+  if (distMap) {
+    for (const [sub, areas] of Object.entries(distMap)) {
+      if (areas.some(a => a === r.targetArea || r.targetArea?.includes(a) || a.includes(r.targetArea || ""))) {
+        return sub;
+      }
+    }
+  }
+
+  // 2. Fallback to LOCATION_DATA
   for (const model of ["หมู่บ้าน", "ตำบล"] as const) {
-    const distData = (LOCATION_DATA[model] as any)?.[r.district];
+    const distData = (LOCATION_DATA[model] as any)?.[dist] || (LOCATION_DATA[model] as any)?.[r.district];
     if (distData) {
       for (const [sub, areas] of Object.entries(distData)) {
         if ((areas as string[]).includes(r.targetArea)) {
@@ -67,6 +172,93 @@ export const getRecordSubdistrict = (r: Partial<ScreeningRecord>): string => {
     }
   }
   return "";
+};
+
+// Helper: Parse CSV formatted data into ScreeningRecord items
+export const parseCsvToRecords = (csvText: string): Partial<ScreeningRecord>[] => {
+  const lines = csvText.split(/\r?\n/).filter(line => line.trim().length > 0);
+  if (lines.length < 2) return [];
+
+  const parseLine = (line: string): string[] => {
+    const result: string[] = [];
+    let current = "";
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        result.push(current.trim());
+        current = "";
+      } else {
+        current += char;
+      }
+    }
+    result.push(current.trim());
+    return result;
+  };
+
+  const headerRow = parseLine(lines[0].replace(/^\uFEFF/, ""));
+  const headerMap: Record<string, number> = {};
+  headerRow.forEach((h, idx) => {
+    headerMap[h.trim()] = idx;
+    headerMap[h.trim().toLowerCase()] = idx;
+  });
+
+  const getCol = (cols: string[], ...names: string[]): string => {
+    for (const name of names) {
+      if (headerMap[name] !== undefined) return cols[headerMap[name]] || "";
+      if (headerMap[name.toLowerCase()] !== undefined) return cols[headerMap[name.toLowerCase()]] || "";
+    }
+    return "";
+  };
+
+  const records: Partial<ScreeningRecord>[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cols = parseLine(lines[i]);
+    if (cols.length < 2) continue;
+    const name = getCol(cols, "ชื่อ-นามสกุล", "ชื่อ", "name");
+    if (!name) continue;
+
+    const id = Number(getCol(cols, "ID", "id")) || (Date.now() + i);
+    const date = getCol(cols, "วันที่ตรวจ", "date") || new Date().toLocaleDateString("th-TH");
+    const visitNumber = Number(getCol(cols, "ครั้งที่", "visitNumber", "visit_number")) || 1;
+    const age = Number(getCol(cols, "อายุ", "age")) || 0;
+    const gender = (getCol(cols, "เพศ", "gender") === "หญิง" ? "หญิง" : "ชาย") as any;
+    const phone = getCol(cols, "เบอร์โทร", "phone");
+    const rawDistrict = getCol(cols, "อำเภอ", "district") || "เมือง";
+    const district = (cleanDistrict(rawDistrict) || "เมือง") as DistrictType;
+    const subdistrict = cleanSubdistrict(getCol(cols, "ตำบล", "subdistrict"));
+    const targetArea = getCol(cols, "พื้นที่เป้าหมาย", "หมู่บ้าน", "targetArea");
+    const weight = Number(getCol(cols, "น้ำหนัก", "weight")) || 0;
+    const height = Number(getCol(cols, "ส่วนสูง", "height")) || 0;
+    const bmi = getCol(cols, "BMI", "bmi") || (height > 0 ? (weight / Math.pow(height / 100, 2)).toFixed(2) : "0");
+    const bpSys = Number(getCol(cols, "ความดันบน (Systolic)", "bpSys", "ความดันบน")) || 0;
+    const bpDia = Number(getCol(cols, "ความดันล่าง (Diastolic)", "bpDia", "ความดันล่าง")) || 0;
+    const sugar = Number(getCol(cols, "น้ำตาล (FBS)", "sugar", "น้ำตาล")) || 0;
+
+    records.push({
+      id,
+      date,
+      visitNumber,
+      name,
+      age,
+      gender,
+      phone,
+      district,
+      subdistrict,
+      targetArea,
+      weight,
+      height,
+      bmi,
+      bpSys,
+      bpDia,
+      sugar,
+      createdAt: new Date().toISOString()
+    });
+  }
+
+  return records;
 };
 
 /* =========================================================================
@@ -592,7 +784,7 @@ export interface BackupImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   existingRecords: ScreeningRecord[];
-  onConfirmImport: (recordsToImport: ScreeningRecord[]) => void;
+  onConfirmImport: (recordsToImport: ScreeningRecord[]) => Promise<any> | void;
 }
 
 export const BackupImportModal: React.FC<BackupImportModalProps> = ({
@@ -606,6 +798,7 @@ export const BackupImportModal: React.FC<BackupImportModalProps> = ({
   const [fileName, setFileName] = useState<string>("");
   const [fileSizeStr, setFileSizeStr] = useState<string>("");
   const [errorMsg, setErrorMsg] = useState<string>("");
+  const [isExecuting, setIsExecuting] = useState<boolean>(false);
 
   // Selective Import Filters
   const [importModel, setImportModel] = useState<string>("all");
@@ -634,6 +827,7 @@ export const BackupImportModal: React.FC<BackupImportModalProps> = ({
     setImportSubdistrict("all");
     setImportTargetArea("all");
     setImportedSummary(null);
+    setIsExecuting(false);
   };
 
   const handleModalClose = () => {
@@ -641,7 +835,7 @@ export const BackupImportModal: React.FC<BackupImportModalProps> = ({
     onClose();
   };
 
-  // Handle file reading
+  // Handle file reading (JSON and CSV)
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -655,20 +849,50 @@ export const BackupImportModal: React.FC<BackupImportModalProps> = ({
     reader.onload = (event) => {
       try {
         const text = event.target?.result as string;
-        const json = JSON.parse(text);
+        let rawItems: any[] = [];
 
-        if (!Array.isArray(json)) {
-          setErrorMsg("โครงสร้างไฟล์ไม่ถูกต้อง: ข้อมูลต้องเป็น Array ของรายการตรวจ (JSON)");
-          return;
+        if (file.name.toLowerCase().endsWith(".csv")) {
+          rawItems = parseCsvToRecords(text);
+        } else {
+          const json = JSON.parse(text);
+          if (Array.isArray(json)) {
+            rawItems = json;
+          } else if (json && Array.isArray(json.records)) {
+            rawItems = json.records;
+          } else if (json && Array.isArray(json.data)) {
+            rawItems = json.data;
+          } else {
+            setErrorMsg("โครงสร้างไฟล์ไม่ถูกต้อง: ข้อมูลต้องเป็น Array ของรายการตรวจ หรือ { records: [...] }");
+            return;
+          }
         }
 
-        if (json.length === 0) {
+        if (rawItems.length === 0) {
           setErrorMsg("ไฟล์ไม่มีข้อมูลบันทึก (0 รายการ)");
           return;
         }
 
-        // Validate basic record shape
-        const validRecords: ScreeningRecord[] = json.filter(item => item && (item.name || item.id));
+        // Validate and normalize records with guaranteed IDs and location fields
+        const validRecords: ScreeningRecord[] = rawItems
+          .filter(item => item && typeof item === "object" && (item.name || item.id))
+          .map((item, idx) => {
+            const numId = Number(item.id) || (Date.now() + idx);
+            const m = item.modelType || getRecordModel(item);
+            const sub = cleanSubdistrict(item.subdistrict || getRecordSubdistrict(item));
+            const rawDist = item.district || "เมือง";
+            const dist = cleanDistrict(rawDist) as DistrictType;
+            return {
+              ...item,
+              id: numId,
+              name: item.name || "ไม่ระบุชื่อ",
+              visitNumber: Number(item.visitNumber) || 1,
+              modelType: (m === "หมู่บ้าน" || m === "ตำบล" ? m : "หมู่บ้าน") as any,
+              district: dist,
+              subdistrict: sub,
+              targetArea: item.targetArea || (sub ? `ต.${sub}` : "ทั่วไป"),
+              createdAt: item.createdAt || new Date().toISOString()
+            } as ScreeningRecord;
+          });
 
         if (validRecords.length === 0) {
           setErrorMsg("ไม่พบบันทึกการคัดกรองที่ถูกต้องในไฟล์นี้");
@@ -677,9 +901,9 @@ export const BackupImportModal: React.FC<BackupImportModalProps> = ({
 
         setParsedData(validRecords);
         setStep("filter_preview");
-      } catch (err) {
+      } catch (err: any) {
         console.error(err);
-        setErrorMsg("เกิดข้อผิดพลาดในการอ่านไฟล์ JSON กรุณาตรวจสอบความถูกต้องของไฟล์");
+        setErrorMsg("เกิดข้อผิดพลาดในการอ่านไฟล์: " + (err.message || "กรุณาตรวจสอบความถูกต้องของไฟล์"));
       }
     };
 
@@ -699,19 +923,19 @@ export const BackupImportModal: React.FC<BackupImportModalProps> = ({
     parsedData.forEach(r => {
       const m = getRecordModel(r);
       const sub = getRecordSubdistrict(r);
-      modelsSet.add(m);
+      if (m) modelsSet.add(m);
       if (r.district) districtsSet.add(r.district);
 
-      if (importDistrict === "all" || r.district === importDistrict) {
-        if (importModel === "all" || m === importModel) {
+      if (importDistrict === "all" || matchesDistrictFilter(r.district, [importDistrict])) {
+        if (importModel === "all" || matchesModelFilter(r, [importModel])) {
           if (sub) subdistrictsSet.add(sub);
         }
       }
 
       if (
-        (importDistrict === "all" || r.district === importDistrict) &&
-        (importModel === "all" || m === importModel) &&
-        (importSubdistrict === "all" || sub === importSubdistrict)
+        (importDistrict === "all" || matchesDistrictFilter(r.district, [importDistrict])) &&
+        (importModel === "all" || matchesModelFilter(r, [importModel])) &&
+        (importSubdistrict === "all" || matchesSubdistrictFilter(sub, [importSubdistrict]))
       ) {
         if (r.targetArea) targetAreasSet.add(r.targetArea);
       }
@@ -728,13 +952,12 @@ export const BackupImportModal: React.FC<BackupImportModalProps> = ({
   // Filter parsed records based on user's selective import criteria
   const recordsToImport = useMemo(() => {
     return parsedData.filter(r => {
-      const m = getRecordModel(r);
       const sub = getRecordSubdistrict(r);
 
-      if (importModel !== "all" && m !== importModel) return false;
-      if (importDistrict !== "all" && r.district !== importDistrict) return false;
-      if (importSubdistrict !== "all" && sub !== importSubdistrict) return false;
-      if (importTargetArea !== "all" && r.targetArea !== importTargetArea) return false;
+      if (importModel !== "all" && !matchesModelFilter(r, [importModel])) return false;
+      if (importDistrict !== "all" && !matchesDistrictFilter(r.district, [importDistrict])) return false;
+      if (importSubdistrict !== "all" && !matchesSubdistrictFilter(sub, [importSubdistrict])) return false;
+      if (importTargetArea !== "all" && !matchesTargetAreaFilter(r.targetArea, [importTargetArea])) return false;
 
       return true;
     });
@@ -742,12 +965,12 @@ export const BackupImportModal: React.FC<BackupImportModalProps> = ({
 
   // Comparison metrics with current database
   const comparisonStats = useMemo(() => {
-    const existingIdSet = new Set(existingRecords.map(r => r.id));
+    const existingIdSet = new Set(existingRecords.map(r => Number(r.id)));
     let newCount = 0;
     let updateCount = 0;
 
     recordsToImport.forEach(r => {
-      if (existingIdSet.has(r.id)) {
+      if (existingIdSet.has(Number(r.id))) {
         updateCount++;
       } else {
         newCount++;
@@ -757,22 +980,30 @@ export const BackupImportModal: React.FC<BackupImportModalProps> = ({
     return { newCount, updateCount };
   }, [recordsToImport, existingRecords]);
 
-  // Execute import
-  const handleExecuteImport = () => {
+  // Execute import (asynchronous and verified)
+  const handleExecuteImport = async () => {
     if (recordsToImport.length === 0) {
       alert("ไม่มีข้อมูลตรงตามเงื่อนไขที่เลือกนำเข้า");
       return;
     }
 
-    onConfirmImport(recordsToImport);
+    try {
+      setIsExecuting(true);
+      await onConfirmImport(recordsToImport);
 
-    setImportedSummary({
-      totalImported: recordsToImport.length,
-      newCount: comparisonStats.newCount,
-      updatedCount: comparisonStats.updateCount
-    });
+      setImportedSummary({
+        totalImported: recordsToImport.length,
+        newCount: comparisonStats.newCount,
+        updatedCount: comparisonStats.updateCount
+      });
 
-    setStep("success");
+      setStep("success");
+    } catch (err: any) {
+      console.error("Execute import error:", err);
+      alert("เกิดข้อผิดพลาดในการนำเข้าข้อมูล: " + (err.message || "กรุณาลองใหม่อีกครั้ง"));
+    } finally {
+      setIsExecuting(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -817,21 +1048,21 @@ export const BackupImportModal: React.FC<BackupImportModalProps> = ({
                 <Upload className="w-7 h-7" />
               </div>
               <h4 className="text-sm font-bold text-slate-800 mb-1">
-                คลิกเพื่อเลือกไฟล์สำรองข้อมูล (JSON)
+                คลิกเพื่อเลือกไฟล์สำรองข้อมูล (JSON หรือ CSV)
               </h4>
               <p className="text-xs text-slate-500 max-w-sm">
-                รองรับไฟล์นามสกุล <strong>.json</strong> ที่ได้จากการสำรองข้อมูลของระบบ
+                รองรับไฟล์นามสกุล <strong>.json</strong> (ไฟล์สำรองระบบ) และ <strong>.csv</strong> (ตาราง Excel)
               </p>
               <div className="mt-4 inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-white border border-emerald-200 px-3.5 py-1.5 rounded-xl shadow-3xs">
                 <FileCheck className="w-4 h-4" />
-                <span>เลือกไฟล์จากเครื่อง</span>
+                <span>เลือกไฟล์จากเครื่อง (.json, .csv)</span>
               </div>
             </div>
 
             <input 
               ref={fileInputRef}
               type="file" 
-              accept=".json"
+              accept=".json,.csv"
               onChange={handleFileChange}
               className="hidden" 
             />
@@ -1112,18 +1343,28 @@ export const BackupImportModal: React.FC<BackupImportModalProps> = ({
               <button
                 type="button"
                 onClick={() => setStep("upload")}
-                className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl border border-slate-250 font-bold text-xs text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                disabled={isExecuting}
+                className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl border border-slate-250 font-bold text-xs text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer disabled:opacity-50"
               >
                 ย้อนกลับ
               </button>
               <button
                 type="button"
                 onClick={handleExecuteImport}
-                disabled={recordsToImport.length === 0}
+                disabled={recordsToImport.length === 0 || isExecuting}
                 className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Check className="w-4 h-4" />
-                <span>ยืนยันนำเข้าข้อมูล ({recordsToImport.length.toLocaleString()})</span>
+                {isExecuting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>กำลังบันทึกลงระบบ...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>ยืนยันนำเข้าข้อมูล ({recordsToImport.length.toLocaleString()})</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

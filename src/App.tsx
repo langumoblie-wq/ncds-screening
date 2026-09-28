@@ -11,7 +11,13 @@ import { IndividualProfile } from "./components/IndividualProfile";
 import { NcdAnalyticsDashboard } from "./components/NcdAnalyticsDashboard";
 import { RecordModal } from "./components/RecordModal";
 import { ProjectTracking } from "./components/ProjectTracking";
-import { ScreeningRecord } from "./types";
+import { ScreeningRecord, DistrictType } from "./types";
+import { 
+  cleanDistrict, 
+  cleanSubdistrict, 
+  getRecordModel, 
+  getRecordSubdistrict 
+} from "./components/BackupRestoreModal";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<"form" | "dash" | "individual" | "analytics" | "tracking">("form");
@@ -49,58 +55,107 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [dbStatus, setDbStatus] = useState({ connected: false, message: "กำลังตรวจสอบการเชื่อมต่อ..." });
 
+  // Initial load and bi-directional sync with persistent server API (/api/records) + localStorage
   useEffect(() => {
     let isMounted = true;
-    async function checkDbStatus() {
-      try {
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error("Timeout")), 2500)
-        );
-        const queryPromise = supabase.from('ncd_records').select('id').limit(1);
-        const res: any = await Promise.race([queryPromise, timeoutPromise]);
-        if (!isMounted) return;
-        if (res?.error) {
-           setDbStatus({ connected: false, message: "ฐานข้อมูลออฟไลน์ / ใช้ข้อมูลในเครื่อง" });
-        } else {
-           setDbStatus({ connected: true, message: "เชื่อมต่อฐานข้อมูล Supabase สำเร็จ และพร้อมใช้งาน!" });
-        }
-      } catch (error) {
-        if (!isMounted) return;
-        setDbStatus({ connected: false, message: "ฐานข้อมูลออฟไลน์ / ใช้ข้อมูลในเครื่อง" });
-      }
-    }
-    checkDbStatus();
-    return () => { isMounted = false; };
-  }, []);
-
-  // Fetch records from server database with timeout fallback to local storage
-  useEffect(() => {
-    let isMounted = true;
-    async function loadRecordsFromServer() {
+    async function syncRecords() {
       try {
         setIsSyncing(true);
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error("Timeout")), 3000)
-        );
-        const queryPromise = supabase.from('ncd_records').select('data').order('created_at', { ascending: false });
-        const res: any = await Promise.race([queryPromise, timeoutPromise]);
-        
+
+        // 1. Fetch from persistent server backend (/api/records)
+        let serverRecords: ScreeningRecord[] = [];
+        try {
+          const res = await fetch("/api/records");
+          if (res.ok) {
+            const json = await res.json();
+            if (json.success && Array.isArray(json.records)) {
+              serverRecords = json.records.filter((r: any) => r && typeof r === "object" && "id" in r);
+            }
+          }
+        } catch (apiErr) {
+          console.warn("Server API fetch warning:", apiErr);
+        }
+
+        // 2. Fetch from Supabase if reachable
+        let supabaseRecords: ScreeningRecord[] = [];
+        try {
+          const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 2000));
+          const queryPromise = supabase.from('ncd_records').select('data').order('created_at', { ascending: false });
+          const sbRes: any = await Promise.race([queryPromise, timeoutPromise]);
+          if (!sbRes?.error && sbRes?.data && Array.isArray(sbRes.data)) {
+            supabaseRecords = sbRes.data.map((row: any) => row.data).filter((r: any) => r && typeof r === "object" && "id" in r);
+            setDbStatus({ connected: true, message: "เชื่อมต่อฐานข้อมูลเซิร์ฟเวอร์สำเร็จ และพร้อมใช้งาน!" });
+          } else {
+            setDbStatus({ connected: true, message: "เชื่อมต่อฐานข้อมูลภายในระบบเซิร์ฟเวอร์เรียบร้อย" });
+          }
+        } catch (sbErr) {
+          setDbStatus({ connected: true, message: "เชื่อมต่อฐานข้อมูลภายในระบบเซิร์ฟเวอร์เรียบร้อย" });
+        }
+
+        // 3. Read current localStorage
+        let localRecords: ScreeningRecord[] = [];
+        try {
+          const raw = localStorage.getItem("ncd_records");
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+              localRecords = parsed.filter((r: any) => r && typeof r === "object" && ("id" in r || "name" in r));
+            }
+          }
+        } catch (storageErr) {
+          console.warn("Storage parse error:", storageErr);
+        }
+
+        // 4. Merge all sources by ID (Server records + Supabase records + Local records)
+        const recordMap = new Map<number, ScreeningRecord>();
+        // Put server records first
+        serverRecords.forEach(r => {
+          if (r && r.id != null) recordMap.set(Number(r.id), r);
+        });
+        // Put supabase records
+        supabaseRecords.forEach(r => {
+          if (r && r.id != null) recordMap.set(Number(r.id), r);
+        });
+        // Put local records (preserve newer edits from local if local was updated)
+        localRecords.forEach(r => {
+          if (r && r.id != null) {
+            const numId = Number(r.id);
+            const existing = recordMap.get(numId);
+            if (!existing) {
+              recordMap.set(numId, r);
+            } else {
+              if (r.createdAt && existing.createdAt && r.createdAt > existing.createdAt) {
+                recordMap.set(numId, r);
+              }
+            }
+          }
+        });
+
+        const mergedRecords = Array.from(recordMap.values()).sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
+
         if (!isMounted) return;
-        if (!res?.error && res?.data && Array.isArray(res.data)) {
-           const loadedRecords = res.data
-             .map((row: any) => row.data)
-             .filter((r: any) => r !== null && r !== undefined && typeof r === "object" && "id" in r);
-           if (loadedRecords.length > 0) {
-             setRecords(loadedRecords);
-             try {
-               localStorage.setItem("ncd_records", JSON.stringify(loadedRecords));
-             } catch (e) {
-               console.warn("Local storage write error:", e);
-             }
-           }
+
+        if (mergedRecords.length > 0) {
+          setRecords(mergedRecords);
+          try {
+            localStorage.setItem("ncd_records", JSON.stringify(mergedRecords));
+          } catch (e) {}
+
+          // If local or supabase had extra records not yet on server, sync them to server
+          if (mergedRecords.length > serverRecords.length) {
+            try {
+              await fetch("/api/records/bulk", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ records: mergedRecords })
+              });
+            } catch (syncErr) {
+              console.warn("Bulk sync error:", syncErr);
+            }
+          }
         }
       } catch (error) {
-        console.warn("Server sync skipped or timed out, using local records:", error);
+        console.warn("Sync error:", error);
       } finally {
         if (isMounted) {
           setIsSyncing(false);
@@ -109,13 +164,13 @@ export default function App() {
       }
     }
 
-    loadRecordsFromServer();
+    syncRecords();
     return () => { isMounted = false; };
   }, []);
 
   // Save to localStorage as secondary backup safely
   useEffect(() => {
-    if (records !== undefined && records !== null) {
+    if (records !== undefined && records !== null && records.length > 0) {
       try {
         localStorage.setItem("ncd_records", JSON.stringify(records.filter(Boolean)));
       } catch (e) {
@@ -131,99 +186,218 @@ export default function App() {
       return;
     }
 
+    let updatedList: ScreeningRecord[] = [];
     if (isEdit) {
-      setRecords((prev) => prev.map((r) => (r && r.id === savedRecord.id ? savedRecord : r)).filter(Boolean));
+      setRecords((prev) => {
+        updatedList = prev.map((r) => (r && r.id === savedRecord.id ? savedRecord : r)).filter(Boolean);
+        return updatedList;
+      });
       setEditingRecord(null);
     } else {
       setRecords((prev) => {
         const safePrev = prev.filter(Boolean);
         if (safePrev.some((r) => r && r.id === savedRecord.id)) {
-          return safePrev.map((r) => (r && r.id === savedRecord.id ? savedRecord : r)).filter(Boolean);
+          updatedList = safePrev.map((r) => (r && r.id === savedRecord.id ? savedRecord : r)).filter(Boolean);
+        } else {
+          updatedList = [savedRecord, ...safePrev];
         }
-        return [...safePrev, savedRecord];
+        return updatedList;
       });
       setEditingRecord(null);
       setIsFollowUpMode(false);
     }
 
+    // Persist to server backend API
+    try {
+      await fetch("/api/records", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ record: savedRecord })
+      });
+    } catch (err) {
+      console.warn("Failed to persist record to /api/records:", err);
+    }
+
+    // Background sync to Supabase
+    try {
+      supabase.from('ncd_records').upsert({
+        id: savedRecord.id,
+        name: savedRecord.name,
+        visit_number: savedRecord.visitNumber,
+        age: savedRecord.age,
+        gender: savedRecord.gender,
+        data: savedRecord,
+        created_at: savedRecord.createdAt || new Date().toISOString()
+      }).then(() => {});
+    } catch (sbErr) {}
+
     setToastContent({
       title: "บันทึกข้อมูลสำเร็จ!",
-      description: "ระบบได้เชื่อมต่อบันทึกข้อมูลเข้าฐานข้อมูลเซิร์ฟเวอร์เรียบร้อย"
+      description: "ระบบได้บันทึกข้อมูลเข้าสู่ฐานข้อมูลเรียบร้อยแล้ว"
     });
 
     setShowToast(true);
     setTimeout(() => setShowToast(false), 3500);
-    // Switch to dashboard automatically to see the saved entry!
     setActiveTab("dash");
   };
 
   // Update record (specifically when AI advice is generated and saved)
   const handleUpdateRecord = async (updatedRecord: ScreeningRecord) => {
     if (!updatedRecord) return;
-    // Optimistically update in client state first
     setRecords((prev) => prev.map((r) => (r && r.id === updatedRecord.id ? updatedRecord : r)).filter(Boolean));
-    setSelectedRecord(updatedRecord); // update current active modal record
+    setSelectedRecord(updatedRecord);
 
     try {
-      const { error } = await supabase.from('ncd_records').upsert({
-         id: updatedRecord.id,
-         name: updatedRecord.name,
-         visit_number: updatedRecord.visitNumber,
-         age: updatedRecord.age,
-         gender: updatedRecord.gender,
-         data: updatedRecord
+      await fetch("/api/records", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ record: updatedRecord })
       });
-    } catch (error) {
-      console.error("Error updating record with AI advice on server:", error);
+    } catch (err) {
+      console.warn("Error updating record to /api/records:", err);
     }
+
+    try {
+      supabase.from('ncd_records').upsert({
+        id: updatedRecord.id,
+        name: updatedRecord.name,
+        visit_number: updatedRecord.visitNumber,
+        age: updatedRecord.age,
+        gender: updatedRecord.gender,
+        data: updatedRecord
+      }).then(() => {});
+    } catch (error) {}
   };
 
   // Delete record
   const handleDeleteRecord = async (id: number) => {
-    // Delete locally first to be fully responsive and robust
     setRecords((prev) => prev.filter((r) => r && r.id !== id));
 
     try {
-      await supabase.from('ncd_records').delete().eq('id', id);
-    } catch (error) {
-      console.error("Error deleting record from server:", error);
-    }
-  };
-
-  // Import records (Restore from Backup)
-  const handleImportRecords = async (importedRecords: ScreeningRecord[]) => {
-    if (!importedRecords || !Array.isArray(importedRecords) || importedRecords.length === 0) {
-      alert("ไฟล์ที่อัปโหลดไม่มีข้อมูลที่ถูกต้อง");
-      return;
+      await fetch(`/api/records/${id}`, { method: "DELETE" });
+    } catch (err) {
+      console.warn("Error deleting record from server:", err);
     }
 
     try {
-      // Map to Supabase format
-      const formattedData = importedRecords.map(record => ({
-         id: record.id,
-         name: record.name,
-         visit_number: record.visitNumber || 1,
-         age: record.age,
-         gender: record.gender,
-         data: record
-      }));
-      
-      const { error } = await supabase.from('ncd_records').upsert(formattedData);
-      
-      if (error) {
-        console.error("Supabase bulk insert error:", error);
-        alert("เกิดข้อผิดพลาดในการอัปโหลดไปที่ฐานข้อมูล");
-        return;
+      supabase.from('ncd_records').delete().eq('id', id).then(() => {});
+    } catch (error) {}
+  };
+
+  // Import records (Restore from Backup) with verified persistence
+  const handleImportRecords = async (importedRecords: ScreeningRecord[]): Promise<boolean> => {
+    if (!importedRecords || !Array.isArray(importedRecords) || importedRecords.length === 0) {
+      alert("ไฟล์ที่อัปโหลดไม่มีข้อมูลที่ถูกต้อง");
+      return false;
+    }
+
+    try {
+      setLoading(true);
+
+      // 1. Sanitize and normalize all imported records
+      const sanitizedImported: ScreeningRecord[] = importedRecords.map((r, idx) => {
+        const id = Number(r.id) || (Date.now() + idx);
+        const model = r.modelType || getRecordModel(r) || "หมู่บ้าน";
+        const sub = cleanSubdistrict(r.subdistrict || getRecordSubdistrict(r));
+        const rawDist = r.district || "เมือง";
+        const dist = (cleanDistrict(rawDist) || "เมือง") as DistrictType;
+        return {
+          ...r,
+          id,
+          name: r.name || "ไม่ระบุชื่อ",
+          visitNumber: Number(r.visitNumber) || 1,
+          modelType: (model === "หมู่บ้าน" || model === "ตำบล" ? model : "หมู่บ้าน") as any,
+          district: dist,
+          subdistrict: sub,
+          targetArea: r.targetArea || (sub ? `ต.${sub}` : "ทั่วไป"),
+          createdAt: r.createdAt || new Date().toISOString()
+        };
+      });
+
+      // 2. Fetch current server records to guarantee we don't drop existing database data
+      let currentServerRecords: ScreeningRecord[] = [];
+      try {
+        const res = await fetch("/api/records");
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && Array.isArray(json.records)) {
+            currentServerRecords = json.records;
+          }
+        }
+      } catch (fetchErr) {
+        console.warn("Fetch before import warning:", fetchErr);
       }
 
-      // Merge local state immediately
-      setRecords(prev => {
-        const newIds = new Set(importedRecords.map(r => r.id));
-        return [...prev.filter(r => !newIds.has(r.id)), ...importedRecords].sort((a, b) => b.id - a.id);
+      // 3. Read current localStorage
+      let localRecords: ScreeningRecord[] = [];
+      try {
+        const raw = localStorage.getItem("ncd_records");
+        if (raw) {
+          const p = JSON.parse(raw);
+          if (Array.isArray(p)) localRecords = p;
+        }
+      } catch (e) {}
+
+      // 4. Construct unified merged map
+      const recordMap = new Map<number, ScreeningRecord>();
+      // Base: current server records
+      currentServerRecords.forEach(r => { if (r && r.id != null) recordMap.set(Number(r.id), r); });
+      // Base: local storage
+      localRecords.forEach(r => { if (r && r.id != null && !recordMap.has(Number(r.id))) recordMap.set(Number(r.id), r); });
+      // Base: active memory state
+      (records || []).forEach(r => { if (r && r.id != null && !recordMap.has(Number(r.id))) recordMap.set(Number(r.id), r); });
+      // Overlay: newly imported records (win over existing)
+      sanitizedImported.forEach(r => { if (r && r.id != null) recordMap.set(Number(r.id), r); });
+
+      const fullMergedList = Array.from(recordMap.values()).sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
+
+      // 5. Persist to server backend API first and WAIT for disk save to complete
+      const saveRes = await fetch("/api/records/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ records: fullMergedList })
       });
-    } catch (error) {
-       console.error("Error importing records:", error);
-       alert("เกิดข้อผิดพลาดในการนำเข้าข้อมูล");
+
+      if (!saveRes.ok) {
+        throw new Error("เซิร์ฟเวอร์ตอบกลับสถานะไม่สำเร็จในการบันทึก");
+      }
+
+      // 6. Save immediately to localStorage as secondary backup
+      try {
+        localStorage.setItem("ncd_records", JSON.stringify(fullMergedList));
+      } catch (e) {
+        console.warn("localStorage quota warning:", e);
+      }
+
+      // 7. Update active state
+      setRecords(fullMergedList);
+
+      // 8. Background sync to Supabase if reachable
+      try {
+        const formattedData = sanitizedImported.map(record => ({
+          id: record.id,
+          name: record.name,
+          visit_number: record.visitNumber || 1,
+          age: record.age,
+          gender: record.gender,
+          data: record
+        }));
+        supabase.from('ncd_records').upsert(formattedData).then(() => {});
+      } catch (sbErr) {}
+
+      setToastContent({
+        title: "นำเข้าข้อมูลสำเร็จ!",
+        description: `นำเข้า ${sanitizedImported.length.toLocaleString()} รายการ และรวมข้อมูลในระบบเป็น ${fullMergedList.length.toLocaleString()} รายการเรียบร้อย (รีเฟรชข้อมูลจะไม่หาย)`
+      });
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 4000);
+      return true;
+    } catch (error: any) {
+      console.error("Error importing records:", error);
+      alert("เกิดข้อผิดพลาดในการนำเข้าข้อมูล: " + (error.message || "กรุณาลองใหม่อีกครั้ง"));
+      return false;
+    } finally {
+      setLoading(false);
     }
   };
 

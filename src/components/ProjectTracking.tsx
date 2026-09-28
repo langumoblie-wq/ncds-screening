@@ -1,6 +1,14 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { ScreeningRecord } from "../types";
+import { 
+  getRecordModel, 
+  getRecordSubdistrict,
+  cleanDistrict,
+  cleanSubdistrict,
+  matchesDistrictFilter,
+  matchesModelFilter
+} from "./BackupRestoreModal";
 import { Target, Users, Activity, Filter, Map, ChevronRight, ChevronDown, BarChart3, Edit2, Check, AlertCircle, TrendingUp, Trophy, Printer } from "lucide-react";
 
 interface ProjectTrackingProps {
@@ -107,8 +115,10 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
   // Get distinct districts for filter
   const allDistricts = useMemo(() => {
     const d = new Set<string>();
+    const allKnownDistricts = ["เมือง", "ละงู", "ท่าแพ", "ควนกาหลง", "ควนโดน", "ทุ่งหว้า", "มะนัง"];
+    allKnownDistricts.forEach(dist => d.add(dist));
     records.forEach(r => {
-      if (r.district) d.add(r.district);
+      if (r.district) d.add(cleanDistrict(r.district));
     });
     return Array.from(d).sort();
   }, [records]);
@@ -150,9 +160,10 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
     }> = {};
 
     filteredRecords.forEach(r => {
-      const area = (r.modelType === "หมู่บ้าน" ? r.targetArea : r.subdistrict) || "ไม่ระบุพื้นที่";
-      const mType = r.modelType || "ไม่ระบุโมเดล";
-      const dist = r.district || "ไม่ระบุอำเภอ";
+      const mType = r.modelType || getRecordModel(r) || "หมู่บ้าน";
+      const sub = cleanSubdistrict(r.subdistrict || getRecordSubdistrict(r));
+      const dist = cleanDistrict(r.district) || "เมือง";
+      const area = (mType === "หมู่บ้าน" ? (r.targetArea || (sub ? `ต.${sub}` : "")) : (sub ? `ต.${sub}` : r.targetArea)) || "ไม่ระบุพื้นที่";
       const key = `${mType}|${dist}|${area}`;
       
       if (!grouped[key]) {
@@ -220,10 +231,10 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
     });
 
     if (modelFilter.length > 0) {
-      result = result.filter(r => modelFilter.includes(r.modelType));
+      result = result.filter(r => matchesModelFilter({ modelType: r.modelType as any }, modelFilter));
     }
     if (districtFilter.length > 0) {
-      result = result.filter(r => districtFilter.includes(r.district));
+      result = result.filter(r => matchesDistrictFilter(r.district, districtFilter));
     }
 
     // Sort by progress descending, then by total visits

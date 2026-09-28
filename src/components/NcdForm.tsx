@@ -34,11 +34,11 @@ export const NcdForm: React.FC<NcdFormProps> = ({
   const [age, setAge] = useState<number | "">("");
   const [gender, setGender] = useState<"ชาย" | "หญิง" | "">("");
   const [address, setAddress] = useState("");
-  const [modelType, setModelType] = useState<"หมู่บ้าน" | "ตำบล" | "">("");
-  const [district, setDistrict] = useState<DistrictType | "">("");
-  const [subdistrict, setSubdistrict] = useState("");
-  const [targetArea, setTargetArea] = useState("");
-  const [phone, setPhone] = useState("");
+  const [modelType, setModelType] = useState<"หมู่บ้าน" | "ตำบล" | "">(initialRecord?.modelType || "");
+  const [district, setDistrict] = useState<DistrictType | "">(initialRecord?.district || "");
+  const [subdistrict, setSubdistrict] = useState(initialRecord?.subdistrict || "");
+  const [targetArea, setTargetArea] = useState(initialRecord?.targetArea || "");
+  const [phone, setPhone] = useState(initialRecord?.phone || "");
 
   // Health History
   const [hasDisease, setHasDisease] = useState(false);
@@ -86,50 +86,7 @@ export const NcdForm: React.FC<NcdFormProps> = ({
   });
 
   // Food Habits scores (mapping of question ID to choice: 0, 1, or 2)
-  // Let's pre-populate with healthy answers (0 for positive statements, 2 for negative statements) 
-  // so the form is ready to submit but encourages review. Or keep them unselected so they have to check.
-  // Actually, pre-populating with a neutral default option (index 2 for reverse, 0 for standard) is extremely friendly.
-  // Let's keep them as unselected (undefined) first, and show a helpful validation error or let them click a preset.
   const [foodHabitAnswers, setFoodHabitAnswers] = useState<Record<string, number>>({});
-
-  // Cascading dropdown updates
-  useEffect(() => {
-    if (initialRecord && modelType === (initialRecord.modelType || "")) {
-      return;
-    }
-    setDistrict("");
-    setSubdistrict("");
-    setTargetArea("");
-  }, [modelType, initialRecord]);
-
-  useEffect(() => {
-    if (initialRecord && district === initialRecord.district) {
-      return;
-    }
-    setSubdistrict("");
-    setTargetArea("");
-  }, [district, initialRecord]);
-
-  useEffect(() => {
-    if (initialRecord) {
-      let initialSub = initialRecord.subdistrict || "";
-      if (!initialSub && initialRecord.district && initialRecord.targetArea) {
-        const subMap = DISTRICT_SUBDISTRICT_MAP[initialRecord.district as DistrictType];
-        if (subMap) {
-          const foundSub = Object.keys(subMap).find(k => 
-            subMap[k].includes(initialRecord.targetArea)
-          );
-          if (foundSub) {
-            initialSub = foundSub;
-          }
-        }
-      }
-      if (subdistrict === initialSub) {
-        return;
-      }
-    }
-    setTargetArea("");
-  }, [subdistrict, initialRecord]);
 
   // Sync initialRecord for Editing Mode
   useEffect(() => {
@@ -525,9 +482,40 @@ export const NcdForm: React.FC<NcdFormProps> = ({
       createdAt: (initialRecord && !isFollowUp) ? (initialRecord.createdAt || new Date().toISOString()) : new Date().toISOString()
     };
 
-    // Attempt backup save to server
+    // 1. Save to persistent server API
     try {
-      const { data, error } = await supabase.from('ncd_records').upsert({
+      const res = await fetch("/api/records", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ record: finalRecordObj })
+      });
+      if (res.ok) {
+        savedRecord = finalRecordObj;
+      }
+    } catch (err) {
+      console.warn("Server API save error:", err);
+    }
+
+    // 2. Persist to localStorage
+    try {
+      const local = localStorage.getItem("ncd_records");
+      let currentRecords: any[] = [];
+      if (local) {
+        currentRecords = JSON.parse(local);
+      }
+      if (initialRecord && !isFollowUp) {
+        currentRecords = currentRecords.map((r) => r.id === recordId ? finalRecordObj : r);
+      } else {
+        currentRecords = [finalRecordObj, ...currentRecords.filter(r => r.id !== recordId)];
+      }
+      localStorage.setItem("ncd_records", JSON.stringify(currentRecords));
+    } catch (storageError) {
+      console.error("Failed to save to localStorage:", storageError);
+    }
+
+    // 3. Background sync to Supabase if available
+    try {
+      supabase.from('ncd_records').upsert({
          id: finalRecordObj.id,
          name: finalRecordObj.name,
          visit_number: finalRecordObj.visitNumber,
@@ -535,40 +523,10 @@ export const NcdForm: React.FC<NcdFormProps> = ({
          gender: finalRecordObj.gender,
          data: finalRecordObj,
          created_at: finalRecordObj.createdAt
-      }).select().single();
+      }).then(() => {});
+    } catch (error) {}
 
-      if (!error && data) {
-         savedRecord = data.data;
-      } else {
-         console.warn("Supabase upsert failed:", error);
-      }
-    } catch (error) {
-      console.warn("Server backup failed:", error);
-    }
-
-    // If Server failed, fall back to localStorage
-    if (!savedRecord) {
-      isOfflineMode = true;
-      savedRecord = finalRecordObj;
-
-      // Manually persist to localStorage as backup
-      try {
-        const local = localStorage.getItem("ncd_records");
-        let currentRecords: any[] = [];
-        if (local) {
-          currentRecords = JSON.parse(local);
-        }
-        
-        if (initialRecord && !isFollowUp) {
-          currentRecords = currentRecords.map((r) => r.id === recordId ? savedRecord : r);
-        } else {
-          currentRecords = [...currentRecords, savedRecord];
-        }
-        localStorage.setItem("ncd_records", JSON.stringify(currentRecords));
-      } catch (storageError) {
-        console.error("Failed to save to localStorage:", storageError);
-      }
-    }
+    savedRecord = finalRecordObj;
 
     // Clear Form Fields only if not editing and not in follow-up mode
     if (!initialRecord || isFollowUp) {
@@ -731,7 +689,13 @@ export const NcdForm: React.FC<NcdFormProps> = ({
               <select 
                 required 
                 value={modelType} 
-                onChange={(e) => setModelType(e.target.value as "หมู่บ้าน" | "ตำบล")}
+                onChange={(e) => {
+                  const val = e.target.value as "หมู่บ้าน" | "ตำบล" | "";
+                  setModelType(val);
+                  setDistrict("");
+                  setSubdistrict("");
+                  setTargetArea("");
+                }}
                 className="w-full text-sm rounded-xl border border-slate-300 p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
               >
                 <option value="">เลือกโมเดล</option>
@@ -746,7 +710,12 @@ export const NcdForm: React.FC<NcdFormProps> = ({
                 required 
                 disabled={!modelType}
                 value={district} 
-                onChange={(e) => setDistrict(e.target.value as DistrictType)}
+                onChange={(e) => {
+                  const val = e.target.value as DistrictType | "";
+                  setDistrict(val);
+                  setSubdistrict("");
+                  setTargetArea("");
+                }}
                 className="w-full text-sm rounded-xl border border-slate-300 p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white disabled:bg-slate-50 disabled:text-slate-400"
               >
                 <option value="">{modelType ? "เลือกอำเภอ" : "โปรดเลือกโมเดลก่อน..."}</option>
@@ -762,7 +731,11 @@ export const NcdForm: React.FC<NcdFormProps> = ({
                 required 
                 disabled={!district}
                 value={subdistrict} 
-                onChange={(e) => setSubdistrict(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSubdistrict(val);
+                  setTargetArea("");
+                }}
                 className="w-full text-sm rounded-xl border border-slate-300 p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white disabled:bg-slate-50 disabled:text-slate-400"
               >
                 <option value="">{district ? "เลือกตำบล" : "โปรดเลือกอำเภอก่อน..."}</option>
