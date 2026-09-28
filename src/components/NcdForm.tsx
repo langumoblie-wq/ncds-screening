@@ -8,6 +8,7 @@ import { DistrictType, ScreeningRecord, DISTRICT_TARGET_AREAS, DISTRICT_SUBDISTR
 import { calculateBMI, calculateHTRisk, calculateDMRisk, evaluateFoodHabit } from "../utils";
 import { FOOD_HABIT_QUESTIONS } from "../data/questions";
 import { ConsentModal } from "./ConsentModal";
+import { getRecordModel, getRecordSubdistrict, cleanDistrict } from "./BackupRestoreModal";
 
 interface NcdFormProps {
   onSubmitSuccess: (record: ScreeningRecord, isEdit: boolean) => void;
@@ -97,31 +98,12 @@ export const NcdForm: React.FC<NcdFormProps> = ({
       setGender(initialRecord.gender);
       setAddress(initialRecord.address);
 
-      // Infer modelType if not present
-      let initialModel: "หมู่บ้าน" | "ตำบล" | "" = initialRecord.modelType || "";
-      if (!initialModel && initialRecord.district && initialRecord.targetArea) {
-        if (LOCATION_DATA["หมู่บ้าน"]?.[initialRecord.district as any]?.[initialRecord.subdistrict || ""]?.includes(initialRecord.targetArea)) {
-          initialModel = "หมู่บ้าน";
-        } else if (LOCATION_DATA["ตำบล"]?.[initialRecord.district as any]?.[initialRecord.subdistrict || ""]?.includes(initialRecord.targetArea)) {
-          initialModel = "ตำบล";
-        }
-      }
-      setModelType(initialModel);
+      // Infer modelType and subdistrict if not present
+      const initialModel = initialRecord.modelType || getRecordModel(initialRecord);
+      setModelType(initialModel as "หมู่บ้าน" | "ตำบล");
       setDistrict(initialRecord.district);
       
-      // Infer subdistrict if not explicitly present
-      let sub = initialRecord.subdistrict || "";
-      if (!sub && initialRecord.district && initialRecord.targetArea) {
-        const subMap = DISTRICT_SUBDISTRICT_MAP[initialRecord.district as DistrictType];
-        if (subMap) {
-          const foundSub = Object.keys(subMap).find(k => 
-            subMap[k].includes(initialRecord.targetArea)
-          );
-          if (foundSub) {
-            sub = foundSub;
-          }
-        }
-      }
+      const sub = initialRecord.subdistrict || getRecordSubdistrict(initialRecord);
       setSubdistrict(sub);
       setTargetArea(initialRecord.targetArea);
       setPhone(initialRecord.phone);
@@ -256,20 +238,23 @@ export const NcdForm: React.FC<NcdFormProps> = ({
 
   // Cascading location helper arrays
   const availableDistricts = (modelType && LOCATION_DATA[modelType])
-    ? (Object.keys(LOCATION_DATA[modelType]) as DistrictType[])
-    : (Object.keys(DISTRICT_SUBDISTRICT_MAP) as DistrictType[]);
+    ? (Object.keys(LOCATION_DATA[modelType]) as DistrictType[]).filter(d => d !== "เมืองสตูล")
+    : (Object.keys(DISTRICT_SUBDISTRICT_MAP) as DistrictType[]).filter(d => d !== "เมืองสตูล");
 
+  const cleanD = cleanDistrict(district);
   const availableSubdistricts = district
     ? (modelType
-        ? Object.keys((LOCATION_DATA[modelType] as any)?.[district] || {})
-        : Object.keys(DISTRICT_SUBDISTRICT_MAP[district as DistrictType] || {})
+        ? Object.keys((LOCATION_DATA[modelType] as any)?.[cleanD] || (LOCATION_DATA[modelType] as any)?.[district] || {})
+        : Object.keys(DISTRICT_SUBDISTRICT_MAP[cleanD as DistrictType] || DISTRICT_SUBDISTRICT_MAP[district as DistrictType] || {})
       )
     : [];
 
   const availableAreas = district && subdistrict
     ? (modelType
-        ? (LOCATION_DATA[modelType] as any)?.[district]?.[subdistrict] || []
-        : DISTRICT_SUBDISTRICT_MAP[district as DistrictType]?.[subdistrict] || []
+        ? (LOCATION_DATA[modelType] as any)?.[cleanD]?.[subdistrict] ||
+          (LOCATION_DATA[modelType] as any)?.[district]?.[subdistrict] || []
+        : DISTRICT_SUBDISTRICT_MAP[cleanD as DistrictType]?.[subdistrict] ||
+          DISTRICT_SUBDISTRICT_MAP[district as DistrictType]?.[subdistrict] || []
       )
     : [];
 

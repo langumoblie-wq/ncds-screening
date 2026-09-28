@@ -590,83 +590,77 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
   const [passwordError, setPasswordError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Dynamic options for filters combining live records, LOCATION_DATA, and DISTRICT_SUBDISTRICT_MAP
+  // Dynamic options for filters strictly adhering to official location configuration
   const availableDistricts = useMemo(() => {
     const districtsSet = new Set<string>();
-    // All 7 official districts of Satun
-    const allKnownDistricts = ["เมือง", "ละงู", "ท่าแพ", "ควนกาหลง", "ควนโดน", "ทุ่งหว้า", "มะนัง"];
-    allKnownDistricts.forEach(d => districtsSet.add(d));
+    const isModelVillage = filterModel.includes("หมู่บ้าน") && !filterModel.includes("ตำบล");
+    const isModelSubdistrict = filterModel.includes("ตำบล") && !filterModel.includes("หมู่บ้าน");
 
-    // From actual records
-    (records || []).forEach(r => {
-      if (r?.district) districtsSet.add(cleanDistrict(r.district));
-    });
-    // From DISTRICT_SUBDISTRICT_MAP
-    Object.keys(DISTRICT_SUBDISTRICT_MAP).forEach(d => districtsSet.add(cleanDistrict(d)));
+    if (isModelVillage) {
+      Object.keys(LOCATION_DATA["หมู่บ้าน"]).forEach(d => {
+        if (d !== "เมืองสตูล") districtsSet.add(cleanDistrict(d));
+      });
+    } else if (isModelSubdistrict) {
+      Object.keys(LOCATION_DATA["ตำบล"]).forEach(d => {
+        if (d !== "เมืองสตูล") districtsSet.add(cleanDistrict(d));
+      });
+    } else {
+      ["ควนกาหลง", "ทุ่งหว้า", "มะนัง", "เมือง", "ละงู"].forEach(d => districtsSet.add(d));
+    }
 
     return Array.from(districtsSet) as DistrictType[];
-  }, [records]);
+  }, [filterModel]);
 
   const availableSubdistricts = useMemo(() => {
     const subdistSet = new Set<string>();
-    
-    if (filterDistrict.length === 0) {
-      // If no specific district selected, include all known subdistricts from records and map
-      (records || []).forEach(r => {
-        const sub = cleanSubdistrict(r.subdistrict || getRecordSubdistrict(r));
-        if (sub) subdistSet.add(sub);
-      });
-      Object.values(DISTRICT_SUBDISTRICT_MAP).forEach(dMap => {
-        Object.keys(dMap).forEach(s => subdistSet.add(cleanSubdistrict(s)));
-      });
-      return Array.from(subdistSet);
-    }
+    const isModelVillage = filterModel.includes("หมู่บ้าน") && !filterModel.includes("ตำบล");
+    const isModelSubdistrict = filterModel.includes("ตำบล") && !filterModel.includes("หมู่บ้าน");
 
-    // When district is selected, find subdistricts in those districts
-    (records || []).forEach(r => {
-      if (r && matchesDistrictFilter(r.district, filterDistrict)) {
-        const sub = cleanSubdistrict(r.subdistrict || getRecordSubdistrict(r));
-        if (sub) subdistSet.add(sub);
-      }
-    });
+    const targetDistricts = filterDistrict.length > 0 
+      ? filterDistrict.map(cleanDistrict) 
+      : (availableDistricts as string[]);
 
-    filterDistrict.forEach(district => {
-      const cleanD = cleanDistrict(district);
-      const dMap = DISTRICT_SUBDISTRICT_MAP[cleanD as DistrictType] || DISTRICT_SUBDISTRICT_MAP[district as DistrictType];
-      if (dMap) {
-        Object.keys(dMap).forEach(s => subdistSet.add(cleanSubdistrict(s)));
+    targetDistricts.forEach(dist => {
+      if (isModelVillage) {
+        const dData = (LOCATION_DATA["หมู่บ้าน"] as any)?.[dist];
+        if (dData) Object.keys(dData).forEach(s => subdistSet.add(cleanSubdistrict(s)));
+      } else if (isModelSubdistrict) {
+        const dData = (LOCATION_DATA["ตำบล"] as any)?.[dist];
+        if (dData) Object.keys(dData).forEach(s => subdistSet.add(cleanSubdistrict(s)));
+      } else {
+        const dMap = DISTRICT_SUBDISTRICT_MAP[dist as DistrictType];
+        if (dMap) Object.keys(dMap).forEach(s => subdistSet.add(cleanSubdistrict(s)));
       }
     });
 
     return Array.from(subdistSet);
-  }, [records, filterDistrict]);
+  }, [filterModel, filterDistrict, availableDistricts]);
 
   const availableTargetAreas = useMemo(() => {
     const areaSet = new Set<string>();
+    const isModelVillage = filterModel.includes("หมู่บ้าน") && !filterModel.includes("ตำบล");
+    const isModelSubdistrict = filterModel.includes("ตำบล") && !filterModel.includes("หมู่บ้าน");
 
-    (records || []).forEach(r => {
-      if (!r) return;
-      if (!matchesDistrictFilter(r.district, filterDistrict)) return;
-      const sub = cleanSubdistrict(r.subdistrict || getRecordSubdistrict(r));
-      if (!matchesSubdistrictFilter(sub, filterSubdistrict)) return;
-      if (r.targetArea) areaSet.add(cleanTargetArea(r.targetArea));
-    });
+    const targetDistricts = filterDistrict.length > 0 
+      ? filterDistrict.map(cleanDistrict) 
+      : (availableDistricts as string[]);
 
-    const targetDistricts = filterDistrict.length > 0 ? filterDistrict : ["เมือง", "ละงู", "ท่าแพ", "ควนกาหลง", "ควนโดน", "ทุ่งหว้า", "มะนัง"];
-    targetDistricts.forEach(district => {
-      const cleanD = cleanDistrict(district);
-      const dMap = DISTRICT_SUBDISTRICT_MAP[cleanD as DistrictType] || DISTRICT_SUBDISTRICT_MAP[district as DistrictType];
-      if (dMap) {
-        Object.entries(dMap).forEach(([sub, areas]) => {
-          if (filterSubdistrict.length === 0 || matchesSubdistrictFilter(cleanSubdistrict(sub), filterSubdistrict)) {
-            areas.forEach(a => areaSet.add(cleanTargetArea(a)));
-          }
-        });
-      }
+    targetDistricts.forEach(dist => {
+      const modelsToCheck = isModelVillage ? ["หมู่บ้าน"] : (isModelSubdistrict ? ["ตำบล"] : ["หมู่บ้าน", "ตำบล"]);
+      modelsToCheck.forEach(m => {
+        const distData = (LOCATION_DATA[m as keyof typeof LOCATION_DATA] as any)?.[dist];
+        if (distData) {
+          Object.entries(distData).forEach(([sub, areas]) => {
+            if (filterSubdistrict.length === 0 || matchesSubdistrictFilter(cleanSubdistrict(sub), filterSubdistrict)) {
+              (areas as string[]).forEach(a => areaSet.add(cleanTargetArea(a)));
+            }
+          });
+        }
+      });
     });
 
     return Array.from(areaSet);
-  }, [records, filterDistrict, filterSubdistrict]);
+  }, [filterModel, filterDistrict, filterSubdistrict, availableDistricts]);
 
   // Cascading dropdown updates for filters - only filter out invalid options rather than hard clearing
   useEffect(() => {

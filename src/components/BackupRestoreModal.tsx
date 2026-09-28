@@ -21,9 +21,7 @@ import {
   HelpCircle,
   FileCheck
 } from "lucide-react";
-import { ScreeningRecord, DistrictType, LOCATION_DATA, DISTRICT_SUBDISTRICT_MAP } from "../types";
-import * as XLSX from "xlsx";
-import { calculateBMI, calculateHTRisk, calculateDMRisk, evaluateFoodHabit } from "../utils";
+import { ScreeningRecord, DistrictType, LOCATION_DATA, DISTRICT_SUBDISTRICT_MAP, EXACT_LOCATION_LIST } from "../types";
 
 // Normalization Helpers
 export const cleanDistrict = (d?: string): string => {
@@ -35,7 +33,9 @@ export const cleanDistrict = (d?: string): string => {
 
 export const cleanSubdistrict = (s?: string): string => {
   if (!s) return "";
-  return s.replace(/^(ต\.|ตำบล)/, "").trim();
+  let clean = s.replace(/^(ต\.|ตำบล)/, "").trim();
+  if (clean === "ปยู") clean = "ปูยู";
+  return clean;
 };
 
 export const cleanTargetArea = (a?: string): string => {
@@ -98,9 +98,22 @@ export const matchesModelFilter = (record: Partial<ScreeningRecord>, filterModel
   });
 };
 
-// Helper: Determine model for a record with full compatibility and preserving explicit choices
-export const getRecordModel = (r: Partial<ScreeningRecord>): "หมู่บ้าน" | "ตำบล" | "ทั่วไป" => {
-  // 1. If explicitly set, ALWAYS prioritize and respect it
+// Helper: Determine model for a record according to the official location table
+export const getRecordModel = (r: Partial<ScreeningRecord>): "หมู่บ้าน" | "ตำบล" => {
+  // 1. Prioritize official standard list from program table
+  if (r.targetArea) {
+    const cleanA = cleanTargetArea(r.targetArea);
+    const matched = EXACT_LOCATION_LIST.find(item => 
+      cleanTargetArea(item.targetArea) === cleanA ||
+      r.targetArea === item.targetArea ||
+      (cleanA && (cleanTargetArea(item.targetArea).includes(cleanA) || cleanA.includes(cleanTargetArea(item.targetArea))))
+    );
+    if (matched) {
+      return matched.model;
+    }
+  }
+
+  // 2. If explicitly set, respect it
   if (r.modelType === "หมู่บ้าน" || r.modelType === "ตำบล") {
     return r.modelType;
   }
@@ -111,7 +124,7 @@ export const getRecordModel = (r: Partial<ScreeningRecord>): "หมู่บ้
     return "ตำบล";
   }
 
-  // 2. Check LOCATION_DATA mapping
+  // 3. Check LOCATION_DATA mapping
   const sub = cleanSubdistrict(r.subdistrict || "");
   const dist = cleanDistrict(r.district);
   if (dist && r.targetArea) {
@@ -132,7 +145,7 @@ export const getRecordModel = (r: Partial<ScreeningRecord>): "หมู่บ้
     }
   }
 
-  // 3. Keyword heuristic if model still undetermined
+  // 4. Keyword heuristic if model still undetermined
   const area = r.targetArea || "";
   if (area.includes("ม.") || area.includes("หมู่") || area.includes("บ้าน") || area.includes("ชุมชน")) {
     return "หมู่บ้าน";
@@ -149,10 +162,21 @@ export const getRecordSubdistrict = (r: Partial<ScreeningRecord>): string => {
   if (r.subdistrict && r.subdistrict.trim() !== "") {
     return cleanSubdistrict(r.subdistrict);
   }
-  if (!r.district || !r.targetArea) return "";
+  if (!r.targetArea) return "";
+
+  // 1. Check EXACT_LOCATION_LIST
+  const cleanA = cleanTargetArea(r.targetArea);
+  const matched = EXACT_LOCATION_LIST.find(item => 
+    cleanTargetArea(item.targetArea) === cleanA ||
+    r.targetArea === item.targetArea ||
+    (cleanA && (cleanTargetArea(item.targetArea).includes(cleanA) || cleanA.includes(cleanTargetArea(item.targetArea))))
+  );
+  if (matched) {
+    return matched.subdistrict;
+  }
   
   const dist = cleanDistrict(r.district);
-  // 1. Check comprehensive DISTRICT_SUBDISTRICT_MAP first
+  // 2. Check comprehensive DISTRICT_SUBDISTRICT_MAP
   const distMap = DISTRICT_SUBDISTRICT_MAP[dist as DistrictType] || DISTRICT_SUBDISTRICT_MAP[r.district as DistrictType];
   if (distMap) {
     for (const [sub, areas] of Object.entries(distMap)) {
@@ -162,7 +186,7 @@ export const getRecordSubdistrict = (r: Partial<ScreeningRecord>): string => {
     }
   }
 
-  // 2. Fallback to LOCATION_DATA
+  // 3. Fallback to LOCATION_DATA
   for (const model of ["หมู่บ้าน", "ตำบล"] as const) {
     const distData = (LOCATION_DATA[model] as any)?.[dist] || (LOCATION_DATA[model] as any)?.[r.district];
     if (distData) {
@@ -176,186 +200,10 @@ export const getRecordSubdistrict = (r: Partial<ScreeningRecord>): string => {
   return "";
 };
 
-// Helper: Convert any raw object (from Excel, CSV, or JSON) into a valid ScreeningRecord
-export const convertRawRowToRecord = (raw: any, index: number): ScreeningRecord | null => {
-  if (!raw || typeof raw !== "object") return null;
-
-  // Build a normalized case-insensitive map of keys
-  const map: Record<string, any> = {};
-  for (const k of Object.keys(raw)) {
-    const val = raw[k];
-    if (val !== undefined && val !== null && val !== "") {
-      map[k.trim()] = val;
-      map[k.trim().toLowerCase()] = val;
-      map[k.replace(/[\s\-_()]/g, "").toLowerCase()] = val;
-    }
-  }
-
-  const get = (...keys: string[]): any => {
-    for (const k of keys) {
-      if (map[k] !== undefined && map[k] !== "") return map[k];
-      if (map[k.toLowerCase()] !== undefined && map[k.toLowerCase()] !== "") return map[k.toLowerCase()];
-      const stripped = k.replace(/[\s\-_()]/g, "").toLowerCase();
-      if (map[stripped] !== undefined && map[stripped] !== "") return map[stripped];
-    }
-    return undefined;
-  };
-
-  // 1. Name
-  let name = get(
-    "ชื่อ-นามสกุล", "ชื่อ - นามสกุล", "ชื่อ นามสกุล", "ชื่อ-สกุล", "ชื่อ - สกุล", "ชื่อ สกุล",
-    "ชื่อผู้ป่วย", "ชื่อผู้รับบริการ", "fullname", "full_name", "patient_name", "name", "ชื่อ"
-  );
-  const firstName = get("ชื่อ", "first_name", "fname");
-  const lastName = get("นามสกุล", "last_name", "lname", "surname");
-  if (firstName && lastName && (!name || name === firstName)) {
-    name = `${firstName} ${lastName}`.trim();
-  }
-
-  // 2. ID / Citizen ID
-  const rawId = get("id", "ID", "ลำดับ", "ลำดับที่", "รหัส", "เลขที่");
-  const numId = Number(rawId) || (Date.now() + index);
-
-  const citizenId = get("cid", "CID", "เลขบัตรประชาชน", "เลขประจำตัวประชาชน", "บัตรประชาชน", "citizenId", "citizen_id", "id_card");
-
-  if (!name) {
-    if (citizenId || rawId) {
-      name = `ผู้รับการตรวจ ${citizenId || numId}`;
-    } else {
-      return null;
-    }
-  }
-
-  // 3. Visit Number
-  const rawVisit = get("ครั้งที่", "ครั้ง", "visitNumber", "visit_number", "visit", "รอบการตรวจ");
-  const visitNumber = Math.max(1, Number(rawVisit) || 1);
-
-  // 4. Date
-  let date = get("วันที่ตรวจ", "วันที่", "date", "screening_date", "screen_date");
-  if (typeof date === "number") {
-    try {
-      const parsedDate = new Date((date - 25569) * 86400 * 1000);
-      if (!isNaN(parsedDate.getTime())) {
-        date = parsedDate.toLocaleDateString("th-TH");
-      }
-    } catch (e) {}
-  }
-  if (!date || typeof date !== "string") {
-    date = new Date().toLocaleDateString("th-TH");
-  }
-
-  // 5. Age
-  const rawAge = get("อายุ", "age", "อายุ (ปี)", "อายุ(ปี)");
-  const age = Math.max(0, Number(rawAge) || 0);
-
-  // 6. Gender
-  const rawGender = String(get("เพศ", "gender", "sex") || "").trim();
-  let gender: "ชาย" | "หญิง" = "ชาย";
-  if (rawGender.includes("ญ") || rawGender.includes("หญิง") || rawGender.toLowerCase().startsWith("f")) {
-    gender = "หญิง";
-  }
-
-  // 7. Phone
-  const phone = String(get("เบอร์โทร", "เบอร์โทรศัพท์", "โทรศัพท์", "โทร", "phone", "tel", "mobile") || "");
-
-  // 8. District & Subdistrict
-  const rawDist = String(get("อำเภอ", "district", "อ.") || "เมือง");
-  const district = (cleanDistrict(rawDist) || "เมือง") as DistrictType;
-  const rawSub = String(get("ตำบล", "subdistrict", "ต.") || "");
-  const subdistrict = cleanSubdistrict(rawSub || getRecordSubdistrict({ district, targetArea: get("พื้นที่เป้าหมาย", "หมู่บ้าน", "targetArea") }));
-
-  // 9. Target Area
-  let targetArea = String(get("พื้นที่เป้าหมาย", "หมู่บ้าน", "ชุมชน", "พื้นที่", "เป้าหมาย", "targetArea", "target_area", "village") || "");
-  if (!targetArea) {
-    targetArea = subdistrict ? `ต.${subdistrict}` : "ทั่วไป";
-  }
-
-  // 10. Model Type
-  const rawModel = get("โมเดล", "รูปแบบ", "ประเภทโมเดล", "modelType", "model");
-  let modelType: "หมู่บ้าน" | "ตำบล" = "หมู่บ้าน";
-  if (rawModel) {
-    if (String(rawModel).includes("ตำบล")) modelType = "ตำบล";
-    else if (String(rawModel).includes("หมู่บ้าน")) modelType = "หมู่บ้าน";
-  } else {
-    modelType = getRecordModel({ modelType: raw.modelType, district, subdistrict, targetArea }) === "ตำบล" ? "ตำบล" : "หมู่บ้าน";
-  }
-
-  // 11. Health Measurements
-  const weight = Math.max(0, Number(get("น้ำหนัก", "น้ำหนัก (กก.)", "weight", "wt")) || 0);
-  const height = Math.max(0, Number(get("ส่วนสูง", "ส่วนสูง (ซม.)", "height", "ht")) || 0);
-
-  let bpSys = Math.max(0, Number(get("ความดันบน (Systolic)", "ความดันบน", "bpSys", "bp_sys", "systolic", "sbp")) || 0);
-  let bpDia = Math.max(0, Number(get("ความดันล่าง (Diastolic)", "ความดันล่าง", "bpDia", "bp_dia", "diastolic", "dbp")) || 0);
-
-  if (bpSys === 0) {
-    const combinedBP = String(get("ความดัน", "ความดันโลหิต", "BP", "bp", "blood_pressure") || "");
-    const match = combinedBP.match(/(\d+)\s*[\/\-]\s*(\d+)/);
-    if (match) {
-      bpSys = Number(match[1]) || 0;
-      bpDia = Number(match[2]) || 0;
-    }
-  }
-
-  const sugar = Math.max(0, Number(get("น้ำตาล (FBS)", "น้ำตาล", "น้ำตาลในเลือด", "sugar", "fbs", "FBS", "blood_sugar")) || 0);
-
-  const bmi = raw.bmi || (height > 0 ? calculateBMI(weight, height) : "0.0");
-  const htResult = raw.htResult || calculateHTRisk(bpSys, bpDia);
-  const dmResult = raw.dmResult || calculateDMRisk(sugar);
-
-  const foodHabit = raw.foodHabit || {
-    sweet: evaluateFoodHabit(raw.foodHabit?.sweet?.score || 0, "sweet"),
-    fat: evaluateFoodHabit(raw.foodHabit?.fat?.score || 0, "fat"),
-    salt: evaluateFoodHabit(raw.foodHabit?.salt?.score || 0, "salt")
-  };
-
-  return {
-    ...raw,
-    id: numId,
-    name,
-    date,
-    visitNumber,
-    age,
-    gender,
-    phone,
-    address: raw.address || `ต.${subdistrict || district} อ.${district} จ.สตูล`,
-    district,
-    subdistrict,
-    targetArea,
-    modelType,
-    weight,
-    height,
-    bmi,
-    bpSys,
-    bpDia,
-    sugar,
-    htResult,
-    dmResult,
-    foodHabit,
-    familyHistory: Array.isArray(raw.familyHistory) ? raw.familyHistory : [],
-    smoking: raw.smoking || "ไม่สูบ",
-    alcohol: raw.alcohol || "ไม่ดื่ม",
-    water: raw.water || "เพียงพอ (6-8 แก้ว)",
-    exercise: raw.exercise || "สม่ำเสมอ (≥ 3 วัน/สัปดาห์)",
-    sleep: raw.sleep || "เพียงพอ (6-8 ชม.)",
-    sodium: raw.sodium || "ปกติ",
-    followUpAction: raw.followUpAction || "",
-    followUpNote: raw.followUpNote || "",
-    createdAt: raw.createdAt || new Date().toISOString()
-  } as ScreeningRecord;
-};
-
-// Helper: Parse CSV formatted data into row objects
-export const parseCsvToRecords = (csvText: string): any[] => {
+// Helper: Parse CSV formatted data into ScreeningRecord items
+export const parseCsvToRecords = (csvText: string): Partial<ScreeningRecord>[] => {
   const lines = csvText.split(/\r?\n/).filter(line => line.trim().length > 0);
   if (lines.length < 2) return [];
-
-  const firstLine = lines[0].replace(/^\uFEFF/, "");
-  let delimiter = ",";
-  const commaCount = (firstLine.match(/,/g) || []).length;
-  const semiCount = (firstLine.match(/;/g) || []).length;
-  const tabCount = (firstLine.match(/\t/g) || []).length;
-  if (semiCount > commaCount && semiCount > tabCount) delimiter = ";";
-  else if (tabCount > commaCount && tabCount > semiCount) delimiter = "\t";
 
   const parseLine = (line: string): string[] => {
     const result: string[] = [];
@@ -365,7 +213,7 @@ export const parseCsvToRecords = (csvText: string): any[] => {
       const char = line[i];
       if (char === '"') {
         inQuotes = !inQuotes;
-      } else if (char === delimiter && !inQuotes) {
+      } else if (char === ',' && !inQuotes) {
         result.push(current.trim());
         current = "";
       } else {
@@ -376,19 +224,67 @@ export const parseCsvToRecords = (csvText: string): any[] => {
     return result;
   };
 
-  const headers = parseLine(firstLine);
-  const rows: any[] = [];
+  const headerRow = parseLine(lines[0].replace(/^\uFEFF/, ""));
+  const headerMap: Record<string, number> = {};
+  headerRow.forEach((h, idx) => {
+    headerMap[h.trim()] = idx;
+    headerMap[h.trim().toLowerCase()] = idx;
+  });
+
+  const getCol = (cols: string[], ...names: string[]): string => {
+    for (const name of names) {
+      if (headerMap[name] !== undefined) return cols[headerMap[name]] || "";
+      if (headerMap[name.toLowerCase()] !== undefined) return cols[headerMap[name.toLowerCase()]] || "";
+    }
+    return "";
+  };
+
+  const records: Partial<ScreeningRecord>[] = [];
   for (let i = 1; i < lines.length; i++) {
     const cols = parseLine(lines[i]);
     if (cols.length < 2) continue;
-    const rowObj: Record<string, any> = {};
-    headers.forEach((h, idx) => {
-      rowObj[h] = cols[idx] !== undefined ? cols[idx] : "";
+    const name = getCol(cols, "ชื่อ-นามสกุล", "ชื่อ", "name");
+    if (!name) continue;
+
+    const id = Number(getCol(cols, "ID", "id")) || (Date.now() + i);
+    const date = getCol(cols, "วันที่ตรวจ", "date") || new Date().toLocaleDateString("th-TH");
+    const visitNumber = Number(getCol(cols, "ครั้งที่", "visitNumber", "visit_number")) || 1;
+    const age = Number(getCol(cols, "อายุ", "age")) || 0;
+    const gender = (getCol(cols, "เพศ", "gender") === "หญิง" ? "หญิง" : "ชาย") as any;
+    const phone = getCol(cols, "เบอร์โทร", "phone");
+    const rawDistrict = getCol(cols, "อำเภอ", "district") || "เมือง";
+    const district = (cleanDistrict(rawDistrict) || "เมือง") as DistrictType;
+    const subdistrict = cleanSubdistrict(getCol(cols, "ตำบล", "subdistrict"));
+    const targetArea = getCol(cols, "พื้นที่เป้าหมาย", "หมู่บ้าน", "targetArea");
+    const weight = Number(getCol(cols, "น้ำหนัก", "weight")) || 0;
+    const height = Number(getCol(cols, "ส่วนสูง", "height")) || 0;
+    const bmi = getCol(cols, "BMI", "bmi") || (height > 0 ? (weight / Math.pow(height / 100, 2)).toFixed(2) : "0");
+    const bpSys = Number(getCol(cols, "ความดันบน (Systolic)", "bpSys", "ความดันบน")) || 0;
+    const bpDia = Number(getCol(cols, "ความดันล่าง (Diastolic)", "bpDia", "ความดันล่าง")) || 0;
+    const sugar = Number(getCol(cols, "น้ำตาล (FBS)", "sugar", "น้ำตาล")) || 0;
+
+    records.push({
+      id,
+      date,
+      visitNumber,
+      name,
+      age,
+      gender,
+      phone,
+      district,
+      subdistrict,
+      targetArea,
+      weight,
+      height,
+      bmi,
+      bpSys,
+      bpDia,
+      sugar,
+      createdAt: new Date().toISOString()
     });
-    rows.push(rowObj);
   }
 
-  return rows;
+  return records;
 };
 
 /* =========================================================================
@@ -412,7 +308,7 @@ export const BackupExportModal: React.FC<BackupExportModalProps> = ({
   const [selectedSubdistrict, setSelectedSubdistrict] = useState<string>("all");
   const [selectedTargetArea, setSelectedTargetArea] = useState<string>("all");
   const [selectedVisitScope, setSelectedVisitScope] = useState<"all" | "latest_only" | "first_only" | "followup_only">("all");
-  const [fileFormat, setFileFormat] = useState<"excel" | "csv" | "json">("excel");
+  const [fileFormat, setFileFormat] = useState<"json" | "csv">("json");
 
   // Reset dependent filters when parent filter changes
   const handleModelChange = (model: string) => {
@@ -582,32 +478,6 @@ export const BackupExportModal: React.FC<BackupExportModalProps> = ({
       link.click();
       document.body.removeChild(link);
       setTimeout(() => URL.revokeObjectURL(url), 150);
-    } else if (fileFormat === "excel") {
-      const excelRows = filteredRecords.map(r => ({
-        "ID": r.id,
-        "วันที่ตรวจ": r.date || "",
-        "ครั้งที่": r.visitNumber || 1,
-        "ชื่อ-นามสกุล": r.name || "",
-        "อายุ (ปี)": r.age || 0,
-        "เพศ": r.gender || "",
-        "เบอร์โทร": r.phone || "",
-        "อำเภอ": r.district || "",
-        "ตำบล": getRecordSubdistrict(r),
-        "พื้นที่เป้าหมาย": r.targetArea || "",
-        "โมเดล": r.modelType || getRecordModel(r),
-        "น้ำหนัก (กก.)": r.weight || 0,
-        "ส่วนสูง (ซม.)": r.height || 0,
-        "BMI": r.bmi || "",
-        "ความดันบน (Systolic)": r.bpSys || 0,
-        "ความดันล่าง (Diastolic)": r.bpDia || 0,
-        "น้ำตาล (FBS)": r.sugar || 0,
-        "สถานะความดัน": r.htResult?.label || "",
-        "สถานะเบาหวาน": r.dmResult?.label || ""
-      }));
-      const ws = XLSX.utils.json_to_sheet(excelRows);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "NCD_Screening");
-      XLSX.writeFile(wb, `ncd_export${suffix}_${dateStr}.xlsx`);
     } else {
       // Export as CSV
       const headers = [
@@ -854,53 +724,11 @@ export const BackupExportModal: React.FC<BackupExportModalProps> = ({
           {/* Export File Format Choice */}
           <div className="space-y-1.5">
             <label className="block text-[11px] font-bold text-slate-500">รูปแบบไฟล์ที่ต้องการ</label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-              <label className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
-                fileFormat === "excel" 
-                  ? "border-emerald-600 bg-emerald-50/50 shadow-2xs ring-1 ring-emerald-500/20" 
-                  : "border-slate-250 bg-white hover:bg-slate-50"
-              }`}>
-                <div className="flex items-center gap-2.5">
-                  <input 
-                    type="radio" 
-                    name="exportFormat" 
-                    checked={fileFormat === "excel"} 
-                    onChange={() => setFileFormat("excel")}
-                    className="text-emerald-600 focus:ring-emerald-500" 
-                  />
-                  <div>
-                    <span className="font-bold text-slate-800 text-xs block">ไฟล์ตาราง Excel (.xlsx)</span>
-                    <span className="text-[10px] text-slate-500">สำหรับเปิดดูใน Excel ทันที ภาษาไทยสมบูรณ์</span>
-                  </div>
-                </div>
-                <FileCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-              </label>
-
-              <label className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
-                fileFormat === "csv" 
-                  ? "border-emerald-600 bg-emerald-50/50 shadow-2xs ring-1 ring-emerald-500/20" 
-                  : "border-slate-250 bg-white hover:bg-slate-50"
-              }`}>
-                <div className="flex items-center gap-2.5">
-                  <input 
-                    type="radio" 
-                    name="exportFormat" 
-                    checked={fileFormat === "csv"} 
-                    onChange={() => setFileFormat("csv")}
-                    className="text-emerald-600 focus:ring-emerald-500" 
-                  />
-                  <div>
-                    <span className="font-bold text-slate-800 text-xs block">ไฟล์ตาราง CSV (.csv)</span>
-                    <span className="text-[10px] text-slate-500">สำหรับฐานข้อมูลและสถิติ</span>
-                  </div>
-                </div>
-                <FileText className="w-4 h-4 text-blue-500 shrink-0" />
-              </label>
-
+            <div className="grid grid-cols-2 gap-3">
               <label className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
                 fileFormat === "json" 
-                  ? "border-indigo-600 bg-indigo-50/50 shadow-2xs ring-1 ring-indigo-500/20" 
-                  : "border-slate-250 bg-white hover:bg-slate-50"
+                  ? "border-indigo-600 bg-indigo-50/50 shadow-2xs" 
+                  : "border-slate-200 bg-white hover:bg-slate-50"
               }`}>
                 <div className="flex items-center gap-2.5">
                   <input 
@@ -912,10 +740,31 @@ export const BackupExportModal: React.FC<BackupExportModalProps> = ({
                   />
                   <div>
                     <span className="font-bold text-slate-800 text-xs block">ไฟล์สำรองข้อมูล JSON</span>
-                    <span className="text-[10px] text-slate-500">สมบูรณ์ 100% สำหรับนำเข้ากู้คืนระบบ</span>
+                    <span className="text-[10px] text-slate-500">สมบูรณ์ 100% สำหรับนำเข้า/กู้คืนระบบ</span>
                   </div>
                 </div>
-                <Database className="w-4 h-4 text-indigo-500 shrink-0" />
+                <Database className="w-4 h-4 text-indigo-500" />
+              </label>
+
+              <label className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                fileFormat === "csv" 
+                  ? "border-indigo-600 bg-indigo-50/50 shadow-2xs" 
+                  : "border-slate-200 bg-white hover:bg-slate-50"
+              }`}>
+                <div className="flex items-center gap-2.5">
+                  <input 
+                    type="radio" 
+                    name="exportFormat" 
+                    checked={fileFormat === "csv"} 
+                    onChange={() => setFileFormat("csv")}
+                    className="text-indigo-600 focus:ring-indigo-500" 
+                  />
+                  <div>
+                    <span className="font-bold text-slate-800 text-xs block">ไฟล์ตาราง CSV / Excel</span>
+                    <span className="text-[10px] text-slate-500">สำหรับเปิดดูใน Excel และทำรายงาน</span>
+                  </div>
+                </div>
+                <FileText className="w-4 h-4 text-emerald-500" />
               </label>
             </div>
           </div>
@@ -1012,7 +861,7 @@ export const BackupImportModal: React.FC<BackupImportModalProps> = ({
     onClose();
   };
 
-  // Handle file reading (Excel, CSV, and JSON)
+  // Handle file reading (JSON and CSV)
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1022,97 +871,69 @@ export const BackupImportModal: React.FC<BackupImportModalProps> = ({
     setFileSizeStr(sizeInKB > 1024 ? `${(sizeInKB / 1024).toFixed(1)} MB` : `${sizeInKB} KB`);
     setErrorMsg("");
 
-    const processRawItems = (items: any[]) => {
-      if (!Array.isArray(items) || items.length === 0) {
-        setErrorMsg("ไฟล์ไม่มีข้อมูลบันทึก (0 รายการ)");
-        return;
-      }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        let rawItems: any[] = [];
 
-      const validRecords: ScreeningRecord[] = [];
-      items.forEach((item, idx) => {
-        const record = convertRawRowToRecord(item, idx);
-        if (record) {
-          validRecords.push(record);
-        }
-      });
-
-      if (validRecords.length === 0) {
-        setErrorMsg("ไม่พบบันทึกการคัดกรองที่ถูกต้องในไฟล์นี้ (กรุณาตรวจสอบว่ามีคอลัมน์ ชื่อ หรือ ข้อมูลผู้รับการตรวจ)");
-        return;
-      }
-
-      setParsedData(validRecords);
-      setStep("filter_preview");
-    };
-
-    const lowerName = file.name.toLowerCase();
-
-    if (lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls")) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        try {
-          const buffer = event.target?.result as ArrayBuffer;
-          const workbook = XLSX.read(buffer, { type: "array" });
-          const sheetName = workbook.SheetNames[0];
-          if (!sheetName) {
-            setErrorMsg("ไม่พบแผ่นงาน (Sheet) ในไฟล์ Excel นี้");
+        if (file.name.toLowerCase().endsWith(".csv")) {
+          rawItems = parseCsvToRecords(text);
+        } else {
+          const json = JSON.parse(text);
+          if (Array.isArray(json)) {
+            rawItems = json;
+          } else if (json && Array.isArray(json.records)) {
+            rawItems = json.records;
+          } else if (json && Array.isArray(json.data)) {
+            rawItems = json.data;
+          } else {
+            setErrorMsg("โครงสร้างไฟล์ไม่ถูกต้อง: ข้อมูลต้องเป็น Array ของรายการตรวจ หรือ { records: [...] }");
             return;
           }
-          const worksheet = workbook.Sheets[sheetName];
-          const rawRows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
-          processRawItems(rawRows);
-        } catch (err: any) {
-          console.error("Excel parse error:", err);
-          setErrorMsg("เกิดข้อผิดพลาดในการเปิดไฟล์ Excel: " + (err.message || "กรุณาตรวจสอบความถูกต้องของไฟล์"));
         }
-      };
-      reader.readAsArrayBuffer(file);
-    } else {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        try {
-          const text = event.target?.result as string;
-          let rawItems: any[] = [];
 
-          if (lowerName.endsWith(".csv") || lowerName.endsWith(".tsv") || lowerName.endsWith(".txt")) {
-            try {
-              const workbook = XLSX.read(text, { type: "string" });
-              const sheet = workbook.Sheets[workbook.SheetNames[0]];
-              rawItems = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-            } catch (e) {
-              rawItems = parseCsvToRecords(text);
-            }
-            if (!rawItems || rawItems.length === 0) {
-              rawItems = parseCsvToRecords(text);
-            }
-          } else {
-            // JSON parsing
-            const json = JSON.parse(text);
-            if (Array.isArray(json)) {
-              rawItems = json;
-            } else if (json && Array.isArray(json.records)) {
-              rawItems = json.records;
-            } else if (json && Array.isArray(json.data)) {
-              rawItems = json.data;
-            } else if (json && Array.isArray(json.ncd_records)) {
-              rawItems = json.ncd_records;
-            } else if (json && typeof json === "object" && (json.name || json.id)) {
-              rawItems = [json];
-            } else {
-              setErrorMsg("โครงสร้างไฟล์ JSON ไม่ถูกต้อง: ข้อมูลต้องเป็น Array ของรายการตรวจ หรือ { records: [...] }");
-              return;
-            }
-          }
-
-          processRawItems(rawItems);
-        } catch (err: any) {
-          console.error("File parse error:", err);
-          setErrorMsg("เกิดข้อผิดพลาดในการอ่านไฟล์: " + (err.message || "กรุณาตรวจสอบความถูกต้องของไฟล์"));
+        if (rawItems.length === 0) {
+          setErrorMsg("ไฟล์ไม่มีข้อมูลบันทึก (0 รายการ)");
+          return;
         }
-      };
-      reader.readAsText(file);
-    }
 
+        // Validate and normalize records with guaranteed IDs and location fields
+        const validRecords: ScreeningRecord[] = rawItems
+          .filter(item => item && typeof item === "object" && (item.name || item.id))
+          .map((item, idx) => {
+            const numId = Number(item.id) || (Date.now() + idx);
+            const m = item.modelType || getRecordModel(item);
+            const sub = cleanSubdistrict(item.subdistrict || getRecordSubdistrict(item));
+            const rawDist = item.district || "เมือง";
+            const dist = cleanDistrict(rawDist) as DistrictType;
+            return {
+              ...item,
+              id: numId,
+              name: item.name || "ไม่ระบุชื่อ",
+              visitNumber: Number(item.visitNumber) || 1,
+              modelType: (m === "หมู่บ้าน" || m === "ตำบล" ? m : "หมู่บ้าน") as any,
+              district: dist,
+              subdistrict: sub,
+              targetArea: item.targetArea || (sub ? `ต.${sub}` : "ทั่วไป"),
+              createdAt: item.createdAt || new Date().toISOString()
+            } as ScreeningRecord;
+          });
+
+        if (validRecords.length === 0) {
+          setErrorMsg("ไม่พบบันทึกการคัดกรองที่ถูกต้องในไฟล์นี้");
+          return;
+        }
+
+        setParsedData(validRecords);
+        setStep("filter_preview");
+      } catch (err: any) {
+        console.error(err);
+        setErrorMsg("เกิดข้อผิดพลาดในการอ่านไฟล์: " + (err.message || "กรุณาตรวจสอบความถูกต้องของไฟล์"));
+      }
+    };
+
+    reader.readAsText(file);
     e.target.value = "";
   };
 
@@ -1253,21 +1074,21 @@ export const BackupImportModal: React.FC<BackupImportModalProps> = ({
                 <Upload className="w-7 h-7" />
               </div>
               <h4 className="text-sm font-bold text-slate-800 mb-1">
-                คลิกเพื่อเลือกไฟล์นำเข้าข้อมูล (Excel, CSV หรือ JSON)
+                คลิกเพื่อเลือกไฟล์สำรองข้อมูล (JSON หรือ CSV)
               </h4>
               <p className="text-xs text-slate-500 max-w-sm">
-                รองรับไฟล์ตาราง <strong>Excel (.xlsx, .xls)</strong>, ไฟล์ตาราง <strong>.csv</strong> และไฟล์สำรองระบบ <strong>.json</strong>
+                รองรับไฟล์นามสกุล <strong>.json</strong> (ไฟล์สำรองระบบ) และ <strong>.csv</strong> (ตาราง Excel)
               </p>
               <div className="mt-4 inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-white border border-emerald-200 px-3.5 py-1.5 rounded-xl shadow-3xs">
                 <FileCheck className="w-4 h-4" />
-                <span>เลือกไฟล์จากเครื่อง (.xlsx, .xls, .csv, .json)</span>
+                <span>เลือกไฟล์จากเครื่อง (.json, .csv)</span>
               </div>
             </div>
 
             <input 
               ref={fileInputRef}
               type="file" 
-              accept=".xlsx,.xls,.csv,.tsv,.txt,.json"
+              accept=".json,.csv"
               onChange={handleFileChange}
               className="hidden" 
             />
