@@ -76,6 +76,21 @@ export default function App() {
           console.warn("Server API fetch warning:", apiErr);
         }
 
+        // 1.1 Fallback to static records.json if server API is unavailable (e.g. GitHub Pages or static host)
+        if (serverRecords.length === 0) {
+          try {
+            const staticRes = await fetch("records.json");
+            if (staticRes.ok) {
+              const staticJson = await staticRes.json();
+              if (Array.isArray(staticJson)) {
+                serverRecords = staticJson.filter((r: any) => r && typeof r === "object" && "id" in r);
+              }
+            }
+          } catch (stErr) {
+            // Ignore static fallback error
+          }
+        }
+
         // 2. Fetch from Supabase if reachable
         let supabaseRecords: ScreeningRecord[] = [];
         try {
@@ -328,6 +343,18 @@ export default function App() {
         console.warn("Fetch before import warning:", fetchErr);
       }
 
+      if (currentServerRecords.length === 0) {
+        try {
+          const staticRes = await fetch("records.json");
+          if (staticRes.ok) {
+            const staticJson = await staticRes.json();
+            if (Array.isArray(staticJson)) {
+              currentServerRecords = staticJson;
+            }
+          }
+        } catch (stErr) {}
+      }
+
       // 3. Read current localStorage
       let localRecords: ScreeningRecord[] = [];
       try {
@@ -351,26 +378,29 @@ export default function App() {
 
       const fullMergedList = Array.from(recordMap.values()).sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
 
-      // 5. Persist to server backend API first and WAIT for disk save to complete
-      const saveRes = await fetch("/api/records/bulk", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ records: fullMergedList })
-      });
-
-      if (!saveRes.ok) {
-        throw new Error("เซิร์ฟเวอร์ตอบกลับสถานะไม่สำเร็จในการบันทึก");
-      }
-
-      // 6. Save immediately to localStorage as secondary backup
+      // 5. Save immediately to localStorage as primary client storage (guaranteed offline & static hosting resilience)
       try {
         localStorage.setItem("ncd_records", JSON.stringify(fullMergedList));
       } catch (e) {
         console.warn("localStorage quota warning:", e);
       }
 
-      // 7. Update active state
+      // 6. Update active memory state immediately
       setRecords(fullMergedList);
+
+      // 7. Persist to server backend API if available (non-blocking for static hosting/GitHub Pages)
+      try {
+        const saveRes = await fetch("/api/records/bulk", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ records: fullMergedList })
+        });
+        if (!saveRes.ok) {
+          console.warn("Server backend API responded with status:", saveRes.status);
+        }
+      } catch (serverErr) {
+        console.warn("Server backend API sync skipped (offline or static hosting environment):", serverErr);
+      }
 
       // 8. Background sync to Supabase if reachable
       try {
