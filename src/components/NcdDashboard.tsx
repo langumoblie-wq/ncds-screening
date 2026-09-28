@@ -30,6 +30,7 @@ interface NcdDashboardProps {
   onAddScreeningClicked?: () => void;
   onFollowUpRecord?: (record: ScreeningRecord) => void;
   onImportRecords?: (records: ScreeningRecord[]) => Promise<any> | void;
+  onSyncCloud?: () => Promise<any> | void;
 }
 
 
@@ -559,9 +560,11 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
   onEditRecord,
   onAddScreeningClicked,
   onFollowUpRecord,
-  onImportRecords
+  onImportRecords,
+  onSyncCloud
 }) => {
   const [recordToDelete, setRecordToDelete] = useState<ScreeningRecord | null>(null);
+  const [isCloudSyncing, setIsCloudSyncing] = useState(false);
   
   // Filters state
   const [searchTerm, setSearchTerm] = useState("");
@@ -1887,7 +1890,27 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
               </button>
             )}
 
-                        {isAdmin && (
+              {/* Action: Cloud Sync for all users / Admin */}
+              {onSyncCloud && (
+                <button
+                  onClick={async () => {
+                    try {
+                      setIsCloudSyncing(true);
+                      await onSyncCloud();
+                    } finally {
+                      setIsCloudSyncing(false);
+                    }
+                  }}
+                  disabled={isCloudSyncing}
+                  className="bg-sky-50 border border-sky-200 hover:bg-sky-100 text-sky-700 font-bold text-xs py-3 px-3.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 shrink-0 transition-all shadow-3xs"
+                  title="ดึงข้อมูลล่าสุดจากระบบคลาวด์ Supabase ให้ตรงกันทุกคน"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isCloudSyncing ? "animate-spin text-sky-600" : ""}`} />
+                  {isCloudSyncing ? "กำลังซิงค์..." : "ซิงค์ข้อมูล Cloud"}
+                </button>
+              )}
+
+              {isAdmin && (
               <>
               <button
                 onClick={async () => {

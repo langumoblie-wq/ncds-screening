@@ -76,35 +76,54 @@ export default function App() {
           console.warn("Server API fetch warning:", apiErr);
         }
 
-        // 1.1 Fallback to static records.json if server API is unavailable (e.g. GitHub Pages or static host)
-        if (serverRecords.length === 0) {
-          try {
-            const staticRes = await fetch("records.json");
-            if (staticRes.ok) {
-              const staticJson = await staticRes.json();
-              if (Array.isArray(staticJson)) {
-                serverRecords = staticJson.filter((r: any) => r && typeof r === "object" && "id" in r);
-              }
-            }
-          } catch (stErr) {
-            // Ignore static fallback error
-          }
-        }
-
-        // 2. Fetch from Supabase if reachable
+        // 2. Fetch from Supabase with full pagination if reachable
         let supabaseRecords: ScreeningRecord[] = [];
         try {
-          const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 2000));
-          const queryPromise = supabase.from('ncd_records').select('data').order('created_at', { ascending: false });
-          const sbRes: any = await Promise.race([queryPromise, timeoutPromise]);
-          if (!sbRes?.error && sbRes?.data && Array.isArray(sbRes.data)) {
-            supabaseRecords = sbRes.data.map((row: any) => row.data).filter((r: any) => r && typeof r === "object" && "id" in r);
-            setDbStatus({ connected: true, message: "เชื่อมต่อฐานข้อมูลเซิร์ฟเวอร์สำเร็จ และพร้อมใช้งาน!" });
+          const pageSize = 1000;
+          let page = 0;
+          let hasMore = true;
+          let allSbData: any[] = [];
+
+          while (hasMore && page < 10) {
+            const from = page * pageSize;
+            const to = from + pageSize - 1;
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 8000));
+            const queryPromise = supabase
+              .from('ncd_records')
+              .select('data')
+              .range(from, to)
+              .order('created_at', { ascending: false });
+
+            const sbRes: any = await Promise.race([queryPromise, timeoutPromise]);
+            if (!sbRes?.error && sbRes?.data && Array.isArray(sbRes.data) && sbRes.data.length > 0) {
+              allSbData = allSbData.concat(sbRes.data);
+              if (sbRes.data.length < pageSize) {
+                hasMore = false;
+              } else {
+                page++;
+              }
+            } else {
+              hasMore = false;
+            }
+          }
+
+          if (allSbData.length > 0) {
+            supabaseRecords = allSbData
+              .map((row: any) => row.data)
+              .filter((r: any) => r && typeof r === "object" && "id" in r);
+            setDbStatus({ 
+              connected: true, 
+              message: `เชื่อมต่อ Cloud Supabase สำเร็จ (โหลด ${supabaseRecords.length.toLocaleString()} รายการ)` 
+            });
           } else {
-            setDbStatus({ connected: true, message: "เชื่อมต่อฐานข้อมูลภายในระบบเซิร์ฟเวอร์เรียบร้อย" });
+            setDbStatus({ 
+              connected: false, 
+              message: "เชื่อมต่อฐานข้อมูลภายในระบบ" 
+            });
           }
         } catch (sbErr) {
-          setDbStatus({ connected: true, message: "เชื่อมต่อฐานข้อมูลภายในระบบเซิร์ฟเวอร์เรียบร้อย" });
+          console.warn("Supabase fetch warning:", sbErr);
+          setDbStatus({ connected: false, message: "เชื่อมต่อฐานข้อมูลภายในระบบ" });
         }
 
         // 3. Read current localStorage
@@ -183,6 +202,67 @@ export default function App() {
     return () => { isMounted = false; };
   }, []);
 
+  // Function to manually re-sync records with Supabase & server
+  const handleManualSync = async () => {
+    try {
+      setIsSyncing(true);
+      const pageSize = 1000;
+      let page = 0;
+      let hasMore = true;
+      let allSbData: any[] = [];
+
+      while (hasMore && page < 10) {
+        const from = page * pageSize;
+        const to = from + pageSize - 1;
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 10000));
+        const queryPromise = supabase
+          .from('ncd_records')
+          .select('data')
+          .range(from, to)
+          .order('created_at', { ascending: false });
+
+        const sbRes: any = await Promise.race([queryPromise, timeoutPromise]);
+        if (!sbRes?.error && sbRes?.data && Array.isArray(sbRes.data) && sbRes.data.length > 0) {
+          allSbData = allSbData.concat(sbRes.data);
+          if (sbRes.data.length < pageSize) {
+            hasMore = false;
+          } else {
+            page++;
+          }
+        } else {
+          hasMore = false;
+        }
+      }
+
+      if (allSbData.length > 0) {
+        const cloudRecords: ScreeningRecord[] = allSbData
+          .map((row: any) => row.data)
+          .filter((r: any) => r && typeof r === "object" && "id" in r);
+
+        // Merge with local state
+        const map = new Map<number, ScreeningRecord>();
+        (records || []).forEach(r => { if (r?.id) map.set(Number(r.id), r); });
+        cloudRecords.forEach(r => { if (r?.id) map.set(Number(r.id), r); });
+        
+        const merged = Array.from(map.values()).sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
+        setRecords(merged);
+        localStorage.setItem("ncd_records", JSON.stringify(merged));
+        
+        setToastContent({
+          title: "ซิงค์ข้อมูล Cloud สำเร็จ!",
+          description: `ดึงข้อมูลจาก Cloud อัปเดตข้อมูลทั้งหมดเป็น ${merged.length.toLocaleString()} รายการเรียบร้อย`
+        });
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 3500);
+      }
+    } catch (err: any) {
+      console.warn("Manual sync error:", err);
+      alert("ไม่สามารถซิงค์ข้อมูลจาก Cloud ได้ในขณะนี้: " + (err.message || "กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต"));
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   // Save to localStorage as secondary backup safely
   useEffect(() => {
     if (records !== undefined && records !== null && records.length > 0) {
@@ -235,7 +315,7 @@ export default function App() {
 
     // Background sync to Supabase
     try {
-      supabase.from('ncd_records').upsert({
+      await supabase.from('ncd_records').upsert({
         id: savedRecord.id,
         name: savedRecord.name,
         visit_number: savedRecord.visitNumber,
@@ -243,8 +323,10 @@ export default function App() {
         gender: savedRecord.gender,
         data: savedRecord,
         created_at: savedRecord.createdAt || new Date().toISOString()
-      }).then(() => {});
-    } catch (sbErr) {}
+      });
+    } catch (sbErr) {
+      console.warn("Supabase upsert warning:", sbErr);
+    }
 
     setToastContent({
       title: "บันทึกข้อมูลสำเร็จ!",
@@ -273,15 +355,18 @@ export default function App() {
     }
 
     try {
-      supabase.from('ncd_records').upsert({
+      await supabase.from('ncd_records').upsert({
         id: updatedRecord.id,
         name: updatedRecord.name,
         visit_number: updatedRecord.visitNumber,
         age: updatedRecord.age,
         gender: updatedRecord.gender,
-        data: updatedRecord
-      }).then(() => {});
-    } catch (error) {}
+        data: updatedRecord,
+        created_at: updatedRecord.createdAt || new Date().toISOString()
+      });
+    } catch (error) {
+      console.warn("Supabase update warning:", error);
+    }
   };
 
   // Delete record
@@ -295,8 +380,10 @@ export default function App() {
     }
 
     try {
-      supabase.from('ncd_records').delete().eq('id', id).then(() => {});
-    } catch (error) {}
+      await supabase.from('ncd_records').delete().eq('id', id);
+    } catch (error) {
+      console.warn("Supabase delete warning:", error);
+    }
   };
 
   // Import records (Restore from Backup) with verified persistence
@@ -343,18 +430,6 @@ export default function App() {
         console.warn("Fetch before import warning:", fetchErr);
       }
 
-      if (currentServerRecords.length === 0) {
-        try {
-          const staticRes = await fetch("records.json");
-          if (staticRes.ok) {
-            const staticJson = await staticRes.json();
-            if (Array.isArray(staticJson)) {
-              currentServerRecords = staticJson;
-            }
-          }
-        } catch (stErr) {}
-      }
-
       // 3. Read current localStorage
       let localRecords: ScreeningRecord[] = [];
       try {
@@ -378,31 +453,28 @@ export default function App() {
 
       const fullMergedList = Array.from(recordMap.values()).sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
 
-      // 5. Save immediately to localStorage as primary client storage (guaranteed offline & static hosting resilience)
+      // 5. Persist to server backend API first and WAIT for disk save to complete
+      const saveRes = await fetch("/api/records/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ records: fullMergedList })
+      });
+
+      if (!saveRes.ok) {
+        throw new Error("เซิร์ฟเวอร์ตอบกลับสถานะไม่สำเร็จในการบันทึก");
+      }
+
+      // 6. Save immediately to localStorage as secondary backup
       try {
         localStorage.setItem("ncd_records", JSON.stringify(fullMergedList));
       } catch (e) {
         console.warn("localStorage quota warning:", e);
       }
 
-      // 6. Update active memory state immediately
+      // 7. Update active state
       setRecords(fullMergedList);
 
-      // 7. Persist to server backend API if available (non-blocking for static hosting/GitHub Pages)
-      try {
-        const saveRes = await fetch("/api/records/bulk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ records: fullMergedList })
-        });
-        if (!saveRes.ok) {
-          console.warn("Server backend API responded with status:", saveRes.status);
-        }
-      } catch (serverErr) {
-        console.warn("Server backend API sync skipped (offline or static hosting environment):", serverErr);
-      }
-
-      // 8. Background sync to Supabase if reachable
+      // 8. Sync to Supabase in chunks to guarantee persistence on Cloud
       try {
         const formattedData = sanitizedImported.map(record => ({
           id: record.id,
@@ -410,10 +482,19 @@ export default function App() {
           visit_number: record.visitNumber || 1,
           age: record.age,
           gender: record.gender,
-          data: record
+          data: record,
+          created_at: record.createdAt || new Date().toISOString()
         }));
-        supabase.from('ncd_records').upsert(formattedData).then(() => {});
-      } catch (sbErr) {}
+
+        // Upsert in batches of 100 rows
+        const BATCH_SIZE = 100;
+        for (let i = 0; i < formattedData.length; i += BATCH_SIZE) {
+          const chunk = formattedData.slice(i, i + BATCH_SIZE);
+          await supabase.from('ncd_records').upsert(chunk);
+        }
+      } catch (sbErr) {
+        console.warn("Supabase upsert warning during import:", sbErr);
+      }
 
       setToastContent({
         title: "นำเข้าข้อมูลสำเร็จ!",
@@ -486,12 +567,19 @@ export default function App() {
                   </button>
                 )}
                 
-                <span 
-                  title={dbStatus.message}
-                  className={`w-2.5 h-2.5 rounded-full ${
-                    dbStatus.connected ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
-                  }`} 
-                />
+                <button
+                  onClick={handleManualSync}
+                  title={`${dbStatus.message} (คลิกเพื่อซิงค์ข้อมูล Cloud ทันที)`}
+                  disabled={isSyncing}
+                  className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center gap-1 text-[10px] font-semibold"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isSyncing ? "animate-spin text-blue-600" : ""}`} />
+                  <span 
+                    className={`w-2 h-2 rounded-full ${
+                      dbStatus.connected ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
+                    }`} 
+                  />
+                </button>
               </div>
             </div>
 
@@ -584,24 +672,27 @@ export default function App() {
                 </button>
               )}
 
-              {/* Database Connection Status Badge */}
-              <div 
-                title={dbStatus.message}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] font-semibold transition-all shadow-2xs ${
+              {/* Database Connection Status Badge (Click to Sync) */}
+              <button 
+                onClick={handleManualSync}
+                disabled={isSyncing}
+                title={`${dbStatus.message} (คลิกเพื่อซิงค์ข้อมูล Cloud ทันที)`}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] font-semibold transition-all shadow-2xs cursor-pointer hover:opacity-90 ${
                   dbStatus.connected
                     ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                     : "bg-amber-50 text-amber-700 border-amber-200"
                 }`}
               >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin text-blue-600" : ""}`} />
                 <span className={`w-1.5 h-1.5 rounded-full ${
                   dbStatus.connected 
                     ? "bg-emerald-500 animate-pulse" 
                     : "bg-amber-500"
                 }`} />
                 <span>
-                  ฐานข้อมูล: {dbStatus.connected ? "Supabase" : "เครื่องนี้ (สำรอง)"}
+                  ฐานข้อมูล: {dbStatus.connected ? "Cloud Supabase" : "เครื่องนี้ (สำรอง)"}
                 </span>
-              </div>
+              </button>
             </div>
 
           </div>
@@ -668,6 +759,7 @@ export default function App() {
                     setActiveTab("form");
                   }}
                   onImportRecords={handleImportRecords}
+                  onSyncCloud={handleManualSync}
                 />
               </motion.div>
             )}

@@ -498,9 +498,9 @@ export const NcdForm: React.FC<NcdFormProps> = ({
       console.error("Failed to save to localStorage:", storageError);
     }
 
-    // 3. Background sync to Supabase if available
+    // 3. Sync to Supabase if available
     try {
-      supabase.from('ncd_records').upsert({
+      await supabase.from('ncd_records').upsert({
          id: finalRecordObj.id,
          name: finalRecordObj.name,
          visit_number: finalRecordObj.visitNumber,
@@ -508,8 +508,10 @@ export const NcdForm: React.FC<NcdFormProps> = ({
          gender: finalRecordObj.gender,
          data: finalRecordObj,
          created_at: finalRecordObj.createdAt
-      }).then(() => {});
-    } catch (error) {}
+      });
+    } catch (error) {
+      console.warn("Supabase form submit warning:", error);
+    }
 
     savedRecord = finalRecordObj;
 
