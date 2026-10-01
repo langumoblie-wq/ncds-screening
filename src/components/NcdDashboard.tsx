@@ -7,7 +7,7 @@ import { RefreshCw,
   Layers, UserCheck, Calendar, Check, GitBranch, TrendingUp, CalendarRange, Clock, BarChart2
 } from "lucide-react";
 import { ScreeningRecord, DistrictType, LOCATION_DATA, DISTRICT_SUBDISTRICT_MAP } from "../types";
-import { parseDateToIso, formatYearMonthThai, formatYearMonthThaiShort, getRecordYearMonth } from "../utils";
+import { parseDateToIso, formatYearMonthThai, formatYearMonthThaiShort, getRecordYearMonth, formatThaiDate } from "../utils";
 import { 
   BackupExportModal, 
   BackupImportModal, 
@@ -1209,7 +1209,7 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
       const visitType = vNum === 1 ? "คัดกรองแรกรับ" : `ติดตามครั้งที่ ${vNum - 1}`;
       return [
         r.id,
-        r.date,
+        formatThaiDate(r.date, "slash"),
         vNum,
         `"${visitType}"`,
         isLatest ? "ใช่ (ผลล่าสุด)" : "ประวัติครั้งก่อน",
@@ -2818,8 +2818,13 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
                       
                       {/* Date & Visit */}
                       <td className="py-4 px-5">
-                        <span className="font-semibold text-slate-800 block">{r.date}</span>
-                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        <span className="font-bold text-slate-800 block text-sm leading-tight">
+                          {formatThaiDate(r.date, "medium")}
+                        </span>
+                        <span className="text-[11px] text-slate-400 font-mono block leading-tight mt-0.5">
+                          ({formatThaiDate(r.date, "slash")})
+                        </span>
+                        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold ${
                             (r.visitNumber || 1) === 1
                               ? "bg-blue-50 text-blue-700 border border-blue-200"

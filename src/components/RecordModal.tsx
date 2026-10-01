@@ -7,6 +7,7 @@ import {
   Trash2, Check, ShieldAlert, Printer, Download, FileCheck, Loader2, History
 } from "lucide-react";
 import { ScreeningRecord } from "../types";
+import { formatThaiDate } from "../utils";
 import { CustomTrendChart } from "./TrendChart";
 import { BloodPressureTrendRecharts } from "./BloodPressureTrendRecharts";
 
@@ -51,36 +52,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
   
   // Format Thai date
   const getThaiDate = (dateString?: string) => {
-    if (!dateString) return new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
-    try {
-      // Handle common th-TH output like "11/7/2569" (DD/MM/YYYY)
-      if (dateString.includes('/')) {
-        const parts = dateString.split('/');
-        if (parts.length === 3) {
-          const day = parseInt(parts[0], 10);
-          const month = parseInt(parts[1], 10) - 1;
-          let year = parseInt(parts[2], 10);
-          // If year is BE (e.g. 2569), convert to AD for Date parsing
-          if (year > 2500) year -= 543;
-          
-          const parsedDate = new Date(year, month, day);
-          if (!isNaN(parsedDate.getTime())) {
-            return parsedDate.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
-          }
-        }
-      }
-
-      const d = new Date(dateString);
-      if (isNaN(d.getTime())) return dateString;
-      
-      // If parsed year is still > 2500, it means the Date constructor parsed it as BE.
-      if (d.getFullYear() > 2500) {
-        d.setFullYear(d.getFullYear() - 543);
-      }
-      return d.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
-    } catch (e) {
-      return dateString;
-    }
+    return formatThaiDate(dateString, "full");
   };
   const recordDate = getThaiDate(record.date);
 
@@ -290,7 +262,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                       </span>
                     )}
                     <span className={`text-[10px] ${isSelected ? "text-indigo-100" : "text-slate-400"}`}>
-                      {v.date}
+                      {formatThaiDate(v.date, "medium")}
                     </span>
                   </button>
                 );
@@ -314,7 +286,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
               </div>
             </div>
             <div className="text-right text-xs text-slate-500">
-              <p>วันที่บันทึก: {record.date}</p>
+              <p>วันที่บันทึก: {formatThaiDate(record.date, "full")} ({formatThaiDate(record.date, "slash")})</p>
               <p>รหัสอ้างอิง: #{record.id}</p>
             </div>
           </div>
@@ -1122,7 +1094,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                   {patientVisits.map((v) => (
                     <tr key={v.id} style={{ borderBottom: '1px solid #f1f5f9', backgroundColor: v.id === record.id ? '#f0fdf4' : 'transparent' }}>
                       <td style={{ padding: '4px 6px', fontWeight: 'bold' }}>ครั้งที่ {v.visitNumber || 1} {v.id === record.id ? "(ฉบับนี้)" : ""}</td>
-                      <td style={{ padding: '4px 6px' }}>{v.date}</td>
+                      <td style={{ padding: '4px 6px' }}>{formatThaiDate(v.date, "medium")}</td>
                       <td style={{ padding: '4px 6px' }}>{v.weight}</td>
                       <td style={{ padding: '4px 6px' }}>{v.bmi}</td>
                       <td style={{ padding: '4px 6px', fontWeight: 'bold', color: '#0f172a' }}>{v.bpSys}/{v.bpDia}</td>

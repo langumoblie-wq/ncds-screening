@@ -10,7 +10,7 @@ import {
 import { ScreeningRecord } from "../types";
 import { 
   getHTPingPong, getDMPingPong, getCombinedPingPong, 
-  PING_PONG_COLORS, PingPongColorInfo 
+  PING_PONG_COLORS, PingPongColorInfo, formatThaiDate
 } from "../utils";
 
 interface IndividualProfileProps {
@@ -455,7 +455,7 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
                         </span>
                       )}
                       <span className={`text-[10px] ${isSelected ? "text-indigo-100" : "text-slate-400"}`}>
-                        {v.date}
+                        {formatThaiDate(v.date, "medium")}
                       </span>
                     </button>
                   );
@@ -809,7 +809,7 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
                         return (
                           <tr key={`plan-${v.id}`} className="hover:bg-slate-50/20 transition-colors">
                             <td className="py-3 px-4 font-bold text-slate-700">ครั้งที่ {v.visitNumber}</td>
-                            <td className="py-3 px-4 font-semibold text-slate-500">{v.date}</td>
+                            <td className="py-3 px-4 font-semibold text-slate-500">{formatThaiDate(v.date, "medium")}</td>
                             {[
                               { key: 'sweet', data: v.personalPlan.sweet },
                               { key: 'fat', data: v.personalPlan.fat },
@@ -883,7 +883,7 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
                       return (
                         <tr key={v.id} className="hover:bg-slate-50/20 transition-colors">
                           <td className="py-3.5 px-5 font-bold text-slate-800">ครั้งที่ {v.visitNumber}</td>
-                          <td className="py-3.5 px-5 font-semibold text-slate-500">{v.date}</td>
+                          <td className="py-3.5 px-5 font-semibold text-slate-500">{formatThaiDate(v.date, "medium")}</td>
                           <td className="py-3.5 px-5 text-center">
                             <span className="font-bold text-slate-700">{v.bmi}</span>
                             <span className="text-[10px] text-slate-400 block font-semibold">{v.weight} kg</span>

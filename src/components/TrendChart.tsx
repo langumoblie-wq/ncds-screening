@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import { formatThaiDate } from "../utils";
 
 export const CustomTrendChart: React.FC<{
   data: { label: string; value: number; value2?: number; date: string }[];
@@ -266,7 +267,7 @@ export const CustomTrendChart: React.FC<{
                   fontSize="7"
                   textAnchor="middle"
                 >
-                  {p.date}
+                  {formatThaiDate(p.date, "short")}
                 </text>
               </g>
             ))}

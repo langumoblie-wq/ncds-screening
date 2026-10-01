@@ -29,7 +29,7 @@ import {
   Sparkles
 } from "lucide-react";
 import { ScreeningRecord } from "../types";
-import { getHTPingPong } from "../utils";
+import { getHTPingPong, formatThaiDate } from "../utils";
 
 export interface BloodPressureTrendRechartsProps {
   visits: ScreeningRecord[];
@@ -110,7 +110,7 @@ export const BloodPressureTrendRecharts: React.FC<BloodPressureTrendRechartsProp
         visitNumber: v.visitNumber,
         label: `ครั้งที่ ${v.visitNumber}`,
         fullLabel: v.visitNumber === 1 ? "ครั้งที่ 1 (แรกรับ)" : `ครั้งที่ ${v.visitNumber} (ติดตาม #${v.visitNumber - 1})`,
-        date: v.date || "-",
+        date: formatThaiDate(v.date, "medium"),
         sys,
         dia,
         pulsePressure,

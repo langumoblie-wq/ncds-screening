@@ -10,6 +10,7 @@ import { calculateBMI, calculateHTRisk, calculateDMRisk, evaluateFoodHabit, pars
 import { FOOD_HABIT_QUESTIONS } from "../data/questions";
 import { ConsentModal } from "./ConsentModal";
 import { getRecordModel, getRecordSubdistrict, cleanDistrict } from "./BackupRestoreModal";
+import { ThaiDatePicker } from "./ThaiDatePicker";
 
 interface NcdFormProps {
   onSubmitSuccess: (record: ScreeningRecord, isEdit: boolean) => void;
@@ -729,29 +730,17 @@ export const NcdForm: React.FC<NcdFormProps> = ({
               </div>
             </div>
 
-            {/* วันที่คัดกรอง */}
+            {/* วันที่คัดกรอง (ปฏิทิน พ.ศ.) */}
             <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1 flex items-center justify-between">
-                <span>วันที่คัดกรอง <span className="text-rose-500">*</span></span>
-                {screeningDateText && (
-                  <span className="text-[11px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-150">
-                    {screeningDateText}
-                  </span>
-                )}
-              </label>
-              <div className="relative">
-                <input 
-                  type="date" 
-                  required 
-                  value={screeningDateIso} 
-                  onChange={(e) => handleDateChange(e.target.value)}
-                  className="w-full text-sm rounded-xl border border-slate-300 p-3 pl-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all bg-white font-medium"
-                />
-                <Calendar className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              </div>
-              <span className="text-[11px] text-slate-500 mt-1 block">
-                🗓️ {formatThaiDateReadable(screeningDateIso) || screeningDateText}
-              </span>
+              <ThaiDatePicker
+                label="วันที่คัดกรอง"
+                required
+                value={screeningDateIso}
+                onChange={(isoVal, thaiVal) => {
+                  setScreeningDateIso(isoVal);
+                  setScreeningDateText(thaiVal);
+                }}
+              />
             </div>
 
             <div className="sm:col-span-2">

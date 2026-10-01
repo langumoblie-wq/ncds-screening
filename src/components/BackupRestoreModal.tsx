@@ -22,6 +22,7 @@ import {
   FileCheck
 } from "lucide-react";
 import { ScreeningRecord, DistrictType, LOCATION_DATA, DISTRICT_SUBDISTRICT_MAP, EXACT_LOCATION_LIST } from "../types";
+import { formatThaiDate } from "../utils";
 
 // Normalization Helpers
 export const cleanDistrict = (d?: string): string => {
@@ -1303,7 +1304,7 @@ export const BackupImportModal: React.FC<BackupImportModalProps> = ({
                       <tr key={r.id || i} className="hover:bg-slate-50">
                         <td className="py-1.5 px-3 font-semibold text-slate-800">{r.name}</td>
                         <td className="py-1.5 px-3">#{r.visitNumber || 1}</td>
-                        <td className="py-1.5 px-3 text-slate-500">{r.date}</td>
+                        <td className="py-1.5 px-3 text-slate-600 font-medium">{formatThaiDate(r.date, "medium")}</td>
                         <td className="py-1.5 px-3 text-slate-500">{r.district} - {r.targetArea}</td>
                         <td className="py-1.5 px-3">{r.bpSys}/{r.bpDia}</td>
                         <td className="py-1.5 px-3">{r.sugar}</td>

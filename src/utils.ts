@@ -349,69 +349,143 @@ export function getCombinedPingPong(
   return htRank >= dmRank ? ht : dm;
 }
 
+// Thai Buddhist Era Constants
+export const THAI_MONTHS = [
+  "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
+  "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"
+];
+
+export const THAI_MONTHS_SHORT = [
+  "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
+  "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."
+];
+
+export const THAI_DAYS_SHORT = ["อา.", "จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส."];
+
+export interface ParsedDateParts {
+  day: number;
+  month: number; // 1-12
+  yearBE: number; // e.g. 2569
+  yearCE: number; // e.g. 2026
+  iso: string; // YYYY-MM-DD (CE)
+}
+
+/**
+ * Universal date parser that reliably parses any date format (CE/BE, slash/dash/ISO) into day, month, yearBE, yearCE, iso
+ */
+export function parseAnyDateToParts(dateStr?: string): ParsedDateParts {
+  if (!dateStr || typeof dateStr !== "string") {
+    const now = new Date();
+    const ce = now.getFullYear();
+    const be = ce + 543;
+    const m = now.getMonth() + 1;
+    const d = now.getDate();
+    return {
+      day: d,
+      month: m,
+      yearBE: be,
+      yearCE: ce,
+      iso: `${ce}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`
+    };
+  }
+
+  const clean = dateStr.trim();
+
+  // Case 1: D/M/YYYY or DD/MM/YYYY
+  if (clean.includes("/")) {
+    const parts = clean.split("/");
+    if (parts.length === 3) {
+      const d = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      const y = parseInt(parts[2], 10);
+      if (!isNaN(d) && !isNaN(m) && !isNaN(y)) {
+        const be = y > 2400 ? y : y + 543;
+        const ce = y > 2400 ? y - 543 : y;
+        return {
+          day: d,
+          month: m,
+          yearBE: be,
+          yearCE: ce,
+          iso: `${ce}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`
+        };
+      }
+    }
+  }
+
+  // Case 2: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss
+  if (clean.includes("-")) {
+    const datePart = clean.split("T")[0];
+    const parts = datePart.split("-");
+    if (parts.length === 3) {
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      const d = parseInt(parts[2], 10);
+      if (!isNaN(d) && !isNaN(m) && !isNaN(y)) {
+        const be = y > 2400 ? y : y + 543;
+        const ce = y > 2400 ? y - 543 : y;
+        return {
+          day: d,
+          month: m,
+          yearBE: be,
+          yearCE: ce,
+          iso: `${ce}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`
+        };
+      }
+    }
+  }
+
+  const now = new Date();
+  const ce = now.getFullYear();
+  const be = ce + 543;
+  const m = now.getMonth() + 1;
+  const d = now.getDate();
+  return {
+    day: d,
+    month: m,
+    yearBE: be,
+    yearCE: ce,
+    iso: `${ce}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`
+  };
+}
+
+/**
+ * Formats any date string into Thai Buddhist Era format (วัน เดือน ปี พ.ศ.)
+ * @param dateStr Date string in any standard format
+ * @param style "medium" = "1 ต.ค. 2569", "full" = "1 ตุลาคม 2569", "short" = "1 ต.ค. 69", "slash" = "01/10/2569"
+ */
+export function formatThaiDate(dateStr?: string, style: "short" | "medium" | "full" | "slash" = "medium"): string {
+  if (!dateStr) return "-";
+  const parts = parseAnyDateToParts(dateStr);
+  const { day, month, yearBE } = parts;
+  const mIndex = Math.max(0, Math.min(11, month - 1));
+
+  if (style === "slash") {
+    return `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}/${yearBE}`;
+  }
+  if (style === "full") {
+    return `${day} ${THAI_MONTHS[mIndex]} ${yearBE}`;
+  }
+  if (style === "short") {
+    return `${day} ${THAI_MONTHS_SHORT[mIndex]} ${String(yearBE).slice(-2)}`;
+  }
+  // medium (default)
+  return `${day} ${THAI_MONTHS_SHORT[mIndex]} ${yearBE}`;
+}
+
 // Date helpers for converting between ISO (YYYY-MM-DD) and Thai Buddhist Era formats
 export function parseDateToIso(dateStr?: string): string {
-  if (!dateStr) {
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, "0");
-    const d = String(now.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
-  }
-  // Format DD/MM/YYYY or D/M/YYYY
-  if (dateStr.includes("/")) {
-    const parts = dateStr.trim().split("/");
-    if (parts.length === 3) {
-      const d = parts[0].padStart(2, "0");
-      const m = parts[1].padStart(2, "0");
-      let y = parseInt(parts[2], 10);
-      if (y > 2400) y -= 543;
-      return `${y}-${m}-${d}`;
-    }
-  }
-  // Format YYYY-MM-DD
-  if (dateStr.includes("-")) {
-    const parts = dateStr.trim().split("-");
-    if (parts.length === 3) {
-      let y = parseInt(parts[0], 10);
-      if (y > 2400) y -= 543;
-      const m = parts[1].padStart(2, "0");
-      const d = parts[2].padStart(2, "0");
-      return `${y}-${m}-${d}`;
-    }
-  }
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  return parseAnyDateToParts(dateStr).iso;
 }
 
 export function isoToThaiDateString(isoStr: string): string {
   if (!isoStr) return "";
-  const parts = isoStr.split("-");
-  if (parts.length !== 3) return isoStr;
-  let y = parseInt(parts[0], 10);
-  if (y < 2400) y += 543;
-  const m = parseInt(parts[1], 10);
-  const d = parseInt(parts[2], 10);
-  return `${d}/${m}/${y}`;
+  const parts = parseAnyDateToParts(isoStr);
+  return `${String(parts.day).padStart(2, "0")}/${String(parts.month).padStart(2, "0")}/${parts.yearBE}`;
 }
 
 export function formatThaiDateReadable(isoStr: string): string {
   if (!isoStr) return "";
-  const parts = isoStr.split("-");
-  if (parts.length !== 3) return isoStr;
-  let y = parseInt(parts[0], 10);
-  if (y < 2400) y += 543;
-  const m = parseInt(parts[1], 10);
-  const d = parseInt(parts[2], 10);
-  const thaiMonths = [
-    "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
-    "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"
-  ];
-  const monthName = thaiMonths[m - 1] || "";
-  return `${d} ${monthName} ${y}`;
+  return formatThaiDate(isoStr, "full");
 }
 
 export function formatYearMonthThai(yearMonth: string): string {
@@ -420,11 +494,8 @@ export function formatYearMonthThai(yearMonth: string): string {
   let y = parseInt(parts[0], 10);
   if (y < 2400) y += 543;
   const m = parseInt(parts[1], 10);
-  const thaiMonths = [
-    "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
-    "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"
-  ];
-  return `${thaiMonths[m - 1] || parts[1]} ${y}`;
+  const mIndex = Math.max(0, Math.min(11, m - 1));
+  return `${THAI_MONTHS[mIndex] || parts[1]} ${y}`;
 }
 
 export function formatYearMonthThaiShort(yearMonth: string): string {
@@ -433,11 +504,8 @@ export function formatYearMonthThaiShort(yearMonth: string): string {
   let y = parseInt(parts[0], 10);
   if (y < 2400) y += 543;
   const m = parseInt(parts[1], 10);
-  const shortThaiMonths = [
-    "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
-    "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."
-  ];
-  return `${shortThaiMonths[m - 1] || parts[1]} ${String(y).slice(-2)}`;
+  const mIndex = Math.max(0, Math.min(11, m - 1));
+  return `${THAI_MONTHS_SHORT[mIndex] || parts[1]} ${String(y).slice(-2)}`;
 }
 
 export function getRecordYearMonth(dateStr?: string): string {
