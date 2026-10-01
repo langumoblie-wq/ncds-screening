@@ -54,10 +54,10 @@ function normalizeRecord(r: any): any {
       subdistrict: "คลองขุด"
     };
   }
-  if (["ม.2 บ้านท่าจีน", "บ้านท่าจีน", "ท่าจีน"].includes(r.targetArea)) {
+  if (r.targetArea && (["ม.2 บ้านท่าจีน", "บ้านท่าจีน", "ท่าจีน"].includes(r.targetArea) || r.targetArea.includes("ท่าจีน"))) {
     return {
       ...r,
-      targetArea: "ม.2 บ้านท่าจีน",
+      targetArea: "บ้านเขาจีน",
       modelType: "หมู่บ้าน",
       district: "เมือง",
       subdistrict: "คลองขุด"
