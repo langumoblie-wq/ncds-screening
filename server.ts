@@ -9,6 +9,33 @@ dotenv.config();
 
 const RECORDS_FILE_PATH = path.join(process.cwd(), "records.json");
 const TARGETS_FILE_PATH = path.join(process.cwd(), "project_targets.json");
+const DELETED_IDS_FILE_PATH = path.join(process.cwd(), "deleted_record_ids.json");
+
+function getStoredDeletedIds(): number[] {
+  try {
+    if (fs.existsSync(DELETED_IDS_FILE_PATH)) {
+      const data = fs.readFileSync(DELETED_IDS_FILE_PATH, "utf-8");
+      const parsed = JSON.parse(data);
+      if (Array.isArray(parsed)) {
+        return parsed.map(Number).filter(n => !isNaN(n));
+      }
+    }
+  } catch (err) {
+    console.error("Error reading deleted_record_ids.json:", err);
+  }
+  return [];
+}
+
+function saveStoredDeletedIds(ids: number[]): boolean {
+  try {
+    const unique = Array.from(new Set(ids.map(Number).filter(n => !isNaN(n))));
+    fs.writeFileSync(DELETED_IDS_FILE_PATH, JSON.stringify(unique, null, 2), "utf-8");
+    return true;
+  } catch (err) {
+    console.error("Error writing deleted_record_ids.json:", err);
+    return false;
+  }
+}
 
 function getStoredTargets(): Record<string, number> {
   try {
@@ -105,9 +132,24 @@ async function startServer() {
   app.get("/api/records", (_req, res) => {
     try {
       const records = getStoredRecords();
-      res.json({ success: true, count: records.length, records });
+      const deletedIds = getStoredDeletedIds();
+      const deletedSet = new Set(deletedIds);
+      const cleanRecords = records.filter(r => !deletedSet.has(Number(r.id)));
+      if (cleanRecords.length !== records.length) {
+        saveStoredRecords(cleanRecords);
+      }
+      res.json({ success: true, count: cleanRecords.length, records: cleanRecords, deletedIds });
     } catch (err: any) {
       res.status(500).json({ error: err.message || "Failed to load records" });
+    }
+  });
+
+  app.get("/api/records/deleted", (_req, res) => {
+    try {
+      const deletedIds = getStoredDeletedIds();
+      res.json({ success: true, deletedIds });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to load deleted records" });
     }
   });
 
@@ -120,6 +162,11 @@ async function startServer() {
 
       const recordId = Number(record.id);
       const normalizedRecord = { ...record, id: recordId };
+
+      const deletedIds = getStoredDeletedIds();
+      if (deletedIds.includes(recordId)) {
+        saveStoredDeletedIds(deletedIds.filter(id => id !== recordId));
+      }
 
       const existing = getStoredRecords();
       const existingIdx = existing.findIndex(r => Number(r.id) === recordId);
@@ -143,20 +190,27 @@ async function startServer() {
         return res.status(400).json({ error: "Records must be an array" });
       }
 
-      const current = getStoredRecords();
+      const deletedIds = getStoredDeletedIds();
+      const deletedSet = new Set(deletedIds);
+
+      const current = getStoredRecords().filter(r => !deletedSet.has(Number(r.id)));
       const recordMap = new Map();
       current.forEach(r => {
         if (r && r.id != null) recordMap.set(Number(r.id), r);
       });
       records.forEach(r => {
         if (r && r.id != null) {
-          recordMap.set(Number(r.id), { ...r, id: Number(r.id) });
+          const numId = Number(r.id);
+          // CRITICAL: NEVER allow resurrecting an ID that is in deletedIds!
+          if (!deletedSet.has(numId)) {
+            recordMap.set(numId, { ...r, id: numId });
+          }
         }
       });
 
       const merged = Array.from(recordMap.values()).sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
       saveStoredRecords(merged);
-      res.json({ success: true, count: merged.length, records: merged });
+      res.json({ success: true, count: merged.length, records: merged, deletedIds });
     } catch (err: any) {
       res.status(500).json({ error: err.message || "Failed to bulk save records" });
     }
@@ -168,7 +222,14 @@ async function startServer() {
       const current = getStoredRecords();
       const filtered = current.filter(r => Number(r.id) !== id);
       saveStoredRecords(filtered);
-      res.json({ success: true, count: filtered.length });
+
+      const deletedIds = getStoredDeletedIds();
+      if (!deletedIds.includes(id)) {
+        deletedIds.push(id);
+        saveStoredDeletedIds(deletedIds);
+      }
+
+      res.json({ success: true, count: filtered.length, deletedId: id, deletedIds });
     } catch (err: any) {
       res.status(500).json({ error: err.message || "Failed to delete record" });
     }

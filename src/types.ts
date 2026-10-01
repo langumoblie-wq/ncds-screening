@@ -76,6 +76,7 @@ export interface ScreeningRecord {
   aiAdvice?: string;
   createdAt?: string;
   hasConsented?: boolean;
+  isDeleted?: boolean;
 }
 
 // Official standard location configuration mapping based on program requirements

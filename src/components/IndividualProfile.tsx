@@ -1,28 +1,17 @@
 import { CustomTrendChart } from "./TrendChart";
 import { BloodPressureTrendRecharts } from "./BloodPressureTrendRecharts";
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { 
   Search, ArrowRight, Activity, Calendar, MapPin, 
   Heart, User, Phone, Sparkles, TrendingUp, ChevronRight,
   Info, AlertCircle, Droplet, History,
-  Target, CheckCircle2, XCircle, Pencil, Trash2,
-  Filter, X, ChevronDown
+  Target, CheckCircle2, XCircle, Pencil, Trash2
 } from "lucide-react";
-import { ScreeningRecord, DistrictType, LOCATION_DATA, DISTRICT_SUBDISTRICT_MAP } from "../types";
+import { ScreeningRecord } from "../types";
 import { 
   getHTPingPong, getDMPingPong, getCombinedPingPong, 
   PING_PONG_COLORS, PingPongColorInfo 
 } from "../utils";
-import {
-  matchesModelFilter,
-  matchesDistrictFilter,
-  matchesSubdistrictFilter,
-  matchesTargetAreaFilter,
-  cleanDistrict,
-  cleanSubdistrict,
-  cleanTargetArea,
-  getRecordSubdistrict
-} from "./BackupRestoreModal";
 
 interface IndividualProfileProps {
   isAdmin?: boolean;
@@ -33,105 +22,7 @@ interface IndividualProfileProps {
   onDeleteRecord?: (record: ScreeningRecord) => void;
 }
 
-// MultiSelect Dropdown component for filters
-const MultiSelectDropdown = ({ 
-  options, 
-  selected, 
-  onChange, 
-  placeholder, 
-  disabled = false, 
-  labelKey = (v: string) => v 
-}: { 
-  options: string[], 
-  selected: string[], 
-  onChange: (val: string[]) => void, 
-  placeholder: string, 
-  disabled?: boolean, 
-  labelKey?: (v: string) => string 
-}) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  return (
-    <div className="relative" ref={containerRef}>
-      <div 
-        className={`w-full text-xs border border-slate-300 rounded-xl px-3 py-2.5 bg-white outline-none cursor-pointer flex justify-between items-center transition-all ${
-          disabled ? 'bg-slate-50 text-slate-400 cursor-not-allowed' : 'text-slate-700 font-semibold hover:border-slate-400'
-        } ${isOpen ? 'ring-2 ring-blue-500/20 border-blue-500' : ''}`}
-        onClick={() => !disabled && setIsOpen(!isOpen)}
-      >
-        <div className="truncate pr-2">
-          {selected.length === 0 ? (
-            <span className="text-slate-400 font-normal">{placeholder}</span>
-          ) : selected.length === 1 ? (
-            <span className="text-slate-800 font-semibold">{labelKey(selected[0])}</span>
-          ) : (
-            <span className="flex items-center gap-1.5">
-              <span className="text-slate-800 font-semibold truncate">{labelKey(selected[0])}</span>
-              <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0">
-                +{selected.length - 1}
-              </span>
-            </span>
-          )}
-        </div>
-        <ChevronDown className={`w-4 h-4 text-slate-400 shrink-0 transition-transform ${isOpen ? 'rotate-180 text-blue-600' : ''}`} />
-      </div>
-      {isOpen && !disabled && (
-        <div className="absolute z-50 w-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl max-h-56 overflow-y-auto">
-          {options.length > 0 && (
-            <div className="flex items-center justify-between px-3 py-2 text-xs border-b border-slate-100 bg-slate-50/80">
-              <button 
-                type="button"
-                className="text-blue-600 hover:text-blue-700 font-bold transition-colors cursor-pointer text-[11px]"
-                onClick={() => { onChange(options); }}
-              >
-                ✓ เลือกทั้งหมด
-              </button>
-              <button 
-                type="button"
-                className="text-rose-600 hover:text-rose-700 font-bold transition-colors cursor-pointer text-[11px]"
-                onClick={() => { onChange([]); }}
-              >
-                ✕ ล้างตัวเลือก
-              </button>
-            </div>
-          )}
-          {options.length === 0 ? (
-            <div className="px-3 py-2.5 text-xs text-slate-400 text-center">ไม่มีตัวเลือก</div>
-          ) : (
-            options.map(opt => (
-              <label key={opt} className="flex items-center px-3 py-2 hover:bg-slate-50 cursor-pointer text-xs font-medium text-slate-700 select-none">
-                <input 
-                  type="checkbox" 
-                  className="mr-2 rounded text-blue-600 focus:ring-blue-500 w-3.5 h-3.5 cursor-pointer"
-                  checked={selected.includes(opt)}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      onChange([...selected, opt]);
-                    } else {
-                      onChange(selected.filter(s => s !== opt));
-                    }
-                  }}
-                />
-                <span className="truncate">{labelKey(opt)}</span>
-              </label>
-            ))
-          )}
-        </div>
-      )}
-    </div>
-  );
-};
+// Sparkline/Line Chart component using plain responsive SVGs
 
 export const IndividualProfile: React.FC<IndividualProfileProps> = ({ 
   isAdmin = false,
@@ -145,178 +36,24 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
   const [selectedPatientId, setSelectedPatientId] = useState<string>("");
   const [patientVisitCohortFilter, setPatientVisitCohortFilter] = useState<"all" | "multi" | "single">("all");
   const [selectedVisitId, setSelectedVisitId] = useState<number | null>(null);
-
-  // Location Filters
-  const [filterModel, setFilterModel] = useState<string[]>([]);
-  const [filterDistrict, setFilterDistrict] = useState<string[]>([]);
-  const [filterSubdistrict, setFilterSubdistrict] = useState<string[]>([]);
-  const [filterTargetArea, setFilterTargetArea] = useState<string[]>([]);
-
-  // Dynamic available options strictly adhering to official location configuration
-  const availableDistricts = useMemo(() => {
-    const districtsSet = new Set<string>();
-    const isModelVillage = filterModel.includes("หมู่บ้าน") && !filterModel.includes("ตำบล");
-    const isModelSubdistrict = filterModel.includes("ตำบล") && !filterModel.includes("หมู่บ้าน");
-
-    if (isModelVillage) {
-      Object.keys(LOCATION_DATA["หมู่บ้าน"]).forEach(d => {
-        if (d !== "เมืองสตูล") districtsSet.add(cleanDistrict(d));
-      });
-    } else if (isModelSubdistrict) {
-      Object.keys(LOCATION_DATA["ตำบล"]).forEach(d => {
-        if (d !== "เมืองสตูล") districtsSet.add(cleanDistrict(d));
-      });
-    } else {
-      ["ควนกาหลง", "ทุ่งหว้า", "มะนัง", "เมือง", "ละงู"].forEach(d => districtsSet.add(d));
-    }
-
-    // Also include any district found in records matching model
-    (records || []).forEach(r => {
-      if (r && r.district) {
-        const d = cleanDistrict(r.district);
-        if (d && (filterModel.length === 0 || matchesModelFilter(r, filterModel))) {
-          districtsSet.add(d);
-        }
-      }
-    });
-
-    return Array.from(districtsSet) as DistrictType[];
-  }, [filterModel, records]);
-
-  const availableSubdistricts = useMemo(() => {
-    const subdistSet = new Set<string>();
-    const isModelVillage = filterModel.includes("หมู่บ้าน") && !filterModel.includes("ตำบล");
-    const isModelSubdistrict = filterModel.includes("ตำบล") && !filterModel.includes("หมู่บ้าน");
-
-    const targetDistricts = filterDistrict.length > 0 
-      ? filterDistrict.map(cleanDistrict) 
-      : (availableDistricts as string[]);
-
-    targetDistricts.forEach(dist => {
-      if (isModelVillage) {
-        const dData = (LOCATION_DATA["หมู่บ้าน"] as any)?.[dist];
-        if (dData) Object.keys(dData).forEach(s => subdistSet.add(cleanSubdistrict(s)));
-      } else if (isModelSubdistrict) {
-        const dData = (LOCATION_DATA["ตำบล"] as any)?.[dist];
-        if (dData) Object.keys(dData).forEach(s => subdistSet.add(cleanSubdistrict(s)));
-      } else {
-        const dMap = DISTRICT_SUBDISTRICT_MAP[dist as DistrictType];
-        if (dMap) Object.keys(dMap).forEach(s => subdistSet.add(cleanSubdistrict(s)));
-      }
-    });
-
-    // Also include from records matching current district & model
-    (records || []).forEach(r => {
-      if (r) {
-        const sub = cleanSubdistrict(r.subdistrict || getRecordSubdistrict(r));
-        const dist = cleanDistrict(r.district);
-        const matchDist = filterDistrict.length === 0 || matchesDistrictFilter(dist, filterDistrict);
-        const matchModel = filterModel.length === 0 || matchesModelFilter(r, filterModel);
-        if (sub && matchDist && matchModel) {
-          subdistSet.add(sub);
-        }
-      }
-    });
-
-    return Array.from(subdistSet);
-  }, [filterModel, filterDistrict, availableDistricts, records]);
-
-  const availableTargetAreas = useMemo(() => {
-    const areaSet = new Set<string>();
-    const isModelVillage = filterModel.includes("หมู่บ้าน") && !filterModel.includes("ตำบล");
-    const isModelSubdistrict = filterModel.includes("ตำบล") && !filterModel.includes("หมู่บ้าน");
-
-    const targetDistricts = filterDistrict.length > 0 
-      ? filterDistrict.map(cleanDistrict) 
-      : (availableDistricts as string[]);
-
-    targetDistricts.forEach(dist => {
-      const modelsToCheck = isModelVillage ? ["หมู่บ้าน"] : (isModelSubdistrict ? ["ตำบล"] : ["หมู่บ้าน", "ตำบล"]);
-      modelsToCheck.forEach(m => {
-        const distData = (LOCATION_DATA[m as keyof typeof LOCATION_DATA] as any)?.[dist];
-        if (distData) {
-          Object.entries(distData).forEach(([sub, areas]) => {
-            if (filterSubdistrict.length === 0 || matchesSubdistrictFilter(cleanSubdistrict(sub), filterSubdistrict)) {
-              (areas as string[]).forEach(a => areaSet.add(cleanTargetArea(a)));
-            }
-          });
-        }
-      });
-    });
-
-    // Also include from records matching current filters
-    (records || []).forEach(r => {
-      if (r && r.targetArea) {
-        const dist = cleanDistrict(r.district);
-        const sub = cleanSubdistrict(r.subdistrict || getRecordSubdistrict(r));
-        const matchDist = filterDistrict.length === 0 || matchesDistrictFilter(dist, filterDistrict);
-        const matchSub = filterSubdistrict.length === 0 || matchesSubdistrictFilter(sub, filterSubdistrict);
-        const matchModel = filterModel.length === 0 || matchesModelFilter(r, filterModel);
-        if (matchDist && matchSub && matchModel) {
-          areaSet.add(cleanTargetArea(r.targetArea));
-        }
-      }
-    });
-
-    return Array.from(areaSet);
-  }, [filterModel, filterDistrict, filterSubdistrict, availableDistricts, records]);
-
-  // Cascading dropdown updates
-  useEffect(() => {
-    if (filterDistrict.length > 0 && availableDistricts.length > 0) {
-      const valid = filterDistrict.filter(d => availableDistricts.includes(d as DistrictType));
-      if (valid.length !== filterDistrict.length) setFilterDistrict(valid);
-    }
-  }, [availableDistricts]);
-
-  useEffect(() => {
-    if (filterSubdistrict.length > 0 && availableSubdistricts.length > 0) {
-      const valid = filterSubdistrict.filter(s => availableSubdistricts.includes(s));
-      if (valid.length !== filterSubdistrict.length) setFilterSubdistrict(valid);
-    }
-  }, [availableSubdistricts]);
-
-  useEffect(() => {
-    if (filterTargetArea.length > 0 && availableTargetAreas.length > 0) {
-      const valid = filterTargetArea.filter(a => availableTargetAreas.includes(a));
-      if (valid.length !== filterTargetArea.length) setFilterTargetArea(valid);
-    }
-  }, [availableTargetAreas]);
-
-  const hasActiveLocationFilter = filterModel.length > 0 || filterDistrict.length > 0 || filterSubdistrict.length > 0 || filterTargetArea.length > 0;
-
-  const handleClearLocationFilters = () => {
-    setFilterModel([]);
-    setFilterDistrict([]);
-    setFilterSubdistrict([]);
-    setFilterTargetArea([]);
-  };
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Group records by unique patient (Key: name + phone)
   const uniquePatients = useMemo(() => {
-    const patientsMap: Record<string, { 
-      name: string; 
-      phone: string; 
-      latestRecord: ScreeningRecord; 
-      count: number;
-      allRecords: ScreeningRecord[];
-    }> = {};
+    const patientsMap: Record<string, { name: string; phone: string; latestRecord: ScreeningRecord; count: number }> = {};
     
-    // Process records to get count, allRecords, and latest record
-    (records || []).forEach((r) => {
-      if (!r) return;
+    // Process backwards or forwards to get count and latest
+    records.forEach((r) => {
       const key = `${r.name}_${r.phone || ""}`;
       if (!patientsMap[key]) {
         patientsMap[key] = {
           name: r.name,
           phone: r.phone || "ไม่มีเบอร์โทร",
           latestRecord: r,
-          count: 1,
-          allRecords: [r]
+          count: 1
         };
       } else {
         patientsMap[key].count += 1;
-        patientsMap[key].allRecords.push(r);
         // Keep the record with latest date/visitNumber as latest
         if (r.visitNumber > patientsMap[key].latestRecord.visitNumber) {
           patientsMap[key].latestRecord = r;
@@ -330,48 +67,9 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
     }));
   }, [records]);
 
-  // Patients filtered by Location filters (Model, District, Subdistrict, Target Area)
-  const locationFilteredPatients = useMemo(() => {
-    if (!hasActiveLocationFilter) return uniquePatients;
-
-    return uniquePatients.filter(p => {
-      return p.allRecords.some(r => {
-        const matchesModel = matchesModelFilter(r, filterModel);
-        const matchesDistrict = matchesDistrictFilter(r.district, filterDistrict);
-        const sub = cleanSubdistrict(r.subdistrict || getRecordSubdistrict(r));
-        const matchesSubdistrict = matchesSubdistrictFilter(sub, filterSubdistrict);
-        const matchesTargetArea = matchesTargetAreaFilter(r.targetArea, filterTargetArea);
-        return matchesModel && matchesDistrict && matchesSubdistrict && matchesTargetArea;
-      });
-    });
-  }, [uniquePatients, hasActiveLocationFilter, filterModel, filterDistrict, filterSubdistrict, filterTargetArea]);
-
-  // Cohort Counts based on currently applied location filters
-  const locationCohortCounts = useMemo(() => {
-    return {
-      all: locationFilteredPatients.length,
-      multi: locationFilteredPatients.filter(p => p.count > 1).length,
-      single: locationFilteredPatients.filter(p => p.count === 1).length,
-    };
-  }, [locationFilteredPatients]);
-
-  // Total records count matching currently applied location filters
-  const locationFilteredRecordCount = useMemo(() => {
-    if (!hasActiveLocationFilter) return records.length;
-    return records.filter(r => {
-      const matchesModel = matchesModelFilter(r, filterModel);
-      const matchesDistrict = matchesDistrictFilter(r.district, filterDistrict);
-      const sub = cleanSubdistrict(r.subdistrict || getRecordSubdistrict(r));
-      const matchesSubdistrict = matchesSubdistrictFilter(sub, filterSubdistrict);
-      const matchesTargetArea = matchesTargetAreaFilter(r.targetArea, filterTargetArea);
-      return matchesModel && matchesDistrict && matchesSubdistrict && matchesTargetArea;
-    }).length;
-  }, [records, hasActiveLocationFilter, filterModel, filterDistrict, filterSubdistrict, filterTargetArea]);
-
-  // Filter patients based on location, visit count cohort, and search query
+  // Filter patients based on query and visit count
   const filteredPatients = useMemo(() => {
-    let list = locationFilteredPatients;
-
+    let list = uniquePatients;
     if (patientVisitCohortFilter === "multi") {
       list = list.filter(p => p.count > 1);
     } else if (patientVisitCohortFilter === "single") {
@@ -379,20 +77,26 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
     }
 
     if (!searchQuery.trim()) return list;
-    const q = searchQuery.toLowerCase().trim();
     return list.filter(p => 
-      p.name.toLowerCase().includes(q) ||
-      p.phone.includes(q)
+      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.phone.includes(searchQuery)
     );
-  }, [locationFilteredPatients, searchQuery, patientVisitCohortFilter]);
+  }, [uniquePatients, searchQuery, patientVisitCohortFilter]);
 
-  // Ensure we select something if nothing is selected or current selection is not in filtered list
+  // Set first patient as default when selectedPatientId is empty and patients exist
+  useState(() => {
+    if (uniquePatients.length > 0 && !selectedPatientId) {
+      setSelectedPatientId(uniquePatients[0].id);
+    }
+  });
+
+  // Ensure we select something if nothing is selected but patients are available
   const activePatientId = useMemo(() => {
-    if (selectedPatientId && filteredPatients.some(p => p.id === selectedPatientId)) {
+    if (selectedPatientId && uniquePatients.some(p => p.id === selectedPatientId)) {
       return selectedPatientId;
     }
-    return filteredPatients.length > 0 ? filteredPatients[0].id : "";
-  }, [selectedPatientId, filteredPatients]);
+    return uniquePatients.length > 0 ? uniquePatients[0].id : "";
+  }, [selectedPatientId, uniquePatients]);
 
   // Reset selectedVisitId when activePatientId changes
   useEffect(() => {
@@ -416,27 +120,14 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
     return patientVisits[patientVisits.length - 1];
   }, [patientVisits]);
 
-  // Currently inspected visit (either user-selected or latest matching filter)
+  // Currently inspected visit (either user-selected or latest)
   const activeVisit = useMemo(() => {
     if (selectedVisitId) {
       const found = patientVisits.find(v => v.id === selectedVisitId);
       if (found) return found;
     }
-    if (hasActiveLocationFilter) {
-      const matchingVisits = patientVisits.filter(r => {
-        const matchesModel = matchesModelFilter(r, filterModel);
-        const matchesDistrict = matchesDistrictFilter(r.district, filterDistrict);
-        const sub = cleanSubdistrict(r.subdistrict || getRecordSubdistrict(r));
-        const matchesSubdistrict = matchesSubdistrictFilter(sub, filterSubdistrict);
-        const matchesTargetArea = matchesTargetAreaFilter(r.targetArea, filterTargetArea);
-        return matchesModel && matchesDistrict && matchesSubdistrict && matchesTargetArea;
-      });
-      if (matchingVisits.length > 0) {
-        return matchingVisits[matchingVisits.length - 1];
-      }
-    }
     return latestVisitRecord;
-  }, [patientVisits, selectedVisitId, latestVisitRecord, hasActiveLocationFilter, filterModel, filterDistrict, filterSubdistrict, filterTargetArea]);
+  }, [patientVisits, selectedVisitId, latestVisitRecord]);
 
   // Alias for backward compatibility in components
   const latestVisit = activeVisit;
@@ -471,337 +162,138 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
   }, [patientVisits]);
 
   return (
-    <div className="space-y-6">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
       
-      {/* TOP: Location Filter Card (Model, District, Subdistrict, Target Area) */}
-      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="bg-blue-50 text-blue-600 p-2.5 rounded-xl shrink-0">
-              <Filter className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-slate-800">ตัวกรองโมเดลและพื้นที่เป้าหมาย (วิเคราะห์รายบุคคล)</h3>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-                  {hasActiveLocationFilter 
-                    ? `พบ ${locationFilteredPatients.length} คน (${locationFilteredRecordCount} บันทึก)`
-                    : `ผู้รับการตรวจทั้งหมด ${uniquePatients.length} คน (${records.length} บันทึก)`}
-                </span>
-              </div>
-              <p className="text-[10px] text-slate-500">
-                กรองข้อมูลผู้รับการตรวจเพื่อค้นหาและวิเคราะห์ผลปิงปอง 7 สี ตามโมเดล อำเภอ ตำบล และพื้นที่เป้าหมาย
-              </p>
-            </div>
+      {/* LEFT: Patient list and search selector (4 cols) */}
+      <div className="lg:col-span-4 bg-white rounded-2xl border border-slate-200 shadow-2xs p-5 space-y-4 h-[640px] flex flex-col justify-between">
+        <div className="space-y-3.5 flex-1 flex flex-col overflow-hidden">
+          <div>
+            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">ค้นหาประวัติรายบุคคล</h4>
+            <p className="text-[10px] text-slate-500 mt-0.5">ค้นหาและเลือกผู้รับการตรวจเพื่อวิเคราะห์พฤติกรรมสะสม</p>
           </div>
-          {/* Quick Clear Filter Button if any selected */}
-          {hasActiveLocationFilter && (
-            <button 
+
+          <div className="relative shrink-0">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+            <input 
+              type="text" 
+              placeholder="พิมพ์ชื่อหรือเบอร์โทร..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full text-xs rounded-xl border border-slate-250 pl-9 pr-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all"
+            />
+          </div>
+
+          {/* Cohort Tabs: All / Follow-up / Single */}
+          <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-xl text-center text-[10px] font-bold shrink-0">
+            <button
               type="button"
-              onClick={handleClearLocationFilters}
-              className="text-[10px] font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-3 py-1.5 rounded-lg self-start sm:self-center transition-colors flex items-center gap-1 cursor-pointer"
+              onClick={() => setPatientVisitCohortFilter("all")}
+              className={`py-1.5 px-1.5 rounded-lg transition-all cursor-pointer ${
+                patientVisitCohortFilter === "all"
+                  ? "bg-white text-slate-800 shadow-2xs font-extrabold"
+                  : "text-slate-500 hover:text-slate-800"
+              }`}
             >
-              <X className="w-3.5 h-3.5" />
-              <span>ล้างตัวกรองพื้นที่ทั้งหมด ({[...filterModel, ...filterDistrict, ...filterSubdistrict, ...filterTargetArea].length})</span>
+              ทั้งหมด ({uniquePatients.length})
             </button>
-          )}
-        </div>
-        
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          
-          {/* 1. Model Filter */}
-          <div className="space-y-1">
-            <label className="block text-[10px] font-bold text-slate-400">โมเดล</label>
-            <MultiSelectDropdown 
-              options={["หมู่บ้าน", "ตำบล"]}
-              selected={filterModel}
-              onChange={setFilterModel}
-              placeholder="ทั้งหมด (หมู่บ้าน / ตำบล)"
-            />
+            <button
+              type="button"
+              onClick={() => setPatientVisitCohortFilter("multi")}
+              className={`py-1.5 px-1.5 rounded-lg transition-all cursor-pointer ${
+                patientVisitCohortFilter === "multi"
+                  ? "bg-indigo-600 text-white shadow-2xs font-extrabold"
+                  : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              ติดตาม ≥2 ครั้ง ({uniquePatients.filter(p => p.count > 1).length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setPatientVisitCohortFilter("single")}
+              className={`py-1.5 px-1.5 rounded-lg transition-all cursor-pointer ${
+                patientVisitCohortFilter === "single"
+                  ? "bg-white text-slate-800 shadow-2xs font-extrabold"
+                  : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              ตรวจ 1 ครั้ง ({uniquePatients.filter(p => p.count === 1).length})
+            </button>
           </div>
 
-          {/* 2. District Filter */}
-          <div className="space-y-1">
-            <label className="block text-[10px] font-bold text-slate-400">อำเภอ</label>
-            <MultiSelectDropdown 
-              options={availableDistricts}
-              selected={filterDistrict}
-              onChange={setFilterDistrict}
-              placeholder="ทุกอำเภอ"
-              labelKey={(v) => `อ.${v}`}
-            />
-          </div>
-
-          {/* 3. Subdistrict Filter */}
-          <div className="space-y-1">
-            <label className="block text-[10px] font-bold text-slate-400">ตำบล</label>
-            <MultiSelectDropdown 
-              options={availableSubdistricts}
-              selected={filterSubdistrict}
-              onChange={setFilterSubdistrict}
-              placeholder="ทุกตำบล"
-              disabled={false}
-              labelKey={(v) => `ต.${v}`}
-            />
-          </div>
-
-          {/* 4. Target Area Filter */}
-          <div className="space-y-1">
-            <label className="block text-[10px] font-bold text-slate-400">พื้นที่เป้าหมาย / หมู่บ้าน</label>
-            <MultiSelectDropdown 
-              options={availableTargetAreas}
-              selected={filterTargetArea}
-              onChange={setFilterTargetArea}
-              placeholder="ทุกพื้นที่เป้าหมาย / หมู่บ้าน"
-              disabled={false}
-            />
-          </div>
-
-        </div>
-
-        {/* Active Filter Summary Chips */}
-        {hasActiveLocationFilter && (
-          <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100 text-xs">
-            <span className="text-[10px] font-bold text-slate-400 mr-1">ตัวกรองที่เลือก:</span>
-            {filterModel.map(m => (
-              <span key={m} className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-blue-50 text-blue-700 text-xs font-semibold rounded-lg border border-blue-200">
-                โมเดล: {m}
-                <button type="button" onClick={() => setFilterModel(filterModel.filter(x => x !== m))} className="text-blue-400 hover:text-rose-500 cursor-pointer">✕</button>
-              </span>
-            ))}
-            {filterDistrict.map(d => (
-              <span key={d} className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-indigo-50 text-indigo-700 text-xs font-semibold rounded-lg border border-indigo-200">
-                อ.{d}
-                <button type="button" onClick={() => setFilterDistrict(filterDistrict.filter(x => x !== d))} className="text-indigo-400 hover:text-rose-500 cursor-pointer">✕</button>
-              </span>
-            ))}
-            {filterSubdistrict.map(s => (
-              <span key={s} className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-teal-50 text-teal-700 text-xs font-semibold rounded-lg border border-teal-200">
-                ต.{s}
-                <button type="button" onClick={() => setFilterSubdistrict(filterSubdistrict.filter(x => x !== s))} className="text-teal-400 hover:text-rose-500 cursor-pointer">✕</button>
-              </span>
-            ))}
-            {filterTargetArea.map(a => (
-              <span key={a} className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-amber-50 text-amber-700 text-xs font-semibold rounded-lg border border-amber-200">
-                พื้นที่: {a}
-                <button type="button" onClick={() => setFilterTargetArea(filterTargetArea.filter(x => x !== a))} className="text-amber-400 hover:text-rose-500 cursor-pointer">✕</button>
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Main Grid: Left Search/List + Right Profile Dashboard */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        
-        {/* LEFT: Patient list and search selector (4 cols) */}
-        <div className="lg:col-span-4 bg-white rounded-2xl border border-slate-200 shadow-2xs p-5 space-y-4 min-h-[640px] h-[720px] flex flex-col justify-between">
-          <div className="space-y-3 flex-1 flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between">
-              <div>
-                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">ค้นหาประวัติรายบุคคล</h4>
-                <p className="text-[10px] text-slate-500 mt-0.5">ค้นหาและเลือกผู้รับการตรวจเพื่อวิเคราะห์พฤติกรรมสะสม</p>
+          {/* List of Patients */}
+          <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
+            {filteredPatients.length === 0 ? (
+              <div className="text-center py-12 text-slate-400 text-xs">
+                ไม่พบรายชื่อผู้รับการตรวจ
               </div>
-              {hasActiveLocationFilter && (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-                  {filteredPatients.length} ราย
-                </span>
-              )}
-            </div>
+            ) : (
+              filteredPatients.map((p) => {
+                const isActive = p.id === activePatientId;
+                const latestCombinedPingPong = getCombinedPingPong(
+                  p.latestRecord.bpSys, 
+                  p.latestRecord.bpDia, 
+                  p.latestRecord.sugar, 
+                  p.latestRecord.familyHistory
+                );
 
-            {/* Quick Active Filter Mini Banner in Sidebar */}
-            {hasActiveLocationFilter && (
-              <div className="bg-blue-50/70 border border-blue-200/80 rounded-xl p-2.5 space-y-1.5 shrink-0 text-[10px]">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-blue-800 flex items-center gap-1">
-                    <Filter className="w-3 h-3 text-blue-600" />
-                    กรองพื้นที่ ({locationFilteredPatients.length} คน)
-                  </span>
+                return (
                   <button
-                    type="button"
-                    onClick={handleClearLocationFilters}
-                    className="text-rose-600 hover:text-rose-700 font-bold hover:underline cursor-pointer"
+                    key={p.id}
+                    onClick={() => setSelectedPatientId(p.id)}
+                    className={`w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between cursor-pointer ${
+                      isActive 
+                        ? "bg-blue-50/50 border-blue-200 shadow-2xs" 
+                        : "bg-white hover:bg-slate-50/80 border-slate-200"
+                    }`}
                   >
-                    ล้างตัวกรอง
-                  </button>
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {filterModel.map(m => (
-                    <span key={m} className="bg-white text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded text-[9.5px] font-semibold">
-                      โมเดล: {m}
-                    </span>
-                  ))}
-                  {filterDistrict.map(d => (
-                    <span key={d} className="bg-white text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded text-[9.5px] font-semibold">
-                      อ.{d}
-                    </span>
-                  ))}
-                  {filterSubdistrict.map(s => (
-                    <span key={s} className="bg-white text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded text-[9.5px] font-semibold">
-                      ต.{s}
-                    </span>
-                  ))}
-                  {filterTargetArea.map(a => (
-                    <span key={a} className="bg-white text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded text-[9.5px] font-semibold truncate max-w-[140px]" title={a}>
-                      {a}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="relative shrink-0">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-              <input 
-                type="text" 
-                placeholder="พิมพ์ชื่อหรือเบอร์โทร..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full text-xs rounded-xl border border-slate-250 pl-9 pr-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all"
-              />
-            </div>
-
-            {/* Cohort Tabs: All / Follow-up / Single */}
-            <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-xl text-center text-[10px] font-bold shrink-0">
-              <button
-                type="button"
-                onClick={() => setPatientVisitCohortFilter("all")}
-                className={`py-1.5 px-1.5 rounded-lg transition-all cursor-pointer ${
-                  patientVisitCohortFilter === "all"
-                    ? "bg-white text-slate-800 shadow-2xs font-extrabold"
-                    : "text-slate-500 hover:text-slate-800"
-                }`}
-              >
-                ทั้งหมด ({locationCohortCounts.all})
-              </button>
-              <button
-                type="button"
-                onClick={() => setPatientVisitCohortFilter("multi")}
-                className={`py-1.5 px-1.5 rounded-lg transition-all cursor-pointer ${
-                  patientVisitCohortFilter === "multi"
-                    ? "bg-indigo-600 text-white shadow-2xs font-extrabold"
-                    : "text-slate-500 hover:text-slate-800"
-                }`}
-              >
-                ติดตาม ≥2 ({locationCohortCounts.multi})
-              </button>
-              <button
-                type="button"
-                onClick={() => setPatientVisitCohortFilter("single")}
-                className={`py-1.5 px-1.5 rounded-lg transition-all cursor-pointer ${
-                  patientVisitCohortFilter === "single"
-                    ? "bg-white text-slate-800 shadow-2xs font-extrabold"
-                    : "text-slate-500 hover:text-slate-800"
-                }`}
-              >
-                ตรวจ 1 ครั้ง ({locationCohortCounts.single})
-              </button>
-            </div>
-
-            {/* List of Patients */}
-            <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
-              {filteredPatients.length === 0 ? (
-                <div className="text-center py-12 px-4 text-slate-400 text-xs space-y-2">
-                  <AlertCircle className="w-8 h-8 text-slate-300 mx-auto" />
-                  <p className="font-semibold text-slate-600">ไม่พบรายชื่อผู้รับการตรวจ</p>
-                  {hasActiveLocationFilter ? (
-                    <>
-                      <p className="text-[11px] text-slate-400">
-                        ไม่พบผู้รับการตรวจในพื้นที่หรือเงื่อนไขที่เลือก
-                      </p>
-                      <button
-                        type="button"
-                        onClick={handleClearLocationFilters}
-                        className="inline-block mt-2 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg text-xs font-bold transition-colors cursor-pointer"
-                      >
-                        ล้างตัวกรองพื้นที่
-                      </button>
-                    </>
-                  ) : searchQuery ? (
-                    <p className="text-[11px] text-slate-400">
-                      ไม่พบชื่อหรือเบอร์โทร "{searchQuery}"
-                    </p>
-                  ) : null}
-                </div>
-              ) : (
-                filteredPatients.map((p) => {
-                  const isActive = p.id === activePatientId;
-                  const latestCombinedPingPong = getCombinedPingPong(
-                    p.latestRecord.bpSys, 
-                    p.latestRecord.bpDia, 
-                    p.latestRecord.sugar, 
-                    p.latestRecord.familyHistory
-                  );
-
-                  return (
-                    <button
-                      key={p.id}
-                      onClick={() => setSelectedPatientId(p.id)}
-                      className={`w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between cursor-pointer ${
-                        isActive 
-                          ? "bg-blue-50/50 border-blue-200 shadow-2xs" 
-                          : "bg-white hover:bg-slate-50/80 border-slate-200"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        {/* MoPH Ping Pong dot indicator */}
-                        <span className={`w-3.5 h-3.5 rounded-full shrink-0 border border-slate-200/50 block relative ${latestCombinedPingPong.glowClass}`} style={{
-                          backgroundColor: 
-                            latestCombinedPingPong.color === "white" ? "#ffffff" :
-                            latestCombinedPingPong.color === "light_green" ? "#a7f3d0" :
-                            latestCombinedPingPong.color === "dark_green" ? "#059669" :
-                            latestCombinedPingPong.color === "yellow" ? "#fcd34d" :
-                            latestCombinedPingPong.color === "orange" ? "#fb923c" :
-                            latestCombinedPingPong.color === "red" ? "#f87171" : "#18181b"
-                        }}>
-                          {latestCombinedPingPong.color === "white" && (
-                            <span className="absolute inset-1 rounded-full bg-slate-300" />
-                          )}
-                        </span>
-                        
-                        <div className="truncate">
-                          <div className="text-xs font-bold text-slate-700 truncate">{p.name}</div>
-                          <div className="text-[9px] text-slate-400 flex items-center gap-1 mt-0.5">
-                            <Phone className="w-2.5 h-2.5 shrink-0" />
-                            <span className="truncate">{p.phone}</span>
-                          </div>
-                          {(p.latestRecord.targetArea || p.latestRecord.subdistrict) && (
-                            <div className="text-[9px] text-slate-500 truncate flex items-center gap-1 mt-0.5">
-                              <MapPin className="w-2.5 h-2.5 text-slate-400 shrink-0" />
-                              <span className="truncate font-medium text-slate-600">
-                                {p.latestRecord.targetArea || `ต.${p.latestRecord.subdistrict || getRecordSubdistrict(p.latestRecord)}`}
-                              </span>
-                              <span className="text-slate-300">•</span>
-                              <span className="text-slate-400 shrink-0">อ.{cleanDistrict(p.latestRecord.district)}</span>
-                            </div>
-                          )}
+                    <div className="flex items-center gap-3">
+                      {/* MoPH Ping Pong dot indicator */}
+                      <span className={`w-3.5 h-3.5 rounded-full shrink-0 border border-slate-200/50 block relative ${latestCombinedPingPong.glowClass}`} style={{
+                        backgroundColor: 
+                          latestCombinedPingPong.color === "white" ? "#ffffff" :
+                          latestCombinedPingPong.color === "light_green" ? "#a7f3d0" :
+                          latestCombinedPingPong.color === "dark_green" ? "#059669" :
+                          latestCombinedPingPong.color === "yellow" ? "#fcd34d" :
+                          latestCombinedPingPong.color === "orange" ? "#fb923c" :
+                          latestCombinedPingPong.color === "red" ? "#f87171" : "#18181b"
+                      }}>
+                        {latestCombinedPingPong.color === "white" && (
+                          <span className="absolute inset-1 rounded-full bg-slate-300" />
+                        )}
+                      </span>
+                      
+                      <div className="truncate">
+                        <div className="text-xs font-bold text-slate-700 truncate">{p.name}</div>
+                        <div className="text-[9px] text-slate-400 flex items-center gap-1 mt-0.5">
+                          <Phone className="w-2.5 h-2.5" /> {p.phone}
                         </div>
                       </div>
+                    </div>
 
-                      <div className="flex items-center gap-1 shrink-0 ml-2">
-                        <span className="text-[9px] bg-slate-100 text-slate-500 font-bold px-2 py-0.5 rounded-full">
-                          {p.count} ครั้ง
-                        </span>
-                        <ChevronRight className={`w-3.5 h-3.5 transition-transform ${isActive ? "text-blue-500 translate-x-0.5" : "text-slate-400"}`} />
-                      </div>
-                    </button>
-                  );
-                })
-              )}
-            </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="text-[9px] bg-slate-100 text-slate-500 font-bold px-2 py-0.5 rounded-full">
+                        {p.count} ครั้ง
+                      </span>
+                      <ChevronRight className={`w-3.5 h-3.5 transition-transform ${isActive ? "text-blue-500 translate-x-0.5" : "text-slate-400"}`} />
+                    </div>
+                  </button>
+                );
+              })
+            )}
           </div>
-
-          {/* Footer info legend */}
-          <div className="border-t border-slate-100 pt-3.5 shrink-0 bg-slate-50/50 -mx-5 -mb-5 p-5 rounded-b-2xl">
-            <div className="flex items-start gap-2.5">
-              <Info className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
-              <div className="text-[9px] text-slate-500 leading-relaxed font-medium">
-                * เกณฑ์สีปิงปองวัดจากระดับค่าประเมินสุขภาพที่รุนแรงที่สุดของบุคคลนั้นระหว่าง <strong>โรคความดันโลหิตสูง (HT)</strong> และ <strong>โรคเบาหวาน (DM)</strong> เพื่อเฝ้าระวังสูงสุด
-              </div>
-            </div>
-          </div>
-
         </div>
+
+        {/* Footer info legend */}
+        <div className="border-t border-slate-100 pt-3.5 shrink-0 bg-slate-50/50 -mx-5 -mb-5 p-5 rounded-b-2xl">
+          <div className="flex items-start gap-2.5">
+            <Info className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
+            <div className="text-[9px] text-slate-500 leading-relaxed font-medium">
+              * เกณฑ์สีปิงปองวัดจากระดับค่าประเมินสุขภาพที่รุนแรงที่สุดของบุคคลนั้นระหว่าง <strong>โรคความดันโลหิตสูง (HT)</strong> และ <strong>โรคเบาหวาน (DM)</strong> เพื่อเฝ้าระวังสูงสุด
+            </div>
+          </div>
+        </div>
+
+      </div>
 
       {/* RIGHT: Individual Dashboard View (8 cols) */}
       <div className="lg:col-span-8 space-y-6">
@@ -856,14 +348,35 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
                   </button>
                 )}
                 {isAdmin && onDeleteRecord && (
-                  <button
-                    onClick={() => onDeleteRecord(latestVisit)}
-                    className="bg-rose-100/50 border border-rose-200 hover:bg-rose-100 text-rose-600 font-bold text-xs py-3 px-4 rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all shadow-xs"
-                    title="ลบข้อมูลล่าสุด"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    ลบ
-                  </button>
+                  showDeleteConfirm ? (
+                    <div className="flex items-center gap-1.5 bg-rose-50 border border-rose-200 p-1.5 px-3 rounded-xl animate-in fade-in duration-150">
+                      <span className="text-[11px] text-rose-700 font-semibold">ยืนยันลบ?</span>
+                      <button
+                        onClick={() => {
+                          onDeleteRecord(latestVisit);
+                          setShowDeleteConfirm(false);
+                        }}
+                        className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] py-1 px-2.5 rounded-lg transition-colors cursor-pointer"
+                      >
+                        ลบเลย
+                      </button>
+                      <button
+                        onClick={() => setShowDeleteConfirm(false)}
+                        className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold text-[11px] py-1 px-2 rounded-lg transition-colors cursor-pointer"
+                      >
+                        ยกเลิก
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowDeleteConfirm(true)}
+                      className="bg-rose-100/50 border border-rose-200 hover:bg-rose-100 text-rose-600 font-bold text-xs py-3 px-4 rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all shadow-xs"
+                      title="ลบข้อมูลล่าสุด"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      ลบ
+                    </button>
+                  )
                 )}
 
                 {onFollowUpRecord && (
@@ -1413,32 +926,13 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
 
           </>
         ) : (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs p-12 text-center text-slate-500 font-medium space-y-3">
-            <Filter className="w-10 h-10 text-slate-300 mx-auto" />
-            <h4 className="text-sm font-bold text-slate-700">
-              {hasActiveLocationFilter ? "ไม่พบข้อมูลผู้รับการตรวจตามเงื่อนไขที่เลือก" : "ยังไม่มีข้อมูลผู้รับการตรวจ"}
-            </h4>
-            <p className="text-xs text-slate-400 max-w-md mx-auto">
-              {hasActiveLocationFilter 
-                ? "ลองปรับหรือล้างตัวกรอง โมเดล อำเภอ ตำบล หรือพื้นที่เป้าหมาย เพื่อแสดงผลรายชื่อผู้รับการตรวจ"
-                : "โปรดเพิ่มข้อมูลหรือนำเข้าบันทึกคัดกรองเบื้องต้นเพื่อเปิดใช้งานเครื่องมือวิเคราะห์สะสมรายบุคคล"}
-            </p>
-            {hasActiveLocationFilter && (
-              <button
-                type="button"
-                onClick={handleClearLocationFilters}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-                <span>ล้างตัวกรองพื้นที่ทั้งหมด</span>
-              </button>
-            )}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs p-12 text-center text-slate-400 font-medium">
+            โปรดเพิ่มข้อมูลหรือนำเข้าบันทึกคัดกรองเบื้องต้นเพื่อเปิดใช้งานเครื่องมือวิเคราะห์สะสมรายบุคคล
           </div>
         )}
 
       </div>
 
     </div>
-  </div>
   );
 };

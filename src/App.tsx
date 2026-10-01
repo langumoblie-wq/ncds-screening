@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   HeartPulse, ClipboardList, BarChart3, Activity, 
@@ -87,181 +87,223 @@ export default function App() {
     return r;
   };
 
-  // Initial load and bi-directional sync with persistent server API (/api/records) + localStorage
-  useEffect(() => {
-    let isMounted = true;
-    async function syncRecords() {
+  // Bi-directional sync with persistent server API (/api/records), Supabase & localStorage
+  const syncRecords = useCallback(async () => {
+    try {
+      setIsSyncing(true);
+
+      // 0. Read existing local tombstone of deleted record IDs
+      const allDeletedIds = new Set<number>();
       try {
-        setIsSyncing(true);
-
-        // 1. Fetch from persistent server backend (/api/records)
-        let serverRecords: ScreeningRecord[] = [];
-        try {
-          const res = await fetch("/api/records");
-          if (res.ok) {
-            const json = await res.json();
-            if (json.success && Array.isArray(json.records)) {
-              serverRecords = json.records
-                .filter((r: any) => r && typeof r === "object" && "id" in r)
-                .map(normalizeLegacyRecord);
-            }
-          }
-        } catch (apiErr) {
-          console.warn("Server API fetch warning:", apiErr);
+        const rawDel = localStorage.getItem("ncd_deleted_ids");
+        if (rawDel) {
+          const arr = JSON.parse(rawDel);
+          if (Array.isArray(arr)) arr.forEach((d: any) => allDeletedIds.add(Number(d)));
         }
+      } catch (e) {}
 
-        // 2. Fetch from Supabase with full pagination if reachable
-        let supabaseRecords: ScreeningRecord[] = [];
+      // 1. Fetch from persistent server backend (/api/records)
+      let serverRecords: ScreeningRecord[] = [];
+      try {
+        const res = await fetch("/api/records");
+        if (res.ok) {
+          const json = await res.json();
+          if (json.deletedIds && Array.isArray(json.deletedIds)) {
+            json.deletedIds.forEach((d: any) => allDeletedIds.add(Number(d)));
+          }
+          if (json.success && Array.isArray(json.records)) {
+            serverRecords = json.records
+              .filter((r: any) => r && typeof r === "object" && "id" in r && !allDeletedIds.has(Number(r.id)))
+              .map(normalizeLegacyRecord);
+          }
+        }
+      } catch (apiErr) {
+        console.warn("Server API fetch warning:", apiErr);
+      }
+
+      // 2. Fetch from Supabase with full pagination if reachable
+      let supabaseRecords: ScreeningRecord[] = [];
+      try {
+        // Check system row for deletedIds
         try {
-          const pageSize = 1000;
-          let page = 0;
-          let hasMore = true;
-          let allSbData: any[] = [];
+          const { data: sysRow } = await supabase.from('ncd_records').select('data').eq('id', 0).maybeSingle();
+          if (sysRow?.data?.deletedIds && Array.isArray(sysRow.data.deletedIds)) {
+            sysRow.data.deletedIds.forEach((d: any) => allDeletedIds.add(Number(d)));
+          }
+        } catch (sysErr) {}
 
-          while (hasMore && page < 10) {
-            const from = page * pageSize;
-            const to = from + pageSize - 1;
-            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 8000));
-            const queryPromise = supabase
-              .from('ncd_records')
-              .select('data')
-              .range(from, to)
-              .order('created_at', { ascending: false });
+        const pageSize = 1000;
+        let page = 0;
+        let hasMore = true;
+        let allSbData: any[] = [];
 
-            const sbRes: any = await Promise.race([queryPromise, timeoutPromise]);
-            if (!sbRes?.error && sbRes?.data && Array.isArray(sbRes.data) && sbRes.data.length > 0) {
-              allSbData = allSbData.concat(sbRes.data);
-              if (sbRes.data.length < pageSize) {
-                hasMore = false;
-              } else {
-                page++;
-              }
-            } else {
+        while (hasMore && page < 10) {
+          const from = page * pageSize;
+          const to = from + pageSize - 1;
+          const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 15000));
+          const queryPromise = supabase
+            .from('ncd_records')
+            .select('id, name, gender, data')
+            .neq('id', 0)
+            .range(from, to)
+            .order('created_at', { ascending: false });
+
+          const sbRes: any = await Promise.race([queryPromise, timeoutPromise]);
+          if (!sbRes?.error && sbRes?.data && Array.isArray(sbRes.data) && sbRes.data.length > 0) {
+            allSbData = allSbData.concat(sbRes.data);
+            if (sbRes.data.length < pageSize) {
               hasMore = false;
-            }
-          }
-
-          if (allSbData.length > 0) {
-            supabaseRecords = allSbData
-              .map((row: any) => normalizeLegacyRecord(row.data))
-              .filter((r: any) => r && typeof r === "object" && "id" in r);
-            setDbStatus({ 
-              connected: true, 
-              message: `เชื่อมต่อ Cloud Supabase สำเร็จ (โหลด ${supabaseRecords.length.toLocaleString()} รายการ)` 
-            });
-          } else {
-            setDbStatus({ 
-              connected: false, 
-              message: "เชื่อมต่อฐานข้อมูลภายในระบบ" 
-            });
-          }
-        } catch (sbErr) {
-          console.warn("Supabase fetch warning:", sbErr);
-          setDbStatus({ connected: false, message: "เชื่อมต่อฐานข้อมูลภายในระบบ" });
-        }
-
-        // 3. Read current localStorage
-        let localRecords: ScreeningRecord[] = [];
-        try {
-          const raw = localStorage.getItem("ncd_records");
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed)) {
-              localRecords = parsed
-                .filter((r: any) => r && typeof r === "object" && ("id" in r || "name" in r))
-                .map(normalizeLegacyRecord);
-            }
-          }
-        } catch (storageErr) {
-          console.warn("Storage parse error:", storageErr);
-        }
-
-        // 4. Merge all sources by ID (Server records + Supabase records + Local records)
-        const recordMap = new Map<number, ScreeningRecord>();
-        // Put server records first
-        serverRecords.forEach(r => {
-          if (r && r.id != null) recordMap.set(Number(r.id), r);
-        });
-        // Put supabase records
-        supabaseRecords.forEach(r => {
-          if (r && r.id != null) recordMap.set(Number(r.id), r);
-        });
-        // Put local records (preserve newer edits from local if local was updated)
-        localRecords.forEach(r => {
-          if (r && r.id != null) {
-            const numId = Number(r.id);
-            const existing = recordMap.get(numId);
-            if (!existing) {
-              recordMap.set(numId, r);
             } else {
-              if (r.createdAt && existing.createdAt && r.createdAt > existing.createdAt) {
-                recordMap.set(numId, r);
-              }
+              page++;
             }
+          } else {
+            hasMore = false;
           }
-        });
+        }
 
-        const mergedRecords = Array.from(recordMap.values()).sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
-
-        if (!isMounted) return;
-
-        if (mergedRecords.length > 0) {
-          setRecords(mergedRecords);
-          try {
-            localStorage.setItem("ncd_records", JSON.stringify(mergedRecords));
-          } catch (e) {}
-
-          // If local or supabase had extra records not yet on server, sync them to server
-          if (mergedRecords.length > serverRecords.length) {
-            try {
-              await fetch("/api/records/bulk", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ records: mergedRecords })
-              });
-            } catch (syncErr) {
-              console.warn("Bulk sync error:", syncErr);
+        if (allSbData.length > 0) {
+          // Detect all tombstones directly from Supabase rows
+          allSbData.forEach((row: any) => {
+            if (row.id === 0 || row.gender === "deleted" || row.name === "__DELETED__" || row.data?.isDeleted) {
+              allDeletedIds.add(Number(row.id));
             }
+          });
+
+          supabaseRecords = allSbData
+            .filter((row: any) => row.id !== 0 && row.gender !== "deleted" && row.name !== "__DELETED__" && !row.data?.isDeleted)
+            .map((row: any) => normalizeLegacyRecord(row.data))
+            .filter((r: any) => r && typeof r === "object" && "id" in r && !allDeletedIds.has(Number(r.id)) && !r.isDeleted);
+
+          setDbStatus({ 
+            connected: true, 
+            message: `เชื่อมต่อ Cloud Supabase สำเร็จ (โหลด ${supabaseRecords.length.toLocaleString()} รายการ)` 
+          });
+        } else {
+          setDbStatus({ 
+            connected: false, 
+            message: "เชื่อมต่อฐานข้อมูลภายในระบบ" 
+          });
+        }
+      } catch (sbErr) {
+        console.warn("Supabase fetch warning:", sbErr);
+        setDbStatus({ connected: false, message: "เชื่อมต่อฐานข้อมูลภายในระบบ" });
+      }
+
+      // Save combined tombstone to localStorage
+      try {
+        localStorage.setItem("ncd_deleted_ids", JSON.stringify(Array.from(allDeletedIds)));
+      } catch (e) {}
+
+      // 3. Read current localStorage and PURGE ANY DELETED RECORDS
+      let localRecords: ScreeningRecord[] = [];
+      try {
+        const raw = localStorage.getItem("ncd_records");
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            localRecords = parsed
+              .filter((r: any) => r && typeof r === "object" && ("id" in r || "name" in r) && !allDeletedIds.has(Number(r.id)) && !r.isDeleted)
+              .map(normalizeLegacyRecord);
           }
-          // CRITICAL: If local has records that are NOT in Supabase, upload them to Supabase!
-          const supabaseIdSet = new Set(supabaseRecords.map(r => Number(r.id)));
-          const missingInSupabase = mergedRecords.filter(r => r && r.id != null && !supabaseIdSet.has(Number(r.id)));
-          if (missingInSupabase.length > 0) {
-            try {
-              console.log(`Syncing ${missingInSupabase.length} missing local records to Supabase Cloud...`);
-              const BATCH_SIZE = 50;
-              for (let i = 0; i < missingInSupabase.length; i += BATCH_SIZE) {
-                const chunk = missingInSupabase.slice(i, i + BATCH_SIZE);
-                const formatted = chunk.map(r => ({
-                  id: Number(r.id),
-                  name: r.name,
-                  visit_number: r.visitNumber || 1,
-                  age: r.age,
-                  gender: r.gender,
-                  data: r,
-                  created_at: r.createdAt || new Date().toISOString()
-                }));
-                await supabase.from('ncd_records').upsert(formatted);
-              }
-              console.log("Uploaded missing records to Supabase Cloud successfully!");
-            } catch (upErr) {
-              console.warn("Error uploading local records to Supabase:", upErr);
+        }
+      } catch (storageErr) {
+        console.warn("Storage parse error:", storageErr);
+      }
+
+      // 4. Merge all sources by ID (Server records + Supabase records + Local records)
+      const recordMap = new Map<number, ScreeningRecord>();
+      // Put server records first (guaranteed non-deleted)
+      serverRecords.forEach(r => {
+        if (r && r.id != null && !allDeletedIds.has(Number(r.id)) && !r.isDeleted) {
+          recordMap.set(Number(r.id), r);
+        }
+      });
+      // Put supabase records
+      supabaseRecords.forEach(r => {
+        if (r && r.id != null && !allDeletedIds.has(Number(r.id)) && !r.isDeleted) {
+          recordMap.set(Number(r.id), r);
+        }
+      });
+
+      // Put local records: only keep if not in deleted IDs!
+      // If central database (server or supabase) is online and returned data,
+      // we do NOT revive old local records that were pruned on server.
+      const centralHasData = serverRecords.length > 0 || supabaseRecords.length > 0;
+      localRecords.forEach(r => {
+        if (r && r.id != null && !allDeletedIds.has(Number(r.id)) && !r.isDeleted) {
+          const numId = Number(r.id);
+          const existing = recordMap.get(numId);
+          if (!existing) {
+            if (!centralHasData) {
+              recordMap.set(numId, r);
+            }
+          } else {
+            if (r.createdAt && existing.createdAt && r.createdAt > existing.createdAt) {
+              recordMap.set(numId, r);
             }
           }
         }
-      } catch (error) {
-        console.warn("Sync error:", error);
-      } finally {
-        if (isMounted) {
-          setIsSyncing(false);
-          setLoading(false);
+      });
+
+      const mergedRecords = Array.from(recordMap.values())
+        .filter(r => !allDeletedIds.has(Number(r.id)) && !r.isDeleted)
+        .sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
+
+      setRecords(mergedRecords);
+      try {
+        localStorage.setItem("ncd_records", JSON.stringify(mergedRecords));
+      } catch (e) {}
+
+      // If local or supabase had extra records not yet on server, sync them to server (never resurrect deleted IDs)
+      if (mergedRecords.length > serverRecords.length) {
+        try {
+          await fetch("/api/records/bulk", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ records: mergedRecords })
+          });
+        } catch (syncErr) {
+          console.warn("Bulk sync error:", syncErr);
         }
       }
-    }
 
-    syncRecords();
-    return () => { isMounted = false; };
+      // Upload any missing records to Supabase (never upload deleted IDs)
+      const supabaseIdSet = new Set(supabaseRecords.map(r => Number(r.id)));
+      const missingInSupabase = mergedRecords.filter(r => r && r.id != null && !supabaseIdSet.has(Number(r.id)) && !allDeletedIds.has(Number(r.id)) && !r.isDeleted);
+      if (missingInSupabase.length > 0) {
+        try {
+          console.log(`Syncing ${missingInSupabase.length} missing local records to Supabase Cloud...`);
+          const BATCH_SIZE = 50;
+          for (let i = 0; i < missingInSupabase.length; i += BATCH_SIZE) {
+            const chunk = missingInSupabase.slice(i, i + BATCH_SIZE);
+            const formatted = chunk.map(r => ({
+              id: Number(r.id),
+              name: r.name,
+              visit_number: r.visitNumber || 1,
+              age: r.age,
+              gender: r.gender,
+              data: r,
+              created_at: r.createdAt || new Date().toISOString()
+            }));
+            await supabase.from('ncd_records').upsert(formatted);
+          }
+          console.log("Uploaded missing records to Supabase Cloud successfully!");
+        } catch (upErr) {
+          console.warn("Error uploading local records to Supabase:", upErr);
+        }
+      }
+    } catch (error) {
+      console.warn("Sync error:", error);
+    } finally {
+      setIsSyncing(false);
+      setLoading(false);
+    }
   }, []);
+
+  // Initial load and sync on mount
+  useEffect(() => {
+    syncRecords();
+  }, [syncRecords]);
 
   // Real-time listener for multi-device sync
   useEffect(() => {
@@ -273,8 +315,54 @@ export default function App() {
           { event: '*', schema: 'public', table: 'ncd_records' },
           (payload: any) => {
             if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+              if (payload.new?.id === 0) {
+                // System deleted IDs updated
+                const sysDeleted: number[] = payload.new?.data?.deletedIds || [];
+                if (sysDeleted.length > 0) {
+                  const delSet = new Set(sysDeleted.map(Number));
+                  setRecords(prev => {
+                    const updated = (prev || []).filter(r => !delSet.has(Number(r.id)));
+                    try { localStorage.setItem("ncd_records", JSON.stringify(updated)); } catch (e) {}
+                    return updated;
+                  });
+                  try {
+                    const raw = localStorage.getItem("ncd_deleted_ids");
+                    const list: number[] = raw ? JSON.parse(raw) : [];
+                    sysDeleted.forEach(d => { if (!list.includes(d)) list.push(d); });
+                    localStorage.setItem("ncd_deleted_ids", JSON.stringify(list));
+                  } catch (e) {}
+                }
+                return;
+              }
+
               const rowData = normalizeLegacyRecord(payload.new?.data);
+              const isTombstone = payload.new?.gender === 'deleted' || payload.new?.name === '__DELETED__' || rowData?.isDeleted;
+
+              if (isTombstone) {
+                const numDel = Number(payload.new?.id || rowData?.id);
+                if (numDel) {
+                  setRecords(prev => {
+                    const updated = (prev || []).filter(r => Number(r.id) !== numDel);
+                    try { localStorage.setItem("ncd_records", JSON.stringify(updated)); } catch (e) {}
+                    return updated;
+                  });
+                  try {
+                    const raw = localStorage.getItem("ncd_deleted_ids");
+                    const list: number[] = raw ? JSON.parse(raw) : [];
+                    if (!list.includes(numDel)) {
+                      list.push(numDel);
+                      localStorage.setItem("ncd_deleted_ids", JSON.stringify(list));
+                    }
+                  } catch (e) {}
+                }
+                return;
+              }
+
               if (rowData && rowData.id) {
+                const rawDel = localStorage.getItem("ncd_deleted_ids");
+                const delList: number[] = rawDel ? JSON.parse(rawDel) : [];
+                if (delList.includes(Number(rowData.id))) return;
+
                 setRecords(prev => {
                   const map = new Map<number, ScreeningRecord>();
                   (prev || []).forEach(r => { if (r?.id) map.set(Number(r.id), r); });
@@ -287,12 +375,44 @@ export default function App() {
             } else if (payload.eventType === 'DELETE') {
               const deletedId = payload.old?.id;
               if (deletedId) {
+                const numDel = Number(deletedId);
                 setRecords(prev => {
-                  const updated = (prev || []).filter(r => Number(r.id) !== Number(deletedId));
+                  const updated = (prev || []).filter(r => Number(r.id) !== numDel);
                   try { localStorage.setItem("ncd_records", JSON.stringify(updated)); } catch (e) {}
                   return updated;
                 });
+                try {
+                  const raw = localStorage.getItem("ncd_deleted_ids");
+                  const list: number[] = raw ? JSON.parse(raw) : [];
+                  if (!list.includes(numDel)) {
+                    list.push(numDel);
+                    localStorage.setItem("ncd_deleted_ids", JSON.stringify(list));
+                  }
+                } catch (e) {}
               }
+            }
+          }
+        )
+        .on(
+          'broadcast',
+          { event: 'RECORD_DELETED' },
+          (payload: any) => {
+            const deletedId = payload.payload?.id;
+            if (deletedId) {
+              const numDel = Number(deletedId);
+              setRecords(prev => {
+                const updated = (prev || []).filter(r => Number(r.id) !== numDel);
+                try { localStorage.setItem("ncd_records", JSON.stringify(updated)); } catch (e) {}
+                return updated;
+              });
+              try {
+                const raw = localStorage.getItem("ncd_deleted_ids");
+                const list: number[] = raw ? JSON.parse(raw) : [];
+                if (!list.includes(numDel)) {
+                  list.push(numDel);
+                  localStorage.setItem("ncd_deleted_ids", JSON.stringify(list));
+                }
+              } catch (e) {}
             }
           }
         )
@@ -306,10 +426,119 @@ export default function App() {
     }
   }, []);
 
+  // Multi-device periodic sync and tab focus listener
+  useEffect(() => {
+    async function quickSync() {
+      try {
+        const allDeletedIds = new Set<number>();
+        try {
+          const rawDel = localStorage.getItem("ncd_deleted_ids");
+          if (rawDel) {
+            const arr = JSON.parse(rawDel);
+            if (Array.isArray(arr)) arr.forEach((d: any) => allDeletedIds.add(Number(d)));
+          }
+        } catch (e) {}
+
+        // Check Supabase row 0 for deletedIds
+        try {
+          const { data: sysRow } = await supabase.from('ncd_records').select('data').eq('id', 0).maybeSingle();
+          if (sysRow?.data?.deletedIds && Array.isArray(sysRow.data.deletedIds)) {
+            sysRow.data.deletedIds.forEach((d: any) => allDeletedIds.add(Number(d)));
+          }
+        } catch (e) {}
+
+        // Check Supabase tombstones
+        try {
+          const { data: tombstones } = await supabase.from('ncd_records').select('id').eq('gender', 'deleted').limit(200);
+          if (tombstones && Array.isArray(tombstones)) {
+            tombstones.forEach((r: any) => allDeletedIds.add(Number(r.id)));
+          }
+        } catch (e) {}
+
+        // Check server for deletedIds
+        try {
+          const res = await fetch("/api/records");
+          if (res.ok) {
+            const json = await res.json();
+            if (json.deletedIds && Array.isArray(json.deletedIds)) {
+              json.deletedIds.forEach((d: any) => allDeletedIds.add(Number(d)));
+            }
+          }
+        } catch (e) {}
+
+        if (allDeletedIds.size > 0) {
+          try {
+            localStorage.setItem("ncd_deleted_ids", JSON.stringify(Array.from(allDeletedIds)));
+          } catch (e) {}
+
+          setRecords(prev => {
+            const hasDeleted = (prev || []).some(r => r && allDeletedIds.has(Number(r.id)));
+            if (hasDeleted) {
+              const updated = (prev || []).filter(r => r && !allDeletedIds.has(Number(r.id)));
+              try { localStorage.setItem("ncd_records", JSON.stringify(updated)); } catch (e) {}
+              return updated;
+            }
+            return prev;
+          });
+        }
+      } catch (e) {}
+    }
+
+    const handleFocus = () => {
+      if (document.visibilityState === "visible") {
+        quickSync();
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleFocus);
+
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        quickSync();
+      }
+    }, 10000);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleFocus);
+      clearInterval(timer);
+    };
+  }, []);
+
   // Function to manually re-sync records with Supabase & server
   const handleManualSync = async () => {
     try {
       setIsSyncing(true);
+
+      const allDeletedIds = new Set<number>();
+      try {
+        const rawDel = localStorage.getItem("ncd_deleted_ids");
+        if (rawDel) {
+          const arr = JSON.parse(rawDel);
+          if (Array.isArray(arr)) arr.forEach((d: any) => allDeletedIds.add(Number(d)));
+        }
+      } catch (e) {}
+
+      // Get server deleted IDs
+      try {
+        const res = await fetch("/api/records");
+        if (res.ok) {
+          const json = await res.json();
+          if (json.deletedIds && Array.isArray(json.deletedIds)) {
+            json.deletedIds.forEach((d: any) => allDeletedIds.add(Number(d)));
+          }
+        }
+      } catch (e) {}
+
+      // Get Supabase system deleted IDs
+      try {
+        const { data: sysRow } = await supabase.from('ncd_records').select('data').eq('id', 0).maybeSingle();
+        if (sysRow?.data?.deletedIds && Array.isArray(sysRow.data.deletedIds)) {
+          sysRow.data.deletedIds.forEach((d: any) => allDeletedIds.add(Number(d)));
+        }
+      } catch (e) {}
+
       const pageSize = 1000;
       let page = 0;
       let hasMore = true;
@@ -318,10 +547,11 @@ export default function App() {
       while (hasMore && page < 10) {
         const from = page * pageSize;
         const to = from + pageSize - 1;
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 10000));
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 15000));
         const queryPromise = supabase
           .from('ncd_records')
-          .select('data')
+          .select('id, name, gender, data')
+          .neq('id', 0)
           .range(from, to)
           .order('created_at', { ascending: false });
 
@@ -339,24 +569,48 @@ export default function App() {
       }
 
       if (allSbData.length > 0) {
+        // Collect all tombstones from Supabase
+        allSbData.forEach((row: any) => {
+          if (row.id === 0 || row.gender === "deleted" || row.name === "__DELETED__" || row.data?.isDeleted) {
+            allDeletedIds.add(Number(row.id));
+          }
+        });
+
         const cloudRecords: ScreeningRecord[] = allSbData
+          .filter((row: any) => row.id !== 0 && row.gender !== "deleted" && row.name !== "__DELETED__" && !row.data?.isDeleted)
           .map((row: any) => normalizeLegacyRecord(row.data))
-          .filter((r: any) => r && typeof r === "object" && "id" in r);
+          .filter((r: any) => r && typeof r === "object" && "id" in r && !allDeletedIds.has(Number(r.id)) && !r.isDeleted);
 
         const sbIdSet = new Set<number>();
         cloudRecords.forEach(r => { if (r?.id) sbIdSet.add(Number(r.id)); });
 
-        // Merge with local state
+        try {
+          localStorage.setItem("ncd_deleted_ids", JSON.stringify(Array.from(allDeletedIds)));
+        } catch (e) {}
+
+        // Single source of truth: Cloud records are primary.
         const map = new Map<number, ScreeningRecord>();
-        (records || []).forEach(r => { if (r?.id) map.set(Number(r.id), r); });
-        cloudRecords.forEach(r => { if (r?.id) map.set(Number(r.id), r); });
+        cloudRecords.forEach(r => { if (r?.id && !allDeletedIds.has(Number(r.id))) map.set(Number(r.id), r); });
         
-        const merged = Array.from(map.values()).sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
+        // Keep unsynced local offline records ONLY if not deleted
+        (records || []).forEach(r => {
+          if (r?.id && !allDeletedIds.has(Number(r.id)) && !r.isDeleted) {
+            const numId = Number(r.id);
+            if (!map.has(numId)) {
+              map.set(numId, r);
+            }
+          }
+        });
+        
+        const merged = Array.from(map.values())
+          .filter(r => !allDeletedIds.has(Number(r.id)) && !r.isDeleted)
+          .sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
+
         setRecords(merged);
         localStorage.setItem("ncd_records", JSON.stringify(merged));
 
-        // Upload any local records that were missing on Cloud
-        const missingOnCloud = (records || []).filter(r => r && r.id != null && !sbIdSet.has(Number(r.id)));
+        // Upload any local records that were created offline (strictly excluding any deleted IDs)
+        const missingOnCloud = Array.from(map.values()).filter(r => r && r.id != null && !sbIdSet.has(Number(r.id)) && !allDeletedIds.has(Number(r.id)) && !r.isDeleted);
         if (missingOnCloud.length > 0) {
           const BATCH_SIZE = 50;
           for (let i = 0; i < missingOnCloud.length; i += BATCH_SIZE) {
@@ -497,21 +751,80 @@ export default function App() {
     }
   };
 
-  // Delete record
+  // Delete record with multi-device sync and tombstone persistence
   const handleDeleteRecord = async (id: number) => {
-    setRecords((prev) => prev.filter((r) => r && r.id !== id));
+    const numId = Number(id);
 
+    // 1. Instantly update React state
+    setRecords((prev) => {
+      const updated = (prev || []).filter((r) => r && Number(r.id) !== numId);
+      // 2. Instantly update localStorage
+      try {
+        localStorage.setItem("ncd_records", JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+
+    // 3. Mark in local deleted IDs tombstone so this device never resurrects it
     try {
-      await fetch(`/api/records/${id}`, { method: "DELETE" });
+      const rawDel = localStorage.getItem("ncd_deleted_ids");
+      const list: number[] = rawDel ? JSON.parse(rawDel) : [];
+      if (!list.includes(numId)) {
+        list.push(numId);
+        localStorage.setItem("ncd_deleted_ids", JSON.stringify(list));
+      }
+    } catch (e) {}
+
+    // 4. Delete on server backend (/api/records/:id) - server adds to deleted_record_ids.json
+    try {
+      await fetch(`/api/records/${numId}`, { method: "DELETE" });
     } catch (err) {
       console.warn("Error deleting record from server:", err);
     }
 
+    // 5. Delete on Supabase Cloud and record in both tombstone row and __SYSTEM_DELETED_IDS__
     try {
-      await supabase.from('ncd_records').delete().eq('id', id);
+      // Upsert tombstone row on this record ID so any other machine sees it as deleted
+      await supabase.from('ncd_records').upsert({
+        id: numId,
+        name: "__DELETED__",
+        visit_number: 0,
+        age: 0,
+        gender: "deleted",
+        data: { id: numId, isDeleted: true, deletedAt: new Date().toISOString() },
+        created_at: new Date().toISOString()
+      });
+
+      // Update system row id=0
+      const { data: sysRow } = await supabase.from('ncd_records').select('data').eq('id', 0).maybeSingle();
+      const currentDel: number[] = Array.isArray(sysRow?.data?.deletedIds)
+        ? sysRow.data.deletedIds.filter((d: any) => typeof d === 'number')
+        : [];
+      if (!currentDel.includes(numId)) {
+        currentDel.push(numId);
+        await supabase.from('ncd_records').upsert({
+          id: 0,
+          name: "__SYSTEM_DELETED_IDS__",
+          visit_number: 0,
+          age: 0,
+          gender: "system",
+          data: { deletedIds: currentDel },
+          created_at: new Date().toISOString()
+        });
+      }
     } catch (error) {
       console.warn("Supabase delete warning:", error);
     }
+
+    // 6. Broadcast deletion over Supabase realtime channel to all other open devices/tabs
+    try {
+      const channel = supabase.channel('ncd_records_realtime');
+      channel.send({
+        type: 'broadcast',
+        event: 'RECORD_DELETED',
+        payload: { id: numId }
+      });
+    } catch (bcErr) {}
   };
 
   // Import records (Restore from Backup) with verified persistence
@@ -649,6 +962,8 @@ export default function App() {
       setLoginError("");
       setLoginUsername("");
       setLoginPassword("");
+      // Sync fresh data from Cloud immediately upon login so all deletions across devices are synced
+      syncRecords();
     } else {
       setLoginError("รหัสผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง");
     }
