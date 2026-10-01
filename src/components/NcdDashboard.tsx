@@ -4,9 +4,10 @@ import { RefreshCw,
   MapPin, Eye, Trash2, SlidersHorizontal, ArrowUpDown, ChevronDown, 
   Download, FileSpreadsheet, RotateCcw, Cigarette, Wine, Flame, EyeOff,
   Pencil, PlusCircle, History, Apple, Dumbbell, Smile, Moon, Activity, Upload,
-  Layers, UserCheck, Calendar, Check, GitBranch
+  Layers, UserCheck, Calendar, Check, GitBranch, TrendingUp, CalendarRange, Clock, BarChart2
 } from "lucide-react";
 import { ScreeningRecord, DistrictType, LOCATION_DATA, DISTRICT_SUBDISTRICT_MAP } from "../types";
+import { parseDateToIso, formatYearMonthThai, formatYearMonthThaiShort, getRecordYearMonth } from "../utils";
 import { 
   BackupExportModal, 
   BackupImportModal, 
@@ -577,12 +578,143 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
   const [filterBehaviorRisk, setFilterBehaviorRisk] = useState<string[]>([]);
   const [filterVisitScope, setFilterVisitScope] = useState<"all" | "latest_only" | "followup_only" | "initial_only">("all");
   const [filterVisitNumbers, setFilterVisitNumbers] = useState<number[]>([]);
+  const [filterParticipantType, setFilterParticipantType] = useState<string[]>([]);
+  
+  // Month-Year Filter state (กรองช่วงเดือน-ปี เพื่อดูแนวโน้มรายเดือน)
+  const [filterMonthMode, setFilterMonthMode] = useState<"all" | "single" | "range">("all");
+  const [filterSelectedMonth, setFilterSelectedMonth] = useState<string>(""); // e.g. "2026-10"
+  const [filterStartMonth, setFilterStartMonth] = useState<string>("");     // e.g. "2026-05"
+  const [filterEndMonth, setFilterEndMonth] = useState<string>("");         // e.g. "2026-10"
+  const [showMonthlyTrends, setShowMonthlyTrends] = useState<boolean>(true);
+
   const [sortBy, setSortBy] = useState<"date" | "name" | "age" | "bmi" | "visitNumber">("date");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
   // Targeted Backup & Import Modal states
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+
+  // Available months from all records
+  const availableMonths = useMemo(() => {
+    const monthMap = new Map<string, { key: string; label: string; labelShort: string; count: number }>();
+    (records || []).forEach(r => {
+      if (r && r.date) {
+        const ym = parseDateToIso(r.date).substring(0, 7);
+        if (ym && ym.length === 7) {
+          const existing = monthMap.get(ym);
+          if (existing) {
+            existing.count += 1;
+          } else {
+            monthMap.set(ym, {
+              key: ym,
+              label: formatYearMonthThai(ym),
+              labelShort: formatYearMonthThaiShort(ym),
+              count: 1
+            });
+          }
+        }
+      }
+    });
+    return Array.from(monthMap.values()).sort((a, b) => b.key.localeCompare(a.key)); // newest first
+  }, [records]);
+
+  // Participant Category distribution
+  const participantDistribution = useMemo(() => {
+    let targetCount = 0;
+    let committeeCount = 0;
+    (records || []).forEach(r => {
+      if (!r) return;
+      if (r.participantType === "คณะทำงาน") {
+        committeeCount++;
+      } else {
+        targetCount++;
+      }
+    });
+    return { targetCount, committeeCount, total: (records || []).length };
+  }, [records]);
+
+  // Monthly Trends Analytics Data
+  const monthlyTrendsData = useMemo(() => {
+    const map: Record<string, {
+      monthKey: string;
+      label: string;
+      labelShort: string;
+      total: number;
+      initialCount: number;
+      followUpCount: number;
+      targetGroupCount: number;
+      committeeCount: number;
+      htDanger: number;
+      htRisk: number;
+      htNormal: number;
+      dmDanger: number;
+      dmRisk: number;
+      dmNormal: number;
+    }> = {};
+
+    (records || []).forEach(r => {
+      if (!r || !r.date) return;
+      if (!matchesModelFilter(r, filterModel)) return;
+      if (!matchesDistrictFilter(r.district, filterDistrict)) return;
+      const recSub = cleanSubdistrict(r.subdistrict || getRecordSubdistrict(r));
+      if (!matchesSubdistrictFilter(recSub, filterSubdistrict)) return;
+      if (!matchesTargetAreaFilter(r.targetArea, filterTargetArea)) return;
+      const pType = r.participantType || "กลุ่มเป้าหมายโครงการ";
+      if (filterParticipantType.length > 0 && !filterParticipantType.includes(pType)) return;
+
+      const ym = parseDateToIso(r.date).substring(0, 7);
+      if (!ym || ym.length !== 7) return;
+
+      if (!map[ym]) {
+        map[ym] = {
+          monthKey: ym,
+          label: formatYearMonthThai(ym),
+          labelShort: formatYearMonthThaiShort(ym),
+          total: 0,
+          initialCount: 0,
+          followUpCount: 0,
+          targetGroupCount: 0,
+          committeeCount: 0,
+          htDanger: 0,
+          htRisk: 0,
+          htNormal: 0,
+          dmDanger: 0,
+          dmRisk: 0,
+          dmNormal: 0,
+        };
+      }
+
+      const item = map[ym];
+      item.total += 1;
+      if ((r.visitNumber || 1) === 1) item.initialCount += 1;
+      else item.followUpCount += 1;
+
+      if (r.participantType === "คณะทำงาน") item.committeeCount += 1;
+      else item.targetGroupCount += 1;
+
+      if (r.htResult?.level === "danger") item.htDanger += 1;
+      else if (r.htResult?.level === "risk") item.htRisk += 1;
+      else item.htNormal += 1;
+
+      if (r.dmResult?.level === "danger") item.dmDanger += 1;
+      else if (r.dmResult?.level === "risk") item.dmRisk += 1;
+      else item.dmNormal += 1;
+    });
+
+    const list = Object.values(map).sort((a, b) => a.monthKey.localeCompare(b.monthKey));
+    const maxMonthlyTotal = Math.max(...list.map(l => l.total), 1);
+    const totalScreenings = list.reduce((sum, l) => sum + l.total, 0);
+    const avgScreeningPerMonth = list.length > 0 ? Math.round(totalScreenings / list.length) : 0;
+    const peakMonth = [...list].sort((a, b) => b.total - a.total)[0] || null;
+
+    return {
+      list,
+      maxMonthlyTotal,
+      totalScreenings,
+      avgScreeningPerMonth,
+      peakMonth
+    };
+  }, [records, filterModel, filterDistrict, filterSubdistrict, filterTargetArea, filterParticipantType]);
 
   // Password Modal state for Export/Import
   const [passwordModalConfig, setPasswordModalConfig] = useState<{
@@ -843,7 +975,24 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
           });
         }
 
-        return matchesSearch && matchesModel && matchesDistrict && matchesSubdistrict && matchesTargetArea && matchesRisk && matchesBehavior;
+        // Participant Type Filter (กลุ่มเป้าหมายโครงการ / คณะทำงาน)
+        const pType = r.participantType || "กลุ่มเป้าหมายโครงการ";
+        const matchesParticipantType = filterParticipantType.length > 0 
+          ? filterParticipantType.includes(pType) 
+          : true;
+
+        // Month-Year Filter (ช่วงวันที่ เดือน-ปี)
+        let matchesMonthYear = true;
+        if (filterMonthMode === "single" && filterSelectedMonth) {
+          const recYm = parseDateToIso(r.date).substring(0, 7);
+          matchesMonthYear = recYm === filterSelectedMonth;
+        } else if (filterMonthMode === "range") {
+          const recYm = parseDateToIso(r.date).substring(0, 7);
+          if (filterStartMonth && recYm < filterStartMonth) matchesMonthYear = false;
+          if (filterEndMonth && recYm > filterEndMonth) matchesMonthYear = false;
+        }
+
+        return matchesSearch && matchesModel && matchesDistrict && matchesSubdistrict && matchesTargetArea && matchesRisk && matchesBehavior && matchesParticipantType && matchesMonthYear;
       })
       .sort((a, b) => {
         let valA: any = a.id;
@@ -870,7 +1019,7 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
         if (valA > valB) return sortOrder === "asc" ? 1 : -1;
         return 0;
       });
-  }, [records, searchTerm, filterModel, filterDistrict, filterSubdistrict, filterTargetArea, filterVisitScope, filterVisitNumbers, filterHtRisk, filterDmRisk, filterBehaviorRisk, sortBy, sortOrder, patientVisitMapping]);
+  }, [records, searchTerm, filterModel, filterDistrict, filterSubdistrict, filterTargetArea, filterVisitScope, filterVisitNumbers, filterHtRisk, filterDmRisk, filterBehaviorRisk, filterParticipantType, filterMonthMode, filterSelectedMonth, filterStartMonth, filterEndMonth, sortBy, sortOrder, patientVisitMapping]);
 
   // Stat computations based on filteredRecords
   const stats = useMemo(() => {
@@ -1241,6 +1390,252 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
             />
           </div>
 
+        </div>
+
+        {/* Participant Category Filter Bar */}
+        <div className="pt-3.5 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+              <Users className="w-3.5 h-3.5 text-blue-600" />
+              รายงานตามประเภทกลุ่มข้อมูล:
+            </span>
+            <span className="text-[10px] text-slate-400 font-medium">
+              (เลือกรายงานเฉพาะกลุ่มเป้าหมายโครงการ หรือ คณะทำงาน)
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setFilterParticipantType([])}
+              className={`text-xs px-3 py-1.5 rounded-xl font-bold transition-all border cursor-pointer ${
+                filterParticipantType.length === 0
+                  ? "bg-slate-800 text-white border-slate-800 shadow-2xs"
+                  : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              ทั้งหมด ({participantDistribution.total})
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setFilterParticipantType(prev => 
+                  prev.includes("กลุ่มเป้าหมายโครงการ") && prev.length === 1
+                    ? [] 
+                    : ["กลุ่มเป้าหมายโครงการ"]
+                );
+              }}
+              className={`text-xs px-3 py-1.5 rounded-xl font-bold transition-all border flex items-center gap-1.5 cursor-pointer ${
+                filterParticipantType.includes("กลุ่มเป้าหมายโครงการ")
+                  ? "bg-blue-600 text-white border-blue-600 shadow-2xs"
+                  : "bg-white text-blue-700 border-blue-200 hover:bg-blue-50"
+              }`}
+            >
+              <span>1. กลุ่มเป้าหมายโครงการ</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                filterParticipantType.includes("กลุ่มเป้าหมายโครงการ")
+                  ? "bg-white/20 text-white"
+                  : "bg-blue-100 text-blue-800"
+              }`}>
+                {participantDistribution.targetCount}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setFilterParticipantType(prev => 
+                  prev.includes("คณะทำงาน") && prev.length === 1
+                    ? [] 
+                    : ["คณะทำงาน"]
+                );
+              }}
+              className={`text-xs px-3 py-1.5 rounded-xl font-bold transition-all border flex items-center gap-1.5 cursor-pointer ${
+                filterParticipantType.includes("คณะทำงาน")
+                  ? "bg-purple-600 text-white border-purple-600 shadow-2xs"
+                  : "bg-white text-purple-700 border-purple-200 hover:bg-purple-50"
+              }`}
+            >
+              <span>2. คณะทำงาน</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                filterParticipantType.includes("คณะทำงาน")
+                  ? "bg-white/20 text-white"
+                  : "bg-purple-100 text-purple-800"
+              }`}>
+                {participantDistribution.committeeCount}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* Month-Year Filter Bar (ช่วงวันที่ เดือน-ปี) */}
+        <div className="pt-3.5 border-t border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+              <CalendarRange className="w-3.5 h-3.5 text-indigo-600" />
+              กรองช่วงเดือน-ปี (Month-Year):
+            </span>
+            <span className="text-[10px] text-slate-400 font-medium">
+              (เลือกสรุปและดูข้อมูลตามเดือนหรือช่วงเดือนที่ตรวจ)
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Mode selection buttons */}
+            <div className="inline-flex rounded-xl p-1 bg-slate-100 border border-slate-200">
+              <button
+                type="button"
+                onClick={() => {
+                  setFilterMonthMode("all");
+                  setFilterSelectedMonth("");
+                  setFilterStartMonth("");
+                  setFilterEndMonth("");
+                }}
+                className={`text-xs px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                  filterMonthMode === "all"
+                    ? "bg-white text-indigo-600 shadow-2xs"
+                    : "text-slate-600 hover:text-slate-800"
+                }`}
+              >
+                ทุกช่วงเวลา
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setFilterMonthMode("single");
+                  if (!filterSelectedMonth && availableMonths.length > 0) {
+                    setFilterSelectedMonth(availableMonths[0].key);
+                  }
+                }}
+                className={`text-xs px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                  filterMonthMode === "single"
+                    ? "bg-white text-indigo-600 shadow-2xs"
+                    : "text-slate-600 hover:text-slate-800"
+                }`}
+              >
+                เลือกเฉพาะเดือน
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setFilterMonthMode("range");
+                  if (!filterStartMonth && availableMonths.length > 0) {
+                    setFilterEndMonth(availableMonths[0].key);
+                    const oldest = availableMonths[availableMonths.length - 1].key;
+                    setFilterStartMonth(oldest);
+                  }
+                }}
+                className={`text-xs px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                  filterMonthMode === "range"
+                    ? "bg-white text-indigo-600 shadow-2xs"
+                    : "text-slate-600 hover:text-slate-800"
+                }`}
+              >
+                ระบุช่วงเดือน (Range)
+              </button>
+            </div>
+
+            {/* If Single Month Mode */}
+            {filterMonthMode === "single" && (
+              <div className="flex items-center gap-1.5">
+                <select
+                  value={filterSelectedMonth}
+                  onChange={(e) => setFilterSelectedMonth(e.target.value)}
+                  className="text-xs font-bold text-slate-700 bg-white border border-indigo-200 rounded-xl px-3 py-1.5 outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs cursor-pointer"
+                >
+                  <option value="">เลือกเดือน-ปี...</option>
+                  {availableMonths.map(m => (
+                    <option key={m.key} value={m.key}>
+                      {m.label} ({m.count} เคส)
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* If Range Mode */}
+            {filterMonthMode === "range" && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[11px] font-bold text-slate-500">ตั้งแต่</span>
+                <select
+                  value={filterStartMonth}
+                  onChange={(e) => setFilterStartMonth(e.target.value)}
+                  className="text-xs font-bold text-slate-700 bg-white border border-indigo-200 rounded-xl px-2.5 py-1.5 outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs cursor-pointer"
+                >
+                  <option value="">ตั้งแต่เริ่มต้น</option>
+                  {[...availableMonths].reverse().map(m => (
+                    <option key={m.key} value={m.key}>
+                      {m.labelShort}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-[11px] font-bold text-slate-500">ถึง</span>
+                <select
+                  value={filterEndMonth}
+                  onChange={(e) => setFilterEndMonth(e.target.value)}
+                  className="text-xs font-bold text-slate-700 bg-white border border-indigo-200 rounded-xl px-2.5 py-1.5 outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs cursor-pointer"
+                >
+                  <option value="">ถึงปัจจุบัน</option>
+                  {availableMonths.map(m => (
+                    <option key={m.key} value={m.key}>
+                      {m.labelShort}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Quick Presets */}
+            {availableMonths.length > 0 && (
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  title="กรองเฉพาะเดือนล่าสุด"
+                  onClick={() => {
+                    setFilterMonthMode("single");
+                    setFilterSelectedMonth(availableMonths[0].key);
+                  }}
+                  className="text-[10px] font-bold px-2 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 transition-colors cursor-pointer"
+                >
+                  เดือนล่าสุด
+                </button>
+                {availableMonths.length >= 3 && (
+                  <button
+                    type="button"
+                    title="กรองช่วง 3 เดือนล่าสุด"
+                    onClick={() => {
+                      setFilterMonthMode("range");
+                      setFilterEndMonth(availableMonths[0].key);
+                      setFilterStartMonth(availableMonths[Math.min(2, availableMonths.length - 1)].key);
+                    }}
+                    className="text-[10px] font-bold px-2 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 transition-colors cursor-pointer"
+                  >
+                    3 เดือนล่าสุด
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Clear Month Filter button */}
+            {filterMonthMode !== "all" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setFilterMonthMode("all");
+                  setFilterSelectedMonth("");
+                  setFilterStartMonth("");
+                  setFilterEndMonth("");
+                }}
+                className="text-[10px] font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 px-2 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+              >
+                <RotateCcw className="w-3 h-3" />
+                ล้างเดือน
+              </button>
+            )}
+          </div>
         </div>
       </div>
       
@@ -1783,7 +2178,311 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
         </div>
       )}
 
-      {/* Filters and Search Bar Card */}
+      {/* Monthly Screening Trends & Progression Panel (สถิติและแนวโน้มการคัดกรองรายเดือน) */}
+      {monthlyTrendsData.list.length > 0 && (
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+            <div className="flex items-center gap-2.5">
+              <div className="bg-gradient-to-tr from-indigo-500 to-blue-600 text-white p-2.5 rounded-xl shrink-0 shadow-sm">
+                <TrendingUp className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-sm font-black text-slate-800 uppercase tracking-wide">
+                    สถิติและแนวโน้มการคัดกรองรายเดือน (Monthly Screening Trends)
+                  </h3>
+                  {filterMonthMode === "single" && filterSelectedMonth && (
+                    <span className="text-[10px] bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <span>กรองเดือน: {formatYearMonthThaiShort(filterSelectedMonth)}</span>
+                      <button 
+                        onClick={() => {
+                          setFilterMonthMode("all");
+                          setFilterSelectedMonth("");
+                        }}
+                        className="hover:text-indigo-900 cursor-pointer font-black"
+                        title="ยกเลิกการกรองเดือนนี้"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  )}
+                  {filterMonthMode === "range" && (filterStartMonth || filterEndMonth) && (
+                    <span className="text-[10px] bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <span>ช่วง: {filterStartMonth ? formatYearMonthThaiShort(filterStartMonth) : "เริ่มต้น"} - {filterEndMonth ? formatYearMonthThaiShort(filterEndMonth) : "ปัจจุบัน"}</span>
+                      <button 
+                        onClick={() => {
+                          setFilterMonthMode("all");
+                          setFilterStartMonth("");
+                          setFilterEndMonth("");
+                        }}
+                        className="hover:text-indigo-900 cursor-pointer font-black"
+                        title="ยกเลิกการกรองช่วงเดือน"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-500 font-semibold">
+                  วิเคราะห์แนวโน้มการคัดกรองรายเดือน จำแนกตามกลุ่มเป้าหมายโครงการ คณะทำงาน และระดับความเสี่ยงสะสม
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowMonthlyTrends(!showMonthlyTrends)}
+                className="text-xs font-bold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <span>{showMonthlyTrends ? "ย่อหน้าต่าง" : "แสดงรายละเอียดแนวโน้ม"}</span>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showMonthlyTrends ? "rotate-180" : ""}`} />
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Metrics Bar */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-200/60">
+              <span className="text-[10px] font-bold text-slate-400 block uppercase">คัดกรองสะสมในไทม์ไลน์</span>
+              <div className="flex items-baseline gap-1 mt-0.5">
+                <span className="text-xl font-black text-slate-800">{monthlyTrendsData.totalScreenings}</span>
+                <span className="text-[11px] text-slate-500">บันทึก</span>
+              </div>
+            </div>
+
+            <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-200/60">
+              <span className="text-[10px] font-bold text-slate-400 block uppercase">จำนวนเดือนที่มีการตรวจ</span>
+              <div className="flex items-baseline gap-1 mt-0.5">
+                <span className="text-xl font-black text-indigo-600">{monthlyTrendsData.list.length}</span>
+                <span className="text-[11px] text-slate-500">เดือน</span>
+              </div>
+            </div>
+
+            <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-200/60">
+              <span className="text-[10px] font-bold text-slate-400 block uppercase">ค่าเฉลี่ยต่อเดือน</span>
+              <div className="flex items-baseline gap-1 mt-0.5">
+                <span className="text-xl font-black text-blue-600">{monthlyTrendsData.avgScreeningPerMonth}</span>
+                <span className="text-[11px] text-slate-500">ราย/เดือน</span>
+              </div>
+            </div>
+
+            <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-200/60">
+              <span className="text-[10px] font-bold text-slate-400 block uppercase">เดือนที่มีการตรวจสูงสุด</span>
+              <div className="flex items-baseline gap-1 mt-0.5">
+                <span className="text-sm font-black text-emerald-700 truncate">
+                  {monthlyTrendsData.peakMonth ? `${monthlyTrendsData.peakMonth.labelShort}` : "-"}
+                </span>
+                {monthlyTrendsData.peakMonth && (
+                  <span className="text-[11px] font-bold text-emerald-600">({monthlyTrendsData.peakMonth.total} ราย)</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {showMonthlyTrends && (
+            <div className="space-y-6 pt-2">
+              {/* Visual Interactive Bar Chart */}
+              <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-200/80 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                  <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                    <BarChart2 className="w-4 h-4 text-indigo-600" />
+                    กราฟแสดงแนวโน้มยอดคัดกรองรายเดือน (คลิกที่แท่งกราฟเพื่อกรองข้อมูลเฉพาะเดือนนั้น)
+                  </span>
+                  
+                  {/* Legend */}
+                  <div className="flex items-center gap-3 text-[11px] flex-wrap">
+                    <span className="flex items-center gap-1 text-slate-600">
+                      <span className="w-3 h-3 rounded-sm bg-blue-500 inline-block" />
+                      กลุ่มเป้าหมายโครงการ
+                    </span>
+                    <span className="flex items-center gap-1 text-slate-600">
+                      <span className="w-3 h-3 rounded-sm bg-purple-500 inline-block" />
+                      คณะทำงาน
+                    </span>
+                  </div>
+                </div>
+
+                {/* Bars Container */}
+                <div className="pt-8 pb-2 overflow-x-auto">
+                  <div className="flex items-end gap-3 sm:gap-6 min-w-max px-2 h-44 border-b border-slate-200">
+                    {monthlyTrendsData.list.map((m) => {
+                      const isCurrentFilter = filterMonthMode === "single" && filterSelectedMonth === m.monthKey;
+                      const barHeightPercent = Math.max(Math.round((m.total / monthlyTrendsData.maxMonthlyTotal) * 100), 12);
+                      const targetPercent = m.total > 0 ? (m.targetGroupCount / m.total) * 100 : 100;
+                      const committeePercent = m.total > 0 ? (m.committeeCount / m.total) * 100 : 0;
+
+                      return (
+                        <div 
+                          key={m.monthKey}
+                          onClick={() => {
+                            if (isCurrentFilter) {
+                              setFilterMonthMode("all");
+                              setFilterSelectedMonth("");
+                            } else {
+                              setFilterMonthMode("single");
+                              setFilterSelectedMonth(m.monthKey);
+                            }
+                          }}
+                          className="flex flex-col items-center gap-1.5 cursor-pointer group"
+                          title={`เดือน ${m.label}: ทั้งหมด ${m.total} ราย (กลุ่มเป้าหมาย ${m.targetGroupCount}, คณะทำงาน ${m.committeeCount}) - คลิกเพื่อกรอง`}
+                        >
+                          {/* Value on top of bar */}
+                          <div className={`text-[11px] font-black transition-transform group-hover:scale-110 ${
+                            isCurrentFilter ? "text-indigo-600 font-extrabold" : "text-slate-700"
+                          }`}>
+                            {m.total}
+                          </div>
+
+                          {/* Stacked Vertical Bar */}
+                          <div 
+                            style={{ height: `${barHeightPercent}%`, minHeight: "24px" }}
+                            className={`w-10 sm:w-14 rounded-t-lg overflow-hidden flex flex-col-reverse shadow-xs transition-all duration-300 group-hover:opacity-90 ${
+                              isCurrentFilter 
+                                ? "ring-2 ring-indigo-500 ring-offset-2 scale-105" 
+                                : "hover:scale-102"
+                            }`}
+                          >
+                            {/* Blue: Target group */}
+                            <div 
+                              style={{ height: `${targetPercent}%` }} 
+                              className="w-full bg-blue-500 transition-all duration-300"
+                              title={`กลุ่มเป้าหมายโครงการ: ${m.targetGroupCount} ราย`}
+                            />
+                            {/* Purple: Working group */}
+                            {m.committeeCount > 0 && (
+                              <div 
+                                style={{ height: `${committeePercent}%` }} 
+                                className="w-full bg-purple-500 transition-all duration-300"
+                                title={`คณะทำงาน: ${m.committeeCount} ราย`}
+                              />
+                            )}
+                          </div>
+
+                          {/* Month Label below */}
+                          <div className="text-center pt-1.5">
+                            <span className={`block text-[11px] font-bold transition-colors ${
+                              isCurrentFilter ? "text-indigo-700 font-black" : "text-slate-600 group-hover:text-indigo-600"
+                            }`}>
+                              {m.labelShort}
+                            </span>
+                            <span className="block text-[9px] text-slate-400 font-medium">
+                              (แรก {m.initialCount} / ซ้ำ {m.followUpCount})
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1">
+                  <span>* แท่งกราฟจำแนกสี: สีฟ้า = กลุ่มเป้าหมายโครงการ, สีม่วง = คณะทำงาน</span>
+                  <span>คลิกที่แท่งเดือนเพื่อกรองเฉพาะเดือนนั้นทันที</span>
+                </div>
+              </div>
+
+              {/* Monthly Breakdown Detail Cards */}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-black text-slate-700 uppercase tracking-wide">
+                    ตารางแจกแจงสถิติรายเดือน (Monthly Detail Breakdown)
+                  </h4>
+                  <span className="text-[10px] text-slate-400 font-semibold">
+                    จำแนกตามประเภทผู้รับตรวจและผลการคัดกรองเบื้องต้น
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {monthlyTrendsData.list.map((m) => {
+                    const isCurrentFilter = filterMonthMode === "single" && filterSelectedMonth === m.monthKey;
+                    const dangerCount = Math.max(m.htDanger, m.dmDanger);
+                    const riskCount = Math.max(m.htRisk, m.dmRisk);
+                    const normalCount = Math.min(m.htNormal, m.dmNormal);
+
+                    return (
+                      <div 
+                        key={m.monthKey}
+                        className={`p-4 rounded-xl border transition-all ${
+                          isCurrentFilter 
+                            ? "bg-indigo-50/40 border-indigo-300 ring-2 ring-indigo-500/20 shadow-xs" 
+                            : "bg-white border-slate-200 hover:border-slate-300 hover:shadow-2xs"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2.5">
+                          <div>
+                            <span className="text-xs font-black text-slate-800 block">
+                              {m.label}
+                            </span>
+                            <span className="text-[10px] text-slate-400">
+                              รหัสรอบเดือน: {m.monthKey}
+                            </span>
+                          </div>
+                          
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (isCurrentFilter) {
+                                setFilterMonthMode("all");
+                                setFilterSelectedMonth("");
+                              } else {
+                                setFilterMonthMode("single");
+                                setFilterSelectedMonth(m.monthKey);
+                              }
+                            }}
+                            className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                              isCurrentFilter 
+                                ? "bg-indigo-600 text-white shadow-2xs" 
+                                : "bg-slate-100 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600"
+                            }`}
+                          >
+                            {isCurrentFilter ? "กำลังกรองอยู่ ✓" : "กรองเดือนนี้"}
+                          </button>
+                        </div>
+
+                        {/* Counts in month */}
+                        <div className="grid grid-cols-2 gap-2 my-3 text-xs">
+                          <div className="bg-slate-50 p-2 rounded-lg">
+                            <span className="text-[10px] text-slate-400 block font-medium">ยอดรวมคัดกรอง</span>
+                            <span className="font-black text-slate-800 text-base">{m.total} <span className="text-[10px] font-normal text-slate-500">ราย</span></span>
+                            <div className="text-[9px] text-slate-400 mt-0.5">
+                              แรกรับ {m.initialCount} | ซ้ำ {m.followUpCount}
+                            </div>
+                          </div>
+
+                          <div className="bg-slate-50 p-2 rounded-lg space-y-1">
+                            <div className="flex items-center justify-between text-[10px]">
+                              <span className="text-blue-700 font-bold">1. เป้าหมาย:</span>
+                              <span className="font-black text-blue-800">{m.targetGroupCount}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-[10px]">
+                              <span className="text-purple-700 font-bold">2. คณะทำงาน:</span>
+                              <span className="font-black text-purple-800">{m.committeeCount}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Risk status distribution chips */}
+                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px]">
+                          <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
+                            ปกติ {normalCount}
+                          </span>
+                          <span className="font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md">
+                            เสี่ยง {riskCount}
+                          </span>
+                          <span className="font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md">
+                            สงสัยป่วย {dangerCount}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
         
         {/* Row 1: Search & Core Actions */}
@@ -2159,8 +2858,17 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
 
                       {/* Name & Location */}
                       <td className="py-4 px-5">
-                        <div className="font-bold text-slate-800 hover:text-blue-600 cursor-pointer text-sm" onClick={() => onSelectRecord(r)}>
-                          {r.name}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-bold text-slate-800 hover:text-blue-600 cursor-pointer text-sm" onClick={() => onSelectRecord(r)}>
+                            {r.name}
+                          </span>
+                          <span className={`inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                            r.participantType === "คณะทำงาน"
+                              ? "bg-purple-50 text-purple-700 border border-purple-200"
+                              : "bg-blue-50 text-blue-700 border border-blue-200"
+                          }`}>
+                            {r.participantType === "คณะทำงาน" ? "คณะทำงาน" : "กลุ่มเป้าหมาย"}
+                          </span>
                         </div>
                         <div className="text-[10px] text-slate-400 flex items-center gap-0.5 mt-0.5">
                           <MapPin className="w-3 h-3" />
@@ -2193,7 +2901,7 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
                           "bg-emerald-50 text-emerald-700 border border-emerald-200"
                         }`}>
                           {r.sugar && r.sugar > 0 ? (
-                            <>{r.sugar} mg/dL • {r.dmResult?.level === "danger" ? "สงสัยป่วย" : r.dmResult?.level === "risk" ? "กลุ่มเสี่ยง" : "ปกติ"}</>
+                            <>{r.sugar} mg/dL {r.sugarFasting ? `(${r.sugarFasting})` : ""} • {r.dmResult?.level === "danger" ? "สงสัยป่วย" : r.dmResult?.level === "risk" ? "กลุ่มเสี่ยง" : "ปกติ"}</>
                           ) : (
                             "ไม่ได้ตรวจ"
                           )}

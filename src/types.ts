@@ -35,11 +35,14 @@ export interface PersonalPlan {
   exercise: PlanItem;
 }
 
+export type ParticipantType = "กลุ่มเป้าหมายโครงการ" | "คณะทำงาน";
+
 export interface ScreeningRecord {
   id: number;
   date: string;
   visitNumber: number;
   name: string;
+  participantType?: ParticipantType;
   age: number;
   gender: "ชาย" | "หญิง";
   address: string;
@@ -58,6 +61,7 @@ export interface ScreeningRecord {
   bpSys: number;
   bpDia: number;
   sugar: number;
+  sugarFasting?: "อดอาหาร" | "ไม่อดอาหาร";
   followUpAction: string;
   followUpNote: string;
   bmi: string;
@@ -94,9 +98,13 @@ export const EXACT_LOCATION_LIST: LocationMappingItem[] = [
   { model: "หมู่บ้าน", district: "มะนัง", subdistrict: "นิคมพัฒนา", targetArea: "ม.4 บ้านผัง 8,11,12" },
   { model: "หมู่บ้าน", district: "มะนัง", subdistrict: "นิคมพัฒนา", targetArea: "ม.8 บ้านผัง 16,17,19,20" },
   { model: "หมู่บ้าน", district: "เมือง", subdistrict: "คลองขุด", targetArea: "บ้านเขาจีน" },
+  { model: "หมู่บ้าน", district: "เมือง", subdistrict: "คลองขุด", targetArea: "ม.2 บ้านท่าจีน" },
   { model: "หมู่บ้าน", district: "เมือง", subdistrict: "ตำมะลัง", targetArea: "บ้านตำมะลัง" },
   { model: "หมู่บ้าน", district: "เมือง", subdistrict: "ปูยู", targetArea: "เกาะยาว" },
   { model: "หมู่บ้าน", district: "เมือง", subdistrict: "พิมาน", targetArea: "ท่านายเนาว์" },
+  { model: "ตำบล", district: "เมือง", subdistrict: "คลองขุด", targetArea: "บ้านคลองขุด" },
+  { model: "ตำบล", district: "เมือง", subdistrict: "คลองขุด", targetArea: "บ้านเกาะนก" },
+  { model: "ตำบล", district: "เมือง", subdistrict: "คลองขุด", targetArea: "คลองขุดเหนือ" },
   { model: "ตำบล", district: "เมือง", subdistrict: "พิมาน", targetArea: "ชุมชนปานชูรำลึก" },
   { model: "ตำบล", district: "เมือง", subdistrict: "พิมาน", targetArea: "สันตยาราม" },
   { model: "หมู่บ้าน", district: "ละงู", subdistrict: "กำแพง", targetArea: "ม.1 บ้านควนไสน" },
@@ -116,13 +124,13 @@ export const LOCATION_DATA = {
       ],
     },
     เมือง: {
-      คลองขุด: ["บ้านเขาจีน"],
+      คลองขุด: ["บ้านเขาจีน", "ม.2 บ้านท่าจีน"],
       ตำมะลัง: ["บ้านตำมะลัง"],
       ปูยู: ["เกาะยาว"],
       พิมาน: ["ท่านายเนาว์"],
     },
     เมืองสตูล: {
-      คลองขุด: ["บ้านเขาจีน"],
+      คลองขุด: ["บ้านเขาจีน", "ม.2 บ้านท่าจีน"],
       ตำมะลัง: ["บ้านตำมะลัง"],
       ปูยู: ["เกาะยาว"],
       พิมาน: ["ท่านายเนาว์"],
@@ -150,9 +158,11 @@ export const LOCATION_DATA = {
       ],
     },
     เมือง: {
+      คลองขุด: ["บ้านคลองขุด", "บ้านเกาะนก", "คลองขุดเหนือ"],
       พิมาน: ["สันตยาราม", "ชุมชนปานชูรำลึก"],
     },
     เมืองสตูล: {
+      คลองขุด: ["บ้านคลองขุด", "บ้านเกาะนก", "คลองขุดเหนือ"],
       พิมาน: ["สันตยาราม", "ชุมชนปานชูรำลึก"],
     },
     ละงู: {
@@ -183,7 +193,11 @@ export const DISTRICT_TARGET_AREAS: Record<DistrictType, string[]> = {
     "ม.8 บ้านผัง 16,17,19,20",
   ],
   เมือง: [
+    "บ้านคลองขุด",
+    "บ้านเกาะนก",
+    "คลองขุดเหนือ",
     "บ้านเขาจีน",
+    "ม.2 บ้านท่าจีน",
     "บ้านตำมะลัง",
     "เกาะยาว",
     "ท่านายเนาว์",
@@ -191,7 +205,11 @@ export const DISTRICT_TARGET_AREAS: Record<DistrictType, string[]> = {
     "สันตยาราม",
   ],
   เมืองสตูล: [
+    "บ้านคลองขุด",
+    "บ้านเกาะนก",
+    "คลองขุดเหนือ",
     "บ้านเขาจีน",
+    "ม.2 บ้านท่าจีน",
     "บ้านตำมะลัง",
     "เกาะยาว",
     "ท่านายเนาว์",
@@ -237,13 +255,13 @@ export const DISTRICT_SUBDISTRICT_MAP: Record<DistrictType, Record<string, strin
     ],
   },
   เมือง: {
-    "คลองขุด": ["บ้านเขาจีน"],
+    "คลองขุด": ["บ้านคลองขุด", "บ้านเกาะนก", "คลองขุดเหนือ", "บ้านเขาจีน", "ม.2 บ้านท่าจีน"],
     "ตำมะลัง": ["บ้านตำมะลัง"],
     "ปูยู": ["เกาะยาว"],
     "พิมาน": ["ท่านายเนาว์", "ชุมชนปานชูรำลึก", "สันตยาราม"],
   },
   เมืองสตูล: {
-    "คลองขุด": ["บ้านเขาจีน"],
+    "คลองขุด": ["บ้านคลองขุด", "บ้านเกาะนก", "คลองขุดเหนือ", "บ้านเขาจีน", "ม.2 บ้านท่าจีน"],
     "ตำมะลัง": ["บ้านตำมะลัง"],
     "ปูยู": ["เกาะยาว"],
     "พิมาน": ["ท่านายเนาว์", "ชุมชนปานชูรำลึก", "สันตยาราม"],

@@ -67,6 +67,23 @@ export default function App() {
         subdistrict: r.subdistrict || "พิมาน"
       };
     }
+    if (["บ้านคลองขุด", "บ้านเกาะนก", "คลองขุดเหนือ"].includes(r.targetArea)) {
+      return {
+        ...r,
+        modelType: "ตำบล",
+        district: r.district || "เมือง",
+        subdistrict: "คลองขุด"
+      };
+    }
+    if (["ม.2 บ้านท่าจีน", "บ้านท่าจีน", "ท่าจีน"].includes(r.targetArea)) {
+      return {
+        ...r,
+        targetArea: "ม.2 บ้านท่าจีน",
+        modelType: "หมู่บ้าน",
+        district: r.district || "เมือง",
+        subdistrict: "คลองขุด"
+      };
+    }
     return r;
   };
 

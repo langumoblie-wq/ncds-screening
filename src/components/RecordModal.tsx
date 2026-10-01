@@ -329,9 +329,18 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                 ข้อมูลผู้รับการตรวจ
               </h4>
               <div className="space-y-2.5 text-sm">
-                <div>
-                  <span className="text-slate-500 block text-xs">วันที่คัดกรอง</span>
-                  <span className="font-semibold text-slate-800">{recordDate}</span>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-slate-500 block text-xs">วันที่คัดกรอง</span>
+                    <span className="font-semibold text-slate-800">{recordDate}</span>
+                  </div>
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                    record.participantType === "คณะทำงาน"
+                      ? "bg-purple-100 text-purple-700 border border-purple-200"
+                      : "bg-blue-50 text-blue-700 border border-blue-200"
+                  }`}>
+                    {record.participantType || "กลุ่มเป้าหมายโครงการ"}
+                  </span>
                 </div>
                 <div>
                   <span className="text-slate-500 block text-xs">ชื่อ-นามสกุล</span>
@@ -435,6 +444,11 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                     {record.sugar && record.sugar > 0 ? (
                       <>
                         {record.sugar} <span className="text-xs font-normal">mg/dL</span>
+                        {record.sugarFasting && (
+                          <span className="block text-[10px] text-slate-500 font-normal">
+                            ({record.sugarFasting})
+                          </span>
+                        )}
                       </>
                     ) : (
                       "-"
@@ -882,6 +896,12 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                   <td style={{ padding: '3px 6px', color: '#64748b' }}>พื้นที่ / โมเดล:</td>
                   <td style={{ padding: '3px 6px', fontWeight: 'bold', color: '#0f172a' }}>{record.targetArea} {record.modelType ? `(${record.modelType})` : ""}</td>
                 </tr>
+                <tr>
+                  <td style={{ padding: '3px 6px', color: '#64748b' }}>กลุ่มผู้รับการตรวจ:</td>
+                  <td colSpan={3} style={{ padding: '3px 6px', fontWeight: 'bold', color: record.participantType === 'คณะทำงาน' ? '#7e22ce' : '#1d4ed8' }}>
+                    {record.participantType || "กลุ่มเป้าหมายโครงการ"}
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -928,7 +948,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                 <div style={{ fontSize: '10px', color: '#64748b' }}>ระดับน้ำตาล (DTX)</div>
                 <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#0f172a', marginTop: '2px' }}>
                   {record.sugar && record.sugar > 0 ? (
-                    <>{record.sugar} <span style={{ fontSize: '9px', fontWeight: 'normal' }}>mg/dL</span></>
+                    <>{record.sugar} <span style={{ fontSize: '9px', fontWeight: 'normal' }}>mg/dL</span> {record.sugarFasting ? <span style={{ fontSize: '9px', fontWeight: 'normal', color: '#64748b' }}>({record.sugarFasting})</span> : ""}</>
                   ) : "-"}
                 </div>
                 <div style={{ fontSize: '10px', fontWeight: 'bold', color: !record.sugar ? '#64748b' : record.dmResult?.level === 'danger' ? '#dc2626' : record.dmResult?.level === 'risk' ? '#d97706' : '#16a34a' }}>

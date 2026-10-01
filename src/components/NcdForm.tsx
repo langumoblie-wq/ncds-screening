@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { 
   User, MapPin, Phone, HeartPulse, ShieldAlert, Activity, ClipboardCheck, 
-  HelpCircle, Coffee, Flame, AlertTriangle, Droplet, PlusCircle, CheckCircle2 
+  HelpCircle, Coffee, Flame, AlertTriangle, Droplet, PlusCircle, CheckCircle2,
+  Calendar, Users
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
-import { DistrictType, ScreeningRecord, DISTRICT_TARGET_AREAS, DISTRICT_SUBDISTRICT_MAP, LOCATION_DATA, PersonalPlan } from "../types";
-import { calculateBMI, calculateHTRisk, calculateDMRisk, evaluateFoodHabit } from "../utils";
+import { DistrictType, ScreeningRecord, DISTRICT_TARGET_AREAS, DISTRICT_SUBDISTRICT_MAP, LOCATION_DATA, PersonalPlan, ParticipantType } from "../types";
+import { calculateBMI, calculateHTRisk, calculateDMRisk, evaluateFoodHabit, parseDateToIso, isoToThaiDateString, formatThaiDateReadable } from "../utils";
 import { FOOD_HABIT_QUESTIONS } from "../data/questions";
 import { ConsentModal } from "./ConsentModal";
 import { getRecordModel, getRecordSubdistrict, cleanDistrict } from "./BackupRestoreModal";
@@ -28,6 +29,36 @@ export const NcdForm: React.FC<NcdFormProps> = ({
   const [showValidationAlert, setShowValidationAlert] = useState(false);
   const [showOfflineSuccessAlert, setShowOfflineSuccessAlert] = useState(false);
   const [offlineSavedRecord, setOfflineSavedRecord] = useState<any>(null);
+
+  // Screening Date (วันที่คัดกรอง)
+  const [screeningDateIso, setScreeningDateIso] = useState<string>(() => {
+    return parseDateToIso(initialRecord?.date);
+  });
+  const [screeningDateText, setScreeningDateText] = useState<string>(() => {
+    if (initialRecord?.date) return initialRecord.date;
+    const now = new Date();
+    const y = now.getFullYear() + 543;
+    const m = String(now.getMonth() + 1);
+    const d = String(now.getDate());
+    return `${d}/${m}/${y}`;
+  });
+
+  // Fasting option for DTX (1. อดอาหาร, 2. ไม่อดอาหาร)
+  const [sugarFasting, setSugarFasting] = useState<"อดอาหาร" | "ไม่อดอาหาร">(
+    (initialRecord as any)?.sugarFasting || "อดอาหาร"
+  );
+
+  // Participant Category (1. กลุ่มเป้าหมายโครงการ, 2. คณะทำงาน)
+  const [participantType, setParticipantType] = useState<ParticipantType>(
+    initialRecord?.participantType || "กลุ่มเป้าหมายโครงการ"
+  );
+
+  const handleDateChange = (val: string) => {
+    setScreeningDateIso(val);
+    if (val) {
+      setScreeningDateText(isoToThaiDateString(val));
+    }
+  };
 
   // Personal Info
   const [name, setName] = useState("");
@@ -92,6 +123,18 @@ export const NcdForm: React.FC<NcdFormProps> = ({
   // Sync initialRecord for Editing Mode
   useEffect(() => {
     if (initialRecord) {
+      if (initialRecord.date) {
+        setScreeningDateIso(parseDateToIso(initialRecord.date));
+        setScreeningDateText(initialRecord.date);
+      } else {
+        const now = new Date();
+        const iso = now.toISOString().split("T")[0];
+        setScreeningDateIso(iso);
+        setScreeningDateText(now.toLocaleDateString("th-TH"));
+      }
+      setSugarFasting((initialRecord as any)?.sugarFasting || "อดอาหาร");
+      setParticipantType(initialRecord.participantType || "กลุ่มเป้าหมายโครงการ");
+
       setName(initialRecord.name);
       setVisitNumber(isFollowUp ? initialRecord.visitNumber + 1 : initialRecord.visitNumber);
       setAge(initialRecord.age);
@@ -177,6 +220,13 @@ export const NcdForm: React.FC<NcdFormProps> = ({
       setFoodHabitAnswers(initialRecord.foodHabitAnswers || {});
     } else {
       // Reset form to defaults
+      const now = new Date();
+      const iso = now.toISOString().split("T")[0];
+      setScreeningDateIso(iso);
+      setScreeningDateText(isoToThaiDateString(iso));
+      setSugarFasting("อดอาหาร");
+      setParticipantType("กลุ่มเป้าหมายโครงการ");
+
       setHasConsented(false);
       setName("");
       setVisitNumber(1);
@@ -234,7 +284,7 @@ export const NcdForm: React.FC<NcdFormProps> = ({
   const liveHtResult = bpSys && bpDia ? calculateHTRisk(Number(bpSys), Number(bpDia)) : null;
 
   // Real-time DM risk
-  const liveDmResult = sugar ? calculateDMRisk(Number(sugar)) : null;
+  const liveDmResult = sugar ? calculateDMRisk(Number(sugar), sugarFasting) : null;
 
   // Cascading location helper arrays
   const availableDistricts = (modelType && LOCATION_DATA[modelType])
@@ -407,12 +457,15 @@ export const NcdForm: React.FC<NcdFormProps> = ({
 
     const calculatedBmi = calculateBMI(Number(weight), Number(height));
     const htResult = calculateHTRisk(Number(bpSys), Number(bpDia));
-    const dmResult = calculateDMRisk(sugar === "" ? 0 : Number(sugar));
+    const dmResult = calculateDMRisk(sugar === "" ? 0 : Number(sugar), sugarFasting);
+
+    const chosenDate = screeningDateText || isoToThaiDateString(screeningDateIso) || new Date().toLocaleDateString("th-TH");
 
     const record: Omit<ScreeningRecord, "id" | "createdAt"> & { foodHabitAnswers?: Record<string, number> } = {
-      date: new Date().toLocaleDateString("th-TH"),
+      date: chosenDate,
       visitNumber: Number(visitNumber),
       name,
+      participantType,
       age: Number(age),
       gender: gender as "ชาย" | "หญิง",
       address,
@@ -433,6 +486,7 @@ export const NcdForm: React.FC<NcdFormProps> = ({
       bpSys: Number(bpSys),
       bpDia: Number(bpDia),
       sugar: sugar === "" ? 0 : Number(sugar),
+      sugarFasting,
       muscleMass: muscleMass === "" ? undefined : Number(muscleMass),
       followUpAction,
       followUpNote,
@@ -451,7 +505,7 @@ export const NcdForm: React.FC<NcdFormProps> = ({
 
     const payload = (initialRecord && !isFollowUp) ? {
       ...record,
-      date: initialRecord.date, // preserve original screening date
+      date: chosenDate, // allow updating screening date during edit
       aiAdvice: initialRecord.aiAdvice, // keep existing aiAdvice
     } : record;
 
@@ -596,6 +650,110 @@ export const NcdForm: React.FC<NcdFormProps> = ({
           
           <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             
+            {/* ประเภทผู้รับการคัดกรอง / กลุ่มข้อมูล */}
+            <div className="sm:col-span-2 lg:col-span-3 bg-gradient-to-r from-blue-50/70 via-slate-50 to-purple-50/70 p-4 rounded-2xl border border-slate-200">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-2.5">
+                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <Users className="w-4 h-4 text-blue-600" />
+                  <span>ประเภทผู้รับการคัดกรอง / กลุ่มข้อมูล <span className="text-rose-500">*</span></span>
+                </label>
+                <span className="text-[11px] font-semibold text-slate-500">
+                  ระบุว่าเป็นข้อมูลของกลุ่มเป้าหมายโครงการ หรือ คณะทำงาน
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* 1. กลุ่มเป้าหมายโครงการ */}
+                <label 
+                  onClick={() => setParticipantType("กลุ่มเป้าหมายโครงการ")}
+                  className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                    participantType === "กลุ่มเป้าหมายโครงการ"
+                      ? "bg-white border-blue-500 shadow-xs ring-2 ring-blue-500/20"
+                      : "bg-white/80 border-slate-200 hover:bg-white text-slate-600"
+                  }`}
+                >
+                  <input 
+                    type="radio" 
+                    name="participantType" 
+                    value="กลุ่มเป้าหมายโครงการ"
+                    checked={participantType === "กลุ่มเป้าหมายโครงการ"}
+                    onChange={() => setParticipantType("กลุ่มเป้าหมายโครงการ")}
+                    className="mt-0.5 w-4 h-4 text-blue-600 focus:ring-blue-500 shrink-0"
+                  />
+                  <div className="flex-1">
+                    <div className="text-xs font-bold text-slate-800 flex items-center justify-between">
+                      <span className="text-blue-900">1. กลุ่มเป้าหมายโครงการ</span>
+                      {participantType === "กลุ่มเป้าหมายโครงการ" && (
+                        <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+                          เลือกอยู่
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                      ประชาชนกลุ่มเป้าหมายในพื้นที่ 21 พื้นที่โครงการ ที่เข้ารับการตรวจคัดกรองสุขภาพ
+                    </p>
+                  </div>
+                </label>
+
+                {/* 2. คณะทำงาน */}
+                <label 
+                  onClick={() => setParticipantType("คณะทำงาน")}
+                  className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                    participantType === "คณะทำงาน"
+                      ? "bg-white border-purple-500 shadow-xs ring-2 ring-purple-500/20"
+                      : "bg-white/80 border-slate-200 hover:bg-white text-slate-600"
+                  }`}
+                >
+                  <input 
+                    type="radio" 
+                    name="participantType" 
+                    value="คณะทำงาน"
+                    checked={participantType === "คณะทำงาน"}
+                    onChange={() => setParticipantType("คณะทำงาน")}
+                    className="mt-0.5 w-4 h-4 text-purple-600 focus:ring-purple-500 shrink-0"
+                  />
+                  <div className="flex-1">
+                    <div className="text-xs font-bold text-slate-800 flex items-center justify-between">
+                      <span className="text-purple-900">2. คณะทำงาน</span>
+                      {participantType === "คณะทำงาน" && (
+                        <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
+                          เลือกอยู่
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                      คณะทำงานโครงการ ทีมงานสาธารณสุข อสม. แกนนำชุมชน หรือผู้ขับเคลื่อนโครงการ
+                    </p>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            {/* วันที่คัดกรอง */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1 flex items-center justify-between">
+                <span>วันที่คัดกรอง <span className="text-rose-500">*</span></span>
+                {screeningDateText && (
+                  <span className="text-[11px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-150">
+                    {screeningDateText}
+                  </span>
+                )}
+              </label>
+              <div className="relative">
+                <input 
+                  type="date" 
+                  required 
+                  value={screeningDateIso} 
+                  onChange={(e) => handleDateChange(e.target.value)}
+                  className="w-full text-sm rounded-xl border border-slate-300 p-3 pl-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all bg-white font-medium"
+                />
+                <Calendar className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+              <span className="text-[11px] text-slate-500 mt-1 block">
+                🗓️ {formatThaiDateReadable(screeningDateIso) || screeningDateText}
+              </span>
+            </div>
+
             <div className="sm:col-span-2">
               <label className="block text-xs font-semibold text-slate-500 mb-1">ชื่อ - นามสกุล <span className="text-rose-500">*</span></label>
               <input 
@@ -980,18 +1138,57 @@ export const NcdForm: React.FC<NcdFormProps> = ({
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 mb-1">น้ำตาลในเลือด (DTX) <span className="text-slate-400 text-[10px] font-normal">(ไม่บังคับ)</span></label>
+              <div className="sm:col-span-2 lg:col-span-1">
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    น้ำตาลในเลือด (DTX) <span className="text-slate-400 text-[10px] font-normal">(ไม่บังคับ)</span>
+                  </label>
+                  <span className="text-[10px] text-slate-500 font-medium">สภาวะการตรวจ:</span>
+                </div>
+
+                {/* ตัวเลือก 1. อดอาหาร 2. ไม่อดอาหาร */}
+                <div className="grid grid-cols-2 gap-1.5 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => setSugarFasting("อดอาหาร")}
+                    className={`flex items-center justify-center gap-1 py-1.5 px-2 rounded-xl border text-xs font-medium cursor-pointer transition-all ${
+                      sugarFasting === "อดอาหาร"
+                        ? "bg-blue-600 text-white border-blue-600 shadow-2xs font-semibold"
+                        : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                    }`}
+                  >
+                    <span>1. อดอาหาร</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSugarFasting("ไม่อดอาหาร")}
+                    className={`flex items-center justify-center gap-1 py-1.5 px-2 rounded-xl border text-xs font-medium cursor-pointer transition-all ${
+                      sugarFasting === "ไม่อดอาหาร"
+                        ? "bg-amber-600 text-white border-amber-600 shadow-2xs font-semibold"
+                        : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                    }`}
+                  >
+                    <span>2. ไม่อดอาหาร</span>
+                  </button>
+                </div>
+
                 <div className="relative">
                   <input 
                     type="number" 
                     value={sugar} 
                     onChange={(e) => setSugar(e.target.value ? Number(e.target.value) : "")}
-                    placeholder="เช่น 98"
+                    placeholder={sugarFasting === "อดอาหาร" ? "เช่น 95 (เกณฑ์อดอาหาร ≥8 ชม.)" : "เช่น 125 (ไม่อดอาหาร)"}
                     className="w-full text-sm rounded-xl border border-slate-300 p-3 pr-12 focus:ring-2 focus:ring-blue-500 outline-none"
                   />
                   <span className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 text-xs font-medium">mg/dL</span>
                 </div>
+
+                <p className="text-[10px] text-slate-500 mt-1">
+                  {sugarFasting === "อดอาหาร" 
+                    ? "* อดอาหาร ≥8 ชม.: ปกติ <100, เสี่ยง 100-125, สงสัยป่วย ≥126 mg/dL" 
+                    : "* ไม่อดอาหาร: ปกติ <140, เสี่ยง 140-199, สงสัยป่วย ≥200 mg/dL"}
+                </p>
               </div>
 
               <div>
@@ -1036,9 +1233,10 @@ export const NcdForm: React.FC<NcdFormProps> = ({
                 )}
                 {liveDmResult && (
                   <div className="text-xs">
-                    <span className="text-slate-500">คัดกรองเบาหวาน (DM - DTX):</span>
-                    <div className="font-bold text-slate-800 text-sm mt-0.5">
+                    <span className="text-slate-500">คัดกรองเบาหวาน (DM - DTX {sugarFasting}):</span>
+                    <div className="font-bold text-slate-800 text-sm mt-0.5 flex items-center gap-1.5 flex-wrap">
                       <span className={liveDmResult.color.split(" ")[0]}>{liveDmResult.label.split(" ")[0]}</span>
+                      <span className="text-slate-500 font-normal text-xs">({sugar} mg/dL)</span>
                     </div>
                   </div>
                 )}

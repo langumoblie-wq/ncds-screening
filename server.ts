@@ -8,6 +8,63 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const RECORDS_FILE_PATH = path.join(process.cwd(), "records.json");
+const TARGETS_FILE_PATH = path.join(process.cwd(), "project_targets.json");
+
+function getStoredTargets(): Record<string, number> {
+  try {
+    if (fs.existsSync(TARGETS_FILE_PATH)) {
+      const data = fs.readFileSync(TARGETS_FILE_PATH, "utf-8");
+      const parsed = JSON.parse(data);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+  } catch (err) {
+    console.error("Error reading project_targets.json:", err);
+  }
+  return {};
+}
+
+function saveStoredTargets(targets: Record<string, number>): boolean {
+  try {
+    fs.writeFileSync(TARGETS_FILE_PATH, JSON.stringify(targets, null, 2), "utf-8");
+    return true;
+  } catch (err) {
+    console.error("Error writing project_targets.json:", err);
+    return false;
+  }
+}
+
+function normalizeRecord(r: any): any {
+  if (!r || typeof r !== "object" || !("id" in r)) return null;
+  if (r.targetArea === "ปานชู") {
+    return {
+      ...r,
+      targetArea: "ชุมชนปานชูรำลึก",
+      modelType: "ตำบล",
+      district: r.district || "เมือง",
+      subdistrict: r.subdistrict || "พิมาน"
+    };
+  }
+  if (["บ้านคลองขุด", "บ้านเกาะนก", "คลองขุดเหนือ"].includes(r.targetArea)) {
+    return {
+      ...r,
+      modelType: "ตำบล",
+      district: "เมือง",
+      subdistrict: "คลองขุด"
+    };
+  }
+  if (["ม.2 บ้านท่าจีน", "บ้านท่าจีน", "ท่าจีน"].includes(r.targetArea)) {
+    return {
+      ...r,
+      targetArea: "ม.2 บ้านท่าจีน",
+      modelType: "หมู่บ้าน",
+      district: "เมือง",
+      subdistrict: "คลองขุด"
+    };
+  }
+  return r;
+}
 
 function getStoredRecords(): any[] {
   try {
@@ -15,7 +72,7 @@ function getStoredRecords(): any[] {
       const data = fs.readFileSync(RECORDS_FILE_PATH, "utf-8");
       const parsed = JSON.parse(data);
       if (Array.isArray(parsed)) {
-        return parsed.filter(r => r && typeof r === "object" && "id" in r);
+        return parsed.map(normalizeRecord).filter(Boolean);
       }
     }
   } catch (err) {
@@ -27,19 +84,8 @@ function getStoredRecords(): any[] {
 function saveStoredRecords(records: any[]): boolean {
   try {
     const valid = records
-      .filter(r => r && typeof r === "object" && "id" in r)
-      .map(r => {
-        if (r.targetArea === "ปานชู") {
-          return {
-            ...r,
-            targetArea: "ชุมชนปานชูรำลึก",
-            modelType: "ตำบล",
-            district: r.district || "เมือง",
-            subdistrict: r.subdistrict || "พิมาน"
-          };
-        }
-        return r;
-      });
+      .map(normalizeRecord)
+      .filter(Boolean);
     fs.writeFileSync(RECORDS_FILE_PATH, JSON.stringify(valid, null, 2), "utf-8");
     return true;
   } catch (err) {
@@ -125,6 +171,39 @@ async function startServer() {
       res.json({ success: true, count: filtered.length });
     } catch (err: any) {
       res.status(500).json({ error: err.message || "Failed to delete record" });
+    }
+  });
+
+  // API Routes for Project Targets Storage (กำหนดเป้าหมายโครงการ)
+  app.get("/api/project-targets", (_req, res) => {
+    try {
+      const targets = getStoredTargets();
+      res.json({ success: true, targets });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to load project targets" });
+    }
+  });
+
+  app.post("/api/project-targets", (req, res) => {
+    try {
+      const { targets, key, target, replace } = req.body;
+      const current = getStoredTargets();
+      
+      let updated: Record<string, number>;
+      if (replace && targets && typeof targets === "object") {
+        updated = targets;
+      } else if (targets && typeof targets === "object") {
+        updated = { ...current, ...targets };
+      } else if (key != null && target != null) {
+        updated = { ...current, [String(key)]: Number(target) };
+      } else {
+        return res.status(400).json({ error: "Missing targets or key/target" });
+      }
+
+      saveStoredTargets(updated);
+      res.json({ success: true, targets: updated });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to save project targets" });
     }
   });
 

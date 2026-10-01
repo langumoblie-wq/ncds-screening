@@ -32,8 +32,10 @@ import {
   Sparkles,
   Info,
   ChevronRight,
-  Printer
+  Printer,
+  CalendarRange
 } from "lucide-react";
+import { parseDateToIso, formatYearMonthThai, formatYearMonthThaiShort } from "../utils";
 
 interface NcdAnalyticsDashboardProps {
   records: ScreeningRecord[];
@@ -46,6 +48,8 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
   const [filterSubdistrict, setFilterSubdistrict] = useState<string>("");
   const [filterTargetArea, setFilterTargetArea] = useState<string>("");
   const [filterVisitMode, setFilterVisitMode] = useState<"all" | "latest_only" | "visit_1" | "visit_2_plus">("all");
+  const [filterParticipantType, setFilterParticipantType] = useState<string>("");
+  const [filterMonth, setFilterMonth] = useState<string>("");
 
   // Sync / reset filters on model change
   useEffect(() => {
@@ -144,6 +148,29 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
     return map;
   }, [records]);
 
+  // Available months from records
+  const availableMonths = useMemo(() => {
+    const monthMap = new Map<string, { key: string; label: string; count: number }>();
+    records.forEach(r => {
+      if (r && r.date) {
+        const ym = parseDateToIso(r.date).substring(0, 7);
+        if (ym && ym.length === 7) {
+          const existing = monthMap.get(ym);
+          if (existing) {
+            existing.count += 1;
+          } else {
+            monthMap.set(ym, {
+              key: ym,
+              label: formatYearMonthThai(ym),
+              count: 1
+            });
+          }
+        }
+      }
+    });
+    return Array.from(monthMap.values()).sort((a, b) => b.key.localeCompare(a.key));
+  }, [records]);
+
   // Apply filters to records
   const filteredRecords = useMemo(() => {
     return records.filter((r) => {
@@ -168,9 +195,17 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
         return false;
       }
 
-      return matchesModel && matchesDistrict && matchesSubdistrict && matchesTargetArea;
+      // Participant category filter
+      const pType = r.participantType || "กลุ่มเป้าหมายโครงการ";
+      const matchesParticipant = filterParticipantType ? pType === filterParticipantType : true;
+
+      // Month-Year filter
+      const recYm = parseDateToIso(r.date).substring(0, 7);
+      const matchesMonth = filterMonth ? recYm === filterMonth : true;
+
+      return matchesModel && matchesDistrict && matchesSubdistrict && matchesTargetArea && matchesParticipant && matchesMonth;
     });
-  }, [records, filterModel, filterDistrict, filterSubdistrict, filterTargetArea, filterVisitMode, latestPatientMap]);
+  }, [records, filterModel, filterDistrict, filterSubdistrict, filterTargetArea, filterVisitMode, filterParticipantType, filterMonth, latestPatientMap]);
 
   // Comprehensive analysis calculations
   const analysis = useMemo(() => {
@@ -504,13 +539,15 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
               <Printer className="w-4 h-4" />
               พิมพ์รายงาน
             </button>
-            {(filterModel || filterDistrict || filterSubdistrict || filterTargetArea || filterVisitMode !== "all") && (
+            {(filterModel || filterDistrict || filterSubdistrict || filterTargetArea || filterParticipantType || filterMonth || filterVisitMode !== "all") && (
               <button 
                 onClick={() => {
                   setFilterModel("");
                   setFilterDistrict("");
                   setFilterSubdistrict("");
                   setFilterTargetArea("");
+                  setFilterParticipantType("");
+                  setFilterMonth("");
                   setFilterVisitMode("all");
                 }}
                 className="text-[10px] font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
@@ -521,7 +558,41 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
           </div>
         </div>
         
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3">
+          {/* Month-Year Filter */}
+          <div className="space-y-1">
+            <label className="block text-[10px] font-bold text-indigo-600 flex items-center gap-1">
+              <CalendarRange className="w-3 h-3 text-indigo-600" />
+              ช่วงเดือน-ปี
+            </label>
+            <select 
+              value={filterMonth} 
+              onChange={(e) => setFilterMonth(e.target.value)}
+              className="w-full text-xs border border-indigo-200 rounded-xl px-3 py-2.5 bg-indigo-50/40 outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-700"
+            >
+              <option value="">ทุกช่วงเวลา</option>
+              {availableMonths.map(m => (
+                <option key={m.key} value={m.key}>
+                  {m.label} ({m.count} เคส)
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Participant Category Filter */}
+          <div className="space-y-1">
+            <label className="block text-[10px] font-bold text-blue-600">ประเภทกลุ่มข้อมูล</label>
+            <select 
+              value={filterParticipantType} 
+              onChange={(e) => setFilterParticipantType(e.target.value)}
+              className="w-full text-xs border border-blue-200 rounded-xl px-3 py-2.5 bg-blue-50/40 outline-none focus:ring-2 focus:ring-blue-500 font-semibold text-slate-700"
+            >
+              <option value="">ทุกกลุ่มข้อมูล</option>
+              <option value="กลุ่มเป้าหมายโครงการ">1. กลุ่มเป้าหมายโครงการ</option>
+              <option value="คณะทำงาน">2. คณะทำงาน</option>
+            </select>
+          </div>
+
           {/* Model */}
           <div className="space-y-1">
             <label className="block text-[10px] font-bold text-slate-400">โมเดลโครงการ</label>

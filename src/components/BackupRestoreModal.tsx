@@ -35,6 +35,7 @@ export const cleanSubdistrict = (s?: string): string => {
   if (!s) return "";
   let clean = s.replace(/^(ต\.|ตำบล)/, "").trim();
   if (clean === "ปยู") clean = "ปูยู";
+  if (clean === "คลอขุด") clean = "คลองขุด";
   return clean;
 };
 
@@ -261,12 +262,17 @@ export const parseCsvToRecords = (csvText: string): Partial<ScreeningRecord>[] =
     const bmi = getCol(cols, "BMI", "bmi") || (height > 0 ? (weight / Math.pow(height / 100, 2)).toFixed(2) : "0");
     const bpSys = Number(getCol(cols, "ความดันบน (Systolic)", "bpSys", "ความดันบน")) || 0;
     const bpDia = Number(getCol(cols, "ความดันล่าง (Diastolic)", "bpDia", "ความดันล่าง")) || 0;
-    const sugar = Number(getCol(cols, "น้ำตาล (FBS)", "sugar", "น้ำตาล")) || 0;
+    const sugar = Number(getCol(cols, "น้ำตาล (DTX)", "น้ำตาล (FBS)", "sugar", "น้ำตาล")) || 0;
+    const rawFasting = getCol(cols, "สภาวะอดอาหาร", "sugarFasting", "อดอาหาร/ไม่อดอาหาร");
+    const sugarFasting = rawFasting && rawFasting.includes("ไม่อด") ? "ไม่อดอาหาร" : "อดอาหาร";
+    const rawParticipant = getCol(cols, "ประเภทกลุ่ม", "ประเภทผู้รับการคัดกรอง", "participantType", "กลุ่มข้อมูล");
+    const participantType = rawParticipant && rawParticipant.includes("คณะทำงาน") ? "คณะทำงาน" : "กลุ่มเป้าหมายโครงการ";
 
     records.push({
       id,
       date,
       visitNumber,
+      participantType,
       name,
       age,
       gender,
@@ -280,6 +286,7 @@ export const parseCsvToRecords = (csvText: string): Partial<ScreeningRecord>[] =
       bpSys,
       bpDia,
       sugar,
+      sugarFasting,
       createdAt: new Date().toISOString()
     });
   }
@@ -481,15 +488,16 @@ export const BackupExportModal: React.FC<BackupExportModalProps> = ({
     } else {
       // Export as CSV
       const headers = [
-        "ID", "วันที่ตรวจ", "ครั้งที่", "ชื่อ-นามสกุล", "อายุ", "เพศ", "เบอร์โทร",
+        "ID", "วันที่ตรวจ", "ครั้งที่", "ประเภทกลุ่ม", "ชื่อ-นามสกุล", "อายุ", "เพศ", "เบอร์โทร",
         "อำเภอ", "ตำบล", "พื้นที่เป้าหมาย", "น้ำหนัก", "ส่วนสูง", "BMI",
-        "ความดันบน (Systolic)", "ความดันล่าง (Diastolic)", "น้ำตาล (FBS)"
+        "ความดันบน (Systolic)", "ความดันล่าง (Diastolic)", "น้ำตาล (DTX)", "สภาวะอดอาหาร"
       ];
 
       const rows = filteredRecords.map(r => [
         r.id,
         `"${r.date || ""}"`,
         r.visitNumber || 1,
+        `"${r.participantType || "กลุ่มเป้าหมายโครงการ"}"`,
         `"${r.name || ""}"`,
         r.age || "",
         `"${r.gender || ""}"`,
@@ -502,7 +510,8 @@ export const BackupExportModal: React.FC<BackupExportModalProps> = ({
         r.bmi || "",
         r.bpSys || "",
         r.bpDia || "",
-        r.sugar || ""
+        r.sugar || "",
+        `"${r.sugarFasting || "อดอาหาร"}"`
       ]);
 
       const csvContent = "\uFEFF" + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");

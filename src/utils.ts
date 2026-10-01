@@ -27,7 +27,41 @@ export function calculateHTRisk(sys: number, dia: number): EvaluationResult {
 }
 
 // DM Criteria (Diabetes Mellitus)
-export function calculateDMRisk(sugar: number): EvaluationResult {
+export function calculateDMRisk(
+  sugar: number,
+  fastingType: "อดอาหาร" | "ไม่อดอาหาร" | "fasting" | "non_fasting" | string = "อดอาหาร"
+): EvaluationResult {
+  const isNonFasting = fastingType === "ไม่อดอาหาร" || fastingType === "non_fasting";
+
+  // Case 1: ไม่อดอาหาร (RBS / Random DTX)
+  // ปกติ: < 140 mg/dL, กลุ่มเสี่ยง: 140 - 199 mg/dL, สงสัยป่วย: >= 200 mg/dL
+  if (isNonFasting) {
+    if (sugar >= 200) {
+      return {
+        level: "danger",
+        label: "สงสัยป่วย (สีแดง)",
+        color: "text-red-600 bg-red-50 border-red-200",
+        class: "status-danger bg-red-50 text-red-700 border border-red-200",
+      };
+    }
+    if (sugar >= 140) {
+      return {
+        level: "risk",
+        label: "กลุ่มเสี่ยง (สีเขียวอ่อน)",
+        color: "text-green-700 bg-green-50 border-green-200",
+        class: "status-risk bg-green-50 text-green-800 border border-green-200",
+      };
+    }
+    return {
+      level: "normal",
+      label: "ปกติ (สีขาว)",
+      color: "text-slate-700 bg-white border-slate-200",
+      class: "status-normal bg-white text-slate-800 border border-slate-200",
+    };
+  }
+
+  // Case 2: อดอาหาร (FBS / Fasting DTX งดน้ำ-อาหารอย่างน้อย 8 ชั่วโมง)
+  // ปกติ: < 100 mg/dL, กลุ่มเสี่ยง: 100 - 125 mg/dL, สงสัยป่วย: >= 126 mg/dL
   if (sugar >= 126) {
     return {
       level: "danger",
@@ -251,29 +285,37 @@ export function getHTPingPong(sys: number, dia: number, familyHistory: string[] 
 }
 
 // 7-Color Ping Pong Calculation for Diabetes Mellitus (DM)
-export function getDMPingPong(sugar: number, familyHistory: string[] = []): PingPongColorInfo {
+export function getDMPingPong(
+  sugar: number, 
+  familyHistory: string[] = [],
+  fastingType: "อดอาหาร" | "ไม่อดอาหาร" | "fasting" | "non_fasting" | string = "อดอาหาร"
+): PingPongColorInfo {
   const hasComplications = checkHasComplications(familyHistory);
   if (hasComplications) {
     return PING_PONG_COLORS.black;
   }
   
-  if (sugar >= 183) {
+  const isNonFasting = fastingType === "ไม่อดอาหาร" || fastingType === "non_fasting";
+  const dangerLimit = isNonFasting ? 200 : 126;
+  const riskLimit = isNonFasting ? 140 : 100;
+  
+  if (sugar >= (isNonFasting ? 250 : 183)) {
     return PING_PONG_COLORS.red;
   }
-  if (sugar >= 155 && sugar <= 182) {
+  if (sugar >= (isNonFasting ? 220 : 155)) {
     return PING_PONG_COLORS.orange;
   }
-  if (sugar >= 126 && sugar <= 154) {
+  if (sugar >= dangerLimit) {
     return PING_PONG_COLORS.yellow;
   }
   
-  // If controlled under 126 but has DM history
+  // If controlled under danger threshold but has DM history
   const isKnownDMPatient = familyHistory.some(h => h.includes("เบาหวาน"));
-  if (isKnownDMPatient && sugar < 126) {
+  if (isKnownDMPatient && sugar < dangerLimit) {
     return PING_PONG_COLORS.dark_green;
   }
   
-  if (sugar >= 100 && sugar < 126) {
+  if (sugar >= riskLimit && sugar < dangerLimit) {
     return PING_PONG_COLORS.light_green;
   }
   
@@ -281,9 +323,15 @@ export function getDMPingPong(sugar: number, familyHistory: string[] = []): Ping
 }
 
 // Combine both results - gets the highest risk color
-export function getCombinedPingPong(sys: number, dia: number, sugar: number, familyHistory: string[] = []): PingPongColorInfo {
+export function getCombinedPingPong(
+  sys: number, 
+  dia: number, 
+  sugar: number, 
+  familyHistory: string[] = [],
+  fastingType: "อดอาหาร" | "ไม่อดอาหาร" | "fasting" | "non_fasting" | string = "อดอาหาร"
+): PingPongColorInfo {
   const ht = getHTPingPong(sys, dia, familyHistory);
-  const dm = getDMPingPong(sugar, familyHistory);
+  const dm = getDMPingPong(sugar, familyHistory, fastingType);
   
   const severityRank: Record<string, number> = {
     white: 0,
@@ -299,4 +347,100 @@ export function getCombinedPingPong(sys: number, dia: number, sugar: number, fam
   const dmRank = severityRank[dm.color] || 0;
   
   return htRank >= dmRank ? ht : dm;
+}
+
+// Date helpers for converting between ISO (YYYY-MM-DD) and Thai Buddhist Era formats
+export function parseDateToIso(dateStr?: string): string {
+  if (!dateStr) {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+  // Format DD/MM/YYYY or D/M/YYYY
+  if (dateStr.includes("/")) {
+    const parts = dateStr.trim().split("/");
+    if (parts.length === 3) {
+      const d = parts[0].padStart(2, "0");
+      const m = parts[1].padStart(2, "0");
+      let y = parseInt(parts[2], 10);
+      if (y > 2400) y -= 543;
+      return `${y}-${m}-${d}`;
+    }
+  }
+  // Format YYYY-MM-DD
+  if (dateStr.includes("-")) {
+    const parts = dateStr.trim().split("-");
+    if (parts.length === 3) {
+      let y = parseInt(parts[0], 10);
+      if (y > 2400) y -= 543;
+      const m = parts[1].padStart(2, "0");
+      const d = parts[2].padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    }
+  }
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+export function isoToThaiDateString(isoStr: string): string {
+  if (!isoStr) return "";
+  const parts = isoStr.split("-");
+  if (parts.length !== 3) return isoStr;
+  let y = parseInt(parts[0], 10);
+  if (y < 2400) y += 543;
+  const m = parseInt(parts[1], 10);
+  const d = parseInt(parts[2], 10);
+  return `${d}/${m}/${y}`;
+}
+
+export function formatThaiDateReadable(isoStr: string): string {
+  if (!isoStr) return "";
+  const parts = isoStr.split("-");
+  if (parts.length !== 3) return isoStr;
+  let y = parseInt(parts[0], 10);
+  if (y < 2400) y += 543;
+  const m = parseInt(parts[1], 10);
+  const d = parseInt(parts[2], 10);
+  const thaiMonths = [
+    "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
+    "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"
+  ];
+  const monthName = thaiMonths[m - 1] || "";
+  return `${d} ${monthName} ${y}`;
+}
+
+export function formatYearMonthThai(yearMonth: string): string {
+  if (!yearMonth || !yearMonth.includes("-")) return yearMonth || "";
+  const parts = yearMonth.split("-");
+  let y = parseInt(parts[0], 10);
+  if (y < 2400) y += 543;
+  const m = parseInt(parts[1], 10);
+  const thaiMonths = [
+    "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
+    "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"
+  ];
+  return `${thaiMonths[m - 1] || parts[1]} ${y}`;
+}
+
+export function formatYearMonthThaiShort(yearMonth: string): string {
+  if (!yearMonth || !yearMonth.includes("-")) return yearMonth || "";
+  const parts = yearMonth.split("-");
+  let y = parseInt(parts[0], 10);
+  if (y < 2400) y += 543;
+  const m = parseInt(parts[1], 10);
+  const shortThaiMonths = [
+    "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
+    "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."
+  ];
+  return `${shortThaiMonths[m - 1] || parts[1]} ${String(y).slice(-2)}`;
+}
+
+export function getRecordYearMonth(dateStr?: string): string {
+  const iso = parseDateToIso(dateStr);
+  return iso.substring(0, 7);
 }
