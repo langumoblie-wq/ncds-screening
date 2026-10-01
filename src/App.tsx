@@ -84,6 +84,22 @@ export default function App() {
         subdistrict: "คลองขุด"
       };
     }
+    if ((r.targetArea && (r.targetArea === "ม.11 บ้านวังยาว" || r.targetArea.includes("วังยาว"))) || (r.subdistrict && r.subdistrict.includes("น้ำผุด"))) {
+      return {
+        ...r,
+        targetArea: "ม.11 บ้านวังยาว",
+        modelType: "หมู่บ้าน",
+        district: "ละงู",
+        subdistrict: "น้ำผุด"
+      };
+    }
+    const areaStr = String(r.targetArea || "");
+    if (areaStr.includes("บุโบย") || areaStr.includes("ตะโล๊ะใส") || areaStr.includes("ตะโละใส")) {
+      return {
+        ...r,
+        isDeleted: true
+      };
+    }
     return r;
   };
 
