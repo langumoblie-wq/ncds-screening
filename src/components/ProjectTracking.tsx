@@ -99,6 +99,10 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
   const [editValue, setEditValue] = useState<string>("");
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
+  // Dedicated Model / District filters for Section 2: Area × Visits Breakdown Matrix
+  const [matrixModelFilter, setMatrixModelFilter] = useState<string[]>([]);
+  const [matrixDistrictFilter, setMatrixDistrictFilter] = useState<string[]>([]);
+
   // Database synchronization & Target modal states
   const [isSavingTarget, setIsSavingTarget] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState("");
@@ -686,6 +690,44 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
     };
   }, [stats]);
 
+  // Available districts for Area × Visits Matrix based on matrixModelFilter
+  const matrixAvailableDistricts = useMemo(() => {
+    const dSet = new Set<string>();
+    stats.forEach(s => {
+      const matchM = matrixModelFilter.length === 0 || matchesModelFilter({ modelType: s.modelType as any }, matrixModelFilter);
+      if (matchM && s.district) {
+        dSet.add(cleanDistrict(s.district));
+      }
+    });
+    return Array.from(dSet).sort((a, b) => a.localeCompare(b, "th"));
+  }, [stats, matrixModelFilter]);
+
+  // Filtered stats & summary specifically for Section 2: Area × Visits Breakdown Matrix
+  const matrixFilteredStats = useMemo(() => {
+    return stats.filter(s => {
+      const matchM = matrixModelFilter.length === 0 || matchesModelFilter({ modelType: s.modelType as any }, matrixModelFilter);
+      const matchD = matrixDistrictFilter.length === 0 || matchesDistrictFilter(s.district, matrixDistrictFilter);
+      return matchM && matchD;
+    });
+  }, [stats, matrixModelFilter, matrixDistrictFilter]);
+
+  const matrixOverall = useMemo(() => {
+    let totalTarget = 0;
+    let totalAchieved = 0;
+    let totalVisits = 0;
+    matrixFilteredStats.forEach(s => {
+      totalTarget += s.target;
+      totalAchieved += s.achieved;
+      totalVisits += s.totalVisits;
+    });
+    return {
+      target: totalTarget,
+      achieved: totalAchieved,
+      visits: totalVisits,
+      percent: totalTarget > 0 ? (totalAchieved / totalTarget) * 100 : 0
+    };
+  }, [matrixFilteredStats]);
+
   const getColorClass = (percent: number) => {
     if (percent >= 100) return "bg-emerald-500";
     if (percent >= 80) return "bg-teal-500";
@@ -1233,7 +1275,7 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
       {/* SECTION 2: Area × Visits Breakdown Matrix Table (ตารางแจกแจงผลงานรายพื้นที่เป้าหมายแยกตามครั้งที่) */}
       {(trackingViewMode === "visits" || trackingViewMode === "both") && (
         <div className={`bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-4 ${isExecutiveActive ? "print:hidden" : ""}`}>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-100 pb-3">
             <div className="flex items-center gap-3">
               <div className="bg-purple-600 text-white p-2.5 rounded-2xl shadow-sm">
                 <Table className="w-5 h-5" />
@@ -1248,8 +1290,137 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
               </div>
             </div>
 
-            <div className="text-xs font-semibold text-slate-500">
-              พื้นที่แสดงผล: <strong className="text-slate-800">{stats.length}</strong> แห่ง
+            <div className="text-xs font-semibold text-slate-500 shrink-0">
+              พื้นที่แสดงผล: <strong className="text-slate-800">{matrixFilteredStats.length}</strong> / {stats.length} แห่ง
+            </div>
+          </div>
+
+          {/* Dedicated Filter Bar for Model / District in Area × Visits Breakdown Matrix */}
+          <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-3.5 flex flex-col gap-3 print:hidden">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              {/* Quick Model Filter Buttons */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <Filter className="w-3.5 h-3.5 text-purple-600" />
+                  กรองตารางนี้ตาม โมเดล / อำเภอ:
+                </span>
+
+                <div className="inline-flex p-1 bg-white rounded-xl border border-slate-200 gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setMatrixModelFilter([])}
+                    className={`text-xs px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                      matrixModelFilter.length === 0
+                        ? "bg-slate-800 text-white shadow-2xs"
+                        : "text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    ทุกโมเดล
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setMatrixModelFilter(prev =>
+                        prev.length === 1 && prev[0] === "ตำบล" ? [] : ["ตำบล"]
+                      )
+                    }
+                    className={`text-xs px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                      matrixModelFilter.includes("ตำบล")
+                        ? "bg-purple-600 text-white shadow-2xs"
+                        : "text-purple-700 hover:bg-purple-50"
+                    }`}
+                  >
+                    โมเดลตำบล
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setMatrixModelFilter(prev =>
+                        prev.length === 1 && prev[0] === "หมู่บ้าน" ? [] : ["หมู่บ้าน"]
+                      )
+                    }
+                    className={`text-xs px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                      matrixModelFilter.includes("หมู่บ้าน")
+                        ? "bg-blue-600 text-white shadow-2xs"
+                        : "text-blue-700 hover:bg-blue-50"
+                    }`}
+                  >
+                    โมเดลหมู่บ้าน
+                  </button>
+                </div>
+              </div>
+
+              {/* MultiSelect Dropdowns for Model & District + Reset */}
+              <div className="flex flex-wrap items-center gap-2 flex-1 sm:flex-none justify-end">
+                <MultiSelectDropdown
+                  options={["ตำบล", "หมู่บ้าน"]}
+                  selected={matrixModelFilter}
+                  onChange={setMatrixModelFilter}
+                  placeholder="เลือกโมเดล (ทั้งหมด)"
+                  labelKey={(v) => `โมเดล${v}`}
+                />
+
+                <MultiSelectDropdown
+                  options={matrixAvailableDistricts}
+                  selected={matrixDistrictFilter}
+                  onChange={setMatrixDistrictFilter}
+                  placeholder="เลือกอำเภอ (ทุกอำเภอ)"
+                  labelKey={(v) => `อ.${v}`}
+                />
+
+                {(matrixModelFilter.length > 0 || matrixDistrictFilter.length > 0) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMatrixModelFilter([]);
+                      setMatrixDistrictFilter([]);
+                    }}
+                    className="text-xs px-3 py-2 bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 rounded-xl font-bold flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    <span>ล้างตัวกรองตารางนี้</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Quick District Chips */}
+            <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t border-slate-200/70">
+              <span className="text-[11px] font-bold text-slate-500 mr-1">เลือกอำเภอด่วน:</span>
+              <button
+                type="button"
+                onClick={() => setMatrixDistrictFilter([])}
+                className={`text-[11px] px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer border ${
+                  matrixDistrictFilter.length === 0
+                    ? "bg-indigo-600 text-white border-indigo-600"
+                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
+                }`}
+              >
+                ทุกอำเภอ
+              </button>
+              {matrixAvailableDistricts.map((dist) => {
+                const isSelected = matrixDistrictFilter.includes(dist);
+                return (
+                  <button
+                    key={dist}
+                    type="button"
+                    onClick={() => {
+                      setMatrixDistrictFilter(prev =>
+                        prev.includes(dist)
+                          ? prev.filter(d => d !== dist)
+                          : [...prev, dist]
+                      );
+                    }}
+                    className={`text-[11px] px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer border ${
+                      isSelected
+                        ? "bg-indigo-600 text-white border-indigo-600 shadow-2xs"
+                        : "bg-white text-slate-700 border-slate-200 hover:bg-indigo-50 hover:border-indigo-200"
+                    }`}
+                  >
+                    อ.{dist}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -1271,14 +1442,14 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-semibold">
-                {stats.length === 0 ? (
+                {matrixFilteredStats.length === 0 ? (
                   <tr>
                     <td colSpan={11} className="py-8 text-center text-slate-400">
-                      ไม่พบพื้นที่ที่ตรงกับตัวกรอง
+                      ไม่พบพื้นที่ที่ตรงกับตัวกรอง โมเดล / อำเภอ ที่เลือก
                     </td>
                   </tr>
                 ) : (
-                  stats.map((s, idx) => (
+                  matrixFilteredStats.map((s, idx) => (
                     <tr key={s.key} className="hover:bg-slate-50/70 transition-colors">
                       <td className="py-3 px-4 text-center font-bold text-slate-400 text-[11px]">
                         {idx + 1}
@@ -1288,14 +1459,32 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                            s.modelType === "ตำบล" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"
-                          }`}>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setMatrixModelFilter(prev =>
+                                prev.length === 1 && prev[0] === s.modelType ? [] : [s.modelType]
+                              )
+                            }
+                            title={`คลิกเพื่อกรองเฉพาะ โมเดล${s.modelType}`}
+                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded cursor-pointer transition-opacity hover:opacity-80 ${
+                              s.modelType === "ตำบล" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"
+                            }`}
+                          >
                             {s.modelType}
-                          </span>
-                          <span className="text-[11px] text-slate-500 font-semibold">
-                            {s.district}
-                          </span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setMatrixDistrictFilter(prev =>
+                                prev.length === 1 && prev[0] === cleanDistrict(s.district) ? [] : [cleanDistrict(s.district)]
+                              )
+                            }
+                            title={`คลิกเพื่อกรองเฉพาะ อ.${s.district}`}
+                            className="text-[11px] text-slate-600 hover:text-indigo-600 font-semibold cursor-pointer hover:underline"
+                          >
+                            อ.{s.district}
+                          </button>
                         </div>
                       </td>
                       <td className="py-3 px-4 text-center font-bold text-slate-700">
@@ -1340,37 +1529,39 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
                   ))
                 )}
               </tbody>
-              {stats.length > 0 && (
+              {matrixFilteredStats.length > 0 && (
                 <tfoot>
                   <tr className="bg-slate-100/80 font-black text-slate-800 border-t-2 border-slate-300">
-                    <td colSpan={3} className="py-3 px-4">รวมทุกพื้นที่ ({stats.length} แห่ง)</td>
+                    <td colSpan={3} className="py-3 px-4">
+                      รวมพื้นที่ตามตัวกรอง ({matrixFilteredStats.length} แห่ง)
+                    </td>
                     <td className="py-3 px-4 text-center text-slate-800 font-black">
-                      {stats.reduce((sum, s) => sum + s.target, 0).toLocaleString()}
+                      {matrixFilteredStats.reduce((sum, s) => sum + s.target, 0).toLocaleString()}
                     </td>
                     <td className="py-3 px-4 text-center text-indigo-700 text-sm font-black">
-                      {stats.reduce((sum, s) => sum + s.totalVisits, 0)}
+                      {matrixFilteredStats.reduce((sum, s) => sum + s.totalVisits, 0)}
                     </td>
                     <td className="py-3 px-4 text-center text-blue-800 bg-blue-100/50">
-                      {stats.reduce((sum, s) => sum + s.v1Count, 0)}
+                      {matrixFilteredStats.reduce((sum, s) => sum + s.v1Count, 0)}
                     </td>
                     <td className="py-3 px-4 text-center text-indigo-800 bg-indigo-100/50">
-                      {stats.reduce((sum, s) => sum + s.v2Count, 0)}
+                      {matrixFilteredStats.reduce((sum, s) => sum + s.v2Count, 0)}
                     </td>
                     <td className="py-3 px-4 text-center text-purple-800 bg-purple-100/50">
-                      {stats.reduce((sum, s) => sum + s.v3Count, 0)}
+                      {matrixFilteredStats.reduce((sum, s) => sum + s.v3Count, 0)}
                     </td>
                     <td className="py-3 px-4 text-center text-fuchsia-800 bg-fuchsia-100/50">
-                      {stats.reduce((sum, s) => sum + s.v4PlusCount, 0)}
+                      {matrixFilteredStats.reduce((sum, s) => sum + s.v4PlusCount, 0)}
                     </td>
                     <td className="py-3 px-4 text-center text-teal-800">
                       {(() => {
-                        const totalV1 = stats.reduce((sum, s) => sum + s.v1Count, 0);
-                        const totalFollow = stats.reduce((sum, s) => sum + s.followUpCount, 0);
+                        const totalV1 = matrixFilteredStats.reduce((sum, s) => sum + s.v1Count, 0);
+                        const totalFollow = matrixFilteredStats.reduce((sum, s) => sum + s.followUpCount, 0);
                         return totalV1 > 0 ? `${((totalFollow / totalV1) * 100).toFixed(1)}%` : "0%";
                       })()}
                     </td>
                     <td className="py-3 px-4 text-center text-emerald-800 font-black">
-                      {overall.percent.toFixed(1)}%
+                      {matrixOverall.percent.toFixed(1)}%
                     </td>
                   </tr>
                 </tfoot>
