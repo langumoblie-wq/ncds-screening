@@ -17,8 +17,10 @@ import {
   Target, Users, Activity, Filter, Map, ChevronRight, ChevronDown, 
   BarChart3, Edit2, Check, AlertCircle, TrendingUp, Trophy, Printer,
   Database, Save, RefreshCw, Settings, CheckCircle2, X, Search, Sparkles,
-  Calendar, Layers, Table, FileSpreadsheet, History
+  Calendar, Layers, Table, FileSpreadsheet, History, FileText
 } from "lucide-react";
+import { formatThaiDate } from "../utils";
+import { ExecutiveModelReport } from "./ExecutiveModelReport";
 
 interface ProjectTrackingProps {
   records: ScreeningRecord[];
@@ -90,7 +92,7 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
   const [targetAreaFilter, setTargetAreaFilter] = useState<string[]>([]);
   const [riskFilter, setRiskFilter] = useState<string[]>([]);
   const [participantFilter, setParticipantFilter] = useState<string[]>([]);
-  const [trackingViewMode, setTrackingViewMode] = useState<"targets" | "visits" | "both">("both");
+  const [trackingViewMode, setTrackingViewMode] = useState<"both" | "executive" | "targets" | "visits">("both");
   const [tableSearch, setTableSearch] = useState<string>("");
   const [targets, setTargets] = useState<Record<string, number>>({});
   const [editingKey, setEditingKey] = useState<string | null>(null);
@@ -714,42 +716,45 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
     setTargetAreaFilter([]);
   };
 
+  const filterSummaryText = useMemo(() => {
+    const parts: string[] = [];
+    if (modelFilter.length > 0) parts.push(`โมเดล: ${modelFilter.join(", ")}`);
+    if (districtFilter.length > 0) parts.push(`อำเภอ: ${districtFilter.map(d => `อ.${d}`).join(", ")}`);
+    if (subdistrictFilter.length > 0) parts.push(`ตำบล: ${subdistrictFilter.map(s => `ต.${s}`).join(", ")}`);
+    if (targetAreaFilter.length > 0) parts.push(`พื้นที่: ${targetAreaFilter.join(", ")}`);
+    if (participantFilter.length > 0) parts.push(`กลุ่ม: ${participantFilter.join(", ")}`);
+    return parts.length > 0 ? `ตัวกรอง: ${parts.join(" | ")}` : "ตัวกรอง: ทุกพื้นที่และทุกกลุ่มเป้าหมาย";
+  }, [modelFilter, districtFilter, subdistrictFilter, targetAreaFilter, participantFilter]);
+
+  const isExecutiveActive = trackingViewMode === "both" || trackingViewMode === "executive";
+
   return (
     <div className="space-y-6">
-      {/* Print Header (hidden on screen) */}
-      <div className="hidden print:block text-center space-y-2 pb-6 border-b border-slate-200 mb-6">
-        <h2 className="text-2xl font-black text-slate-800">รายงานสรุปผลและการติดตามโครงการ (Project Tracking)</h2>
-        <p className="text-slate-600 font-medium">
-          ข้อมูล ณ วันที่ {new Date().toLocaleDateString("th-TH", { year: "numeric", month: "long", day: "numeric" })}
-        </p>
-        <div className="text-sm text-slate-500 flex items-center justify-center gap-4 mt-2 flex-wrap">
-          <span>โมเดล: {modelFilter.length === 0 ? "ทั้งหมด" : modelFilter.join(", ")}</span>
-          <span>อำเภอ: {districtFilter.length === 0 ? "ทั้งหมด" : districtFilter.map(d => `อ.${d}`).join(", ")}</span>
-          <span>ตำบล: {subdistrictFilter.length === 0 ? "ทั้งหมด" : subdistrictFilter.map(s => `ต.${s}`).join(", ")}</span>
-          <span>พื้นที่เป้าหมาย: {targetAreaFilter.length === 0 ? "ทั้งหมด" : targetAreaFilter.join(", ")}</span>
-          <span>กลุ่มข้อมูล: {participantFilter.length === 0 ? "ทั้งหมด" : participantFilter.join(", ")}</span>
-          <span>ความเสี่ยง: {riskFilter.length === 0 ? "ทั้งหมด" : riskFilter.map(v => {
-            const map: Record<string, string> = {
-              "3a2s": "เสี่ยงสูง (3อ. 2ส.)",
-              "smoking": "สูบบุหรี่",
-              "alcohol": "ดื่มแอลกอฮอล์",
-              "food": "อาหาร (หวาน/มัน/เค็ม)",
-              "exercise": "ขาดการออกกำลังกาย",
-              "sleep": "การนอนหลับ"
-            };
-            return map[v] || v;
-          }).join(", ")}</span>
+      {/* Print Header for non-executive table modes (hidden when ExecutiveModelReport renders its own official header) */}
+      {!isExecutiveActive && (
+        <div className="hidden print:block text-center space-y-2 pb-6 border-b border-slate-200 mb-6">
+          <h2 className="text-2xl font-black text-slate-800">รายงานสรุปผลและการติดตามโครงการ (Project Tracking)</h2>
+          <p className="text-slate-600 font-medium">
+            ข้อมูล ณ วันที่ {formatThaiDate(new Date().toISOString().split("T")[0], "full")}
+          </p>
+          <div className="text-sm text-slate-500 flex items-center justify-center gap-4 mt-2 flex-wrap">
+            <span>โมเดล: {modelFilter.length === 0 ? "ทั้งหมด" : modelFilter.join(", ")}</span>
+            <span>อำเภอ: {districtFilter.length === 0 ? "ทั้งหมด" : districtFilter.map(d => `อ.${d}`).join(", ")}</span>
+            <span>ตำบล: {subdistrictFilter.length === 0 ? "ทั้งหมด" : subdistrictFilter.map(s => `ต.${s}`).join(", ")}</span>
+            <span>พื้นที่เป้าหมาย: {targetAreaFilter.length === 0 ? "ทั้งหมด" : targetAreaFilter.join(", ")}</span>
+            <span>กลุ่มข้อมูล: {participantFilter.length === 0 ? "ทั้งหมด" : participantFilter.join(", ")}</span>
+          </div>
         </div>
-      </div>
+      )}
       {/* Header & Overall Summary */}
       <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex flex-col md:flex-row gap-8 items-center justify-between print:hidden">
         <div>
           <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
             <Trophy className="w-6 h-6 text-indigo-500" />
-            สรุปผลและการติดตามโครงการ
+            สรุปผลและการติดตามโครงการ (แยกรายโมเดล & รายงานผู้บริหาร)
           </h2>
           <p className="text-sm text-slate-500 mt-1 font-semibold">
-            ติดตามความก้าวหน้าการคัดกรองแยกตามโมเดลและพื้นที่เป้าหมาย
+            ติดตามความก้าวหน้า กระบวนการดำเนินงาน การบรรลุเป้าหมาย และผลลัพธ์สุขภาพ แยกตามโมเดลตำบลและโมเดลหมู่บ้าน
           </p>
         </div>
 
@@ -771,11 +776,15 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
           </button>
 
           <button 
-            onClick={() => window.print()}
-            className="hidden md:flex text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 px-4 py-2 rounded-xl transition-colors cursor-pointer items-center gap-2"
+            type="button"
+            onClick={() => {
+              setTrackingViewMode("executive");
+              setTimeout(() => window.print(), 120);
+            }}
+            className="flex text-xs font-bold text-emerald-950 bg-emerald-400 hover:bg-emerald-300 px-4 py-2.5 rounded-xl transition-colors cursor-pointer items-center gap-2 shadow-xs"
           >
             <Printer className="w-4 h-4" />
-            พิมพ์รายงาน
+            <span>พิมพ์รายงานผู้บริหาร (แยกรายโมเดล)</span>
           </button>
 
           <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex-1 md:flex-none md:min-w-[140px]">
@@ -949,7 +958,7 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
             <Layers className="w-4 h-4 text-indigo-600" />
             โหมดการแสดงผล:
           </span>
-          <div className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200">
+          <div className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200 flex-wrap gap-1">
             <button
               type="button"
               onClick={() => setTrackingViewMode("both")}
@@ -959,7 +968,19 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
                   : "text-slate-600 hover:text-slate-800"
               }`}
             >
-              📊 แสดงทุกตารางสรุป
+              📊 แสดงครบทุกส่วน (รายงานผู้บริหาร + ตารางติดตาม)
+            </button>
+            <button
+              type="button"
+              onClick={() => setTrackingViewMode("executive")}
+              className={`text-xs px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                trackingViewMode === "executive"
+                  ? "bg-indigo-600 text-white shadow-2xs"
+                  : "text-slate-600 hover:text-slate-800"
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>รายงานผู้บริหารแยกรายโมเดล (สำหรับพิมพ์)</span>
             </button>
             <button
               type="button"
@@ -970,7 +991,7 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
                   : "text-slate-600 hover:text-slate-800"
               }`}
             >
-              📋 ตารางสรุปผลงานตามรายการครั้งที่ (Visits Breakdown)
+              📋 ตารางสรุปผลงานตามรายการครั้งที่ (Visits)
             </button>
             <button
               type="button"
@@ -981,7 +1002,7 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
                   : "text-slate-600 hover:text-slate-800"
               }`}
             >
-              🎯 ติดตามเป้าหมายรายพื้นที่ (Target Progress)
+              🎯 ตั้งค่า & ติดตามเป้าหมายรายพื้นที่
             </button>
           </div>
         </div>
@@ -1013,9 +1034,18 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
         </div>
       </div>
 
+      {/* EXECUTIVE MODEL REPORT SECTION (รายงานสรุปผลและการติดตามโครงการ แยกรายโมเดล สำหรับผู้บริหาร) */}
+      {(trackingViewMode === "both" || trackingViewMode === "executive") && (
+        <ExecutiveModelReport
+          areaStats={stats}
+          filteredRecords={filteredRecords}
+          filterSummaryText={filterSummaryText}
+        />
+      )}
+
       {/* SECTION 1: Overall Project Visits Breakdown Table (ตารางสรุปผลงานภาพรวมตามรายการครั้งที่) */}
       {(trackingViewMode === "visits" || trackingViewMode === "both") && (
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-5">
+        <div className={`bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-5 ${isExecutiveActive ? "print:hidden" : ""}`}>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
             <div className="flex items-center gap-3">
               <div className="bg-indigo-600 text-white p-2.5 rounded-2xl shadow-sm">
@@ -1202,7 +1232,7 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
 
       {/* SECTION 2: Area × Visits Breakdown Matrix Table (ตารางแจกแจงผลงานรายพื้นที่เป้าหมายแยกตามครั้งที่) */}
       {(trackingViewMode === "visits" || trackingViewMode === "both") && (
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-4">
+        <div className={`bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-4 ${isExecutiveActive ? "print:hidden" : ""}`}>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
             <div className="flex items-center gap-3">
               <div className="bg-purple-600 text-white p-2.5 rounded-2xl shadow-sm">
@@ -1352,7 +1382,7 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
 
       {/* SECTION 3: Area Target Setting & Progress Table (ตารางติดตามเป้าหมายรายพื้นที่เดิม) */}
       {(trackingViewMode === "targets" || trackingViewMode === "both") && (
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden print:overflow-visible">
+      <div className={`bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden print:overflow-visible ${isExecutiveActive ? "print:hidden" : ""}`}>
         <div className="p-5 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="bg-indigo-50 text-indigo-600 p-2 rounded-xl shrink-0">
@@ -1555,45 +1585,36 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
                                         <td className="py-2 px-4 text-center font-bold text-amber-600">{d.count}</td>
                                         <td className="py-2 px-4">
                                           <div className="flex flex-wrap gap-1">
-                                            {d.visits.map((v, i) => {
-                                              let dateStr = "";
-                                              if (v.date) {
-                                                const dObj = new Date(v.date);
-                                                if (isNaN(dObj.getTime())) {
-                                                  // Already a formatted string (like "26/7/2569" or similar), so use it as is
-                                                  dateStr = v.date;
-                                                } else {
-                                                  dateStr = dObj.toLocaleDateString("th-TH", { year: "2-digit", month: "short", day: "numeric" });
-                                                }
-                                              }
-                                              return (
-                                              <span key={i} className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-semibold">ครั้งที่ {v.vNum} {dateStr && `(${dateStr})`}</span>
-                                            )})}
-                                          </div>
-                                        </td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
+                                              {d.visits.map((v, i) => {
+                                                const dateStr = v.date ? formatThaiDate(v.date, "short") : "";
+                                                return (
+                                                <span key={i} className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-semibold">ครั้งที่ {v.vNum} {dateStr && `(${dateStr})`}</span>
+                                              )})}
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
                               </div>
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                  </React.Fragment>
-                ))}
-              </AnimatePresence>
-            </tbody>
-          </table>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
+                  ))}
+                </AnimatePresence>
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
-      )}
-      
-      {/* Suggestions / Advice Box based on progress */}
-      {stats.length > 0 && (
-        <div className="bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-100 rounded-2xl p-6 print:break-inside-avoid">
+        )}
+        
+        {/* Suggestions / Advice Box based on progress (shown in visits/targets mode) */}
+        {stats.length > 0 && !isExecutiveActive && (
+          <div className="bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-100 rounded-2xl p-6 print:break-inside-avoid">
           <div className="flex items-start gap-3">
             <div className="bg-white p-2 rounded-xl shadow-sm text-indigo-500">
               <TrendingUp className="w-5 h-5" />

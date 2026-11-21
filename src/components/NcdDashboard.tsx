@@ -4,7 +4,7 @@ import { RefreshCw,
   MapPin, Eye, Trash2, SlidersHorizontal, ArrowUpDown, ChevronDown, 
   Download, FileSpreadsheet, RotateCcw, Cigarette, Wine, Flame, EyeOff,
   Pencil, PlusCircle, History, Apple, Dumbbell, Smile, Moon, Activity, Upload,
-  Layers, UserCheck, Calendar, Check, GitBranch, TrendingUp, CalendarRange, Clock, BarChart2
+  Layers, UserCheck, Calendar, Check, GitBranch, TrendingUp, CalendarRange, Clock, BarChart2, Printer
 } from "lucide-react";
 import { ScreeningRecord, DistrictType, LOCATION_DATA, DISTRICT_SUBDISTRICT_MAP } from "../types";
 import { parseDateToIso, formatYearMonthThai, formatYearMonthThaiShort, getRecordYearMonth, formatThaiDate } from "../utils";
@@ -32,6 +32,7 @@ interface NcdDashboardProps {
   onFollowUpRecord?: (record: ScreeningRecord) => void;
   onImportRecords?: (records: ScreeningRecord[]) => Promise<any> | void;
   onSyncCloud?: () => Promise<any> | void;
+  onOpenExecutiveReport?: () => void;
 }
 
 
@@ -562,7 +563,8 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
   onAddScreeningClicked,
   onFollowUpRecord,
   onImportRecords,
-  onSyncCloud
+  onSyncCloud,
+  onOpenExecutiveReport
 }) => {
   const [recordToDelete, setRecordToDelete] = useState<ScreeningRecord | null>(null);
   const [isCloudSyncing, setIsCloudSyncing] = useState(false);
@@ -1324,20 +1326,32 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
               <p className="text-[10px] text-slate-500">กรองสถิติและการคัดกรองทั้งหมดตามข้อมูลโมเดล อำเภอ ตำบล และพื้นที่เป้าหมาย</p>
             </div>
           </div>
-          {/* Quick Clear Filter Button if any selected */}
-          {(filterModel.length > 0 || filterDistrict.length > 0 || filterSubdistrict.length > 0 || filterTargetArea.length > 0) && (
-            <button 
-              onClick={() => {
-                setFilterModel([]);
-                setFilterDistrict([]);
-                setFilterSubdistrict([]);
-                setFilterTargetArea([]);
-              }}
-              className="text-[10px] font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-2.5 py-1.5 rounded-lg self-start sm:self-center transition-colors"
-            >
-              ล้างตัวกรองพื้นที่ทั้งหมด
-            </button>
-          )}
+          <div className="flex items-center gap-2 flex-wrap self-start sm:self-center">
+            {onOpenExecutiveReport && (
+              <button
+                type="button"
+                onClick={onOpenExecutiveReport}
+                className="text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 rounded-xl transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>พิมพ์รายงานผู้บริหาร & ติดตามโครงการ (แยกรายโมเดล)</span>
+              </button>
+            )}
+            {/* Quick Clear Filter Button if any selected */}
+            {(filterModel.length > 0 || filterDistrict.length > 0 || filterSubdistrict.length > 0 || filterTargetArea.length > 0) && (
+              <button 
+                onClick={() => {
+                  setFilterModel([]);
+                  setFilterDistrict([]);
+                  setFilterSubdistrict([]);
+                  setFilterTargetArea([]);
+                }}
+                className="text-[10px] font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
+              >
+                ล้างตัวกรองพื้นที่ทั้งหมด
+              </button>
+            )}
+          </div>
         </div>
         
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

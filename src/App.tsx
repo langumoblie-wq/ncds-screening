@@ -1220,6 +1220,7 @@ export default function App() {
                   }}
                   onImportRecords={handleImportRecords}
                   onSyncCloud={handleManualSync}
+                  onOpenExecutiveReport={() => setActiveTab("tracking")}
                 />
               </motion.div>
             )}
