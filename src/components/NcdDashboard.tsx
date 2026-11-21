@@ -2304,13 +2304,19 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
                 </div>
 
                 {/* Bars Container */}
-                <div className="pt-8 pb-2 overflow-x-auto">
-                  <div className="flex items-end gap-3 sm:gap-6 min-w-max px-2 h-44 border-b border-slate-200">
+                <div className="pt-4 pb-2 overflow-x-auto">
+                  <div className="flex items-end justify-around gap-3 sm:gap-5 min-w-full w-max px-3 pt-6 pb-3 border-b border-slate-200 relative">
                     {monthlyTrendsData.list.map((m) => {
                       const isCurrentFilter = filterMonthMode === "single" && filterSelectedMonth === m.monthKey;
-                      const barHeightPercent = Math.max(Math.round((m.total / monthlyTrendsData.maxMonthlyTotal) * 100), 12);
-                      const targetPercent = m.total > 0 ? (m.targetGroupCount / m.total) * 100 : 100;
-                      const committeePercent = m.total > 0 ? (m.committeeCount / m.total) * 100 : 0;
+                      const MAX_BAR_PX = 136;
+                      const barHeightPx = m.total > 0
+                        ? Math.max(Math.round((m.total / monthlyTrendsData.maxMonthlyTotal) * MAX_BAR_PX), 16)
+                        : 6;
+                      const committeeRatio = m.total > 0 ? m.committeeCount / m.total : 0;
+                      const committeeHeightPx = m.committeeCount > 0
+                        ? Math.max(Math.round(barHeightPx * committeeRatio), 4)
+                        : 0;
+                      const targetHeightPx = Math.max(barHeightPx - committeeHeightPx, 0);
 
                       return (
                         <div 
@@ -2324,50 +2330,57 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
                               setFilterSelectedMonth(m.monthKey);
                             }
                           }}
-                          className="flex flex-col items-center gap-1.5 cursor-pointer group"
-                          title={`เดือน ${m.label}: ทั้งหมด ${m.total} ราย (กลุ่มเป้าหมาย ${m.targetGroupCount}, คณะทำงาน ${m.committeeCount}) - คลิกเพื่อกรอง`}
+                          className="flex flex-col items-center cursor-pointer group select-none"
+                          title={`เดือน ${m.label}: ทั้งหมด ${m.total.toLocaleString()} ราย (กลุ่มเป้าหมาย ${m.targetGroupCount.toLocaleString()}, คณะทำงาน ${m.committeeCount.toLocaleString()}) - คลิกเพื่อกรอง`}
                         >
-                          {/* Value on top of bar */}
-                          <div className={`text-[11px] font-black transition-transform group-hover:scale-110 ${
-                            isCurrentFilter ? "text-indigo-600 font-extrabold" : "text-slate-700"
-                          }`}>
-                            {m.total}
-                          </div>
-
-                          {/* Stacked Vertical Bar */}
-                          <div 
-                            style={{ height: `${barHeightPercent}%`, minHeight: "24px" }}
-                            className={`w-10 sm:w-14 rounded-t-lg overflow-hidden flex flex-col-reverse shadow-xs transition-all duration-300 group-hover:opacity-90 ${
+                          {/* Bar Track Area with fixed height so all bars align to bottom baseline */}
+                          <div className="h-[164px] flex flex-col justify-end items-center">
+                            {/* Value on top of bar */}
+                            <div className={`text-[11px] font-black mb-1.5 px-1.5 py-0.5 rounded-md transition-all group-hover:scale-110 ${
                               isCurrentFilter 
-                                ? "ring-2 ring-indigo-500 ring-offset-2 scale-105" 
-                                : "hover:scale-102"
-                            }`}
-                          >
-                            {/* Blue: Target group */}
+                                ? "bg-indigo-600 text-white shadow-xs" 
+                                : "text-slate-700 group-hover:text-indigo-600"
+                            }`}>
+                              {m.total.toLocaleString()}
+                            </div>
+
+                            {/* Stacked Vertical Bar */}
                             <div 
-                              style={{ height: `${targetPercent}%` }} 
-                              className="w-full bg-blue-500 transition-all duration-300"
-                              title={`กลุ่มเป้าหมายโครงการ: ${m.targetGroupCount} ราย`}
-                            />
-                            {/* Purple: Working group */}
-                            {m.committeeCount > 0 && (
-                              <div 
-                                style={{ height: `${committeePercent}%` }} 
-                                className="w-full bg-purple-500 transition-all duration-300"
-                                title={`คณะทำงาน: ${m.committeeCount} ราย`}
-                              />
-                            )}
+                              style={{ height: `${barHeightPx}px` }}
+                              className={`w-11 sm:w-14 rounded-t-lg overflow-hidden flex flex-col justify-end shadow-xs transition-all duration-300 ${
+                                isCurrentFilter 
+                                  ? "ring-2 ring-indigo-600 ring-offset-2 scale-105" 
+                                  : "group-hover:opacity-90 group-hover:scale-[1.03]"
+                              }`}
+                            >
+                              {/* Purple: Working group (top segment) */}
+                              {committeeHeightPx > 0 && (
+                                <div 
+                                  style={{ height: `${committeeHeightPx}px` }} 
+                                  className="w-full bg-purple-500 transition-all duration-300 shrink-0"
+                                  title={`คณะทำงาน: ${m.committeeCount.toLocaleString()} ราย`}
+                                />
+                              )}
+                              {/* Blue: Target group (bottom segment) */}
+                              {targetHeightPx > 0 && (
+                                <div 
+                                  style={{ height: `${targetHeightPx}px` }} 
+                                  className="w-full bg-blue-500 transition-all duration-300 shrink-0"
+                                  title={`กลุ่มเป้าหมายโครงการ: ${m.targetGroupCount.toLocaleString()} ราย`}
+                                />
+                              )}
+                            </div>
                           </div>
 
-                          {/* Month Label below */}
-                          <div className="text-center pt-1.5">
+                          {/* Month Label below baseline */}
+                          <div className="text-center pt-2.5">
                             <span className={`block text-[11px] font-bold transition-colors ${
-                              isCurrentFilter ? "text-indigo-700 font-black" : "text-slate-600 group-hover:text-indigo-600"
+                              isCurrentFilter ? "text-indigo-700 font-black" : "text-slate-700 group-hover:text-indigo-600"
                             }`}>
                               {m.labelShort}
                             </span>
-                            <span className="block text-[9px] text-slate-400 font-medium">
-                              (แรก {m.initialCount} / ซ้ำ {m.followUpCount})
+                            <span className="block text-[9px] text-slate-400 font-medium mt-0.5 whitespace-nowrap">
+                              (แรก {m.initialCount.toLocaleString()} / ซ้ำ {m.followUpCount.toLocaleString()})
                             </span>
                           </div>
                         </div>
