@@ -1,10 +1,11 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { ScreeningRecord, EXACT_LOCATION_LIST } from "../types";
+import { ScreeningRecord, PROJECT_PERFORMANCE_AREAS, SUBDISTRICT_MODEL_AREAS, VILLAGE_MODEL_AREAS } from "../types";
 import { supabase } from "../lib/supabase";
 import { 
   getRecordModel, 
   getRecordSubdistrict,
+  getRecordPerformanceUnit,
   cleanDistrict,
   cleanSubdistrict,
   cleanTargetArea,
@@ -252,89 +253,67 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records, hideN
     setEditingKey(key);
   };
 
-  // Get distinct districts for filter
+  const isOnlyVillageModel = modelFilter.includes("หมู่บ้าน") && !modelFilter.includes("ตำบล");
+  const isOnlySubdistrictModel = modelFilter.includes("ตำบล") && !modelFilter.includes("หมู่บ้าน");
+
+  // Get distinct districts for filter based on selected model (อำเภอ จังหวัดสตูล ไว้ดูรายละเอียดของโมเดล)
   const allDistricts = useMemo(() => {
     const d = new Set<string>();
-    const allKnownDistricts = ["เมือง", "ละงู", "ท่าแพ", "ควนกาหลง", "ควนโดน", "ทุ่งหว้า", "มะนัง"];
-    allKnownDistricts.forEach(dist => d.add(dist));
-    EXACT_LOCATION_LIST.forEach(loc => {
+    const sourceAreas = isOnlyVillageModel
+      ? VILLAGE_MODEL_AREAS
+      : isOnlySubdistrictModel
+      ? SUBDISTRICT_MODEL_AREAS
+      : PROJECT_PERFORMANCE_AREAS;
+
+    sourceAreas.forEach(loc => {
       if (loc.district) d.add(cleanDistrict(loc.district));
     });
-    records.forEach(r => {
-      if (r.district) d.add(cleanDistrict(r.district));
-    });
-    return Array.from(d).sort();
-  }, [records]);
+    return Array.from(d).sort((a, b) => a.localeCompare(b, "th"));
+  }, [isOnlyVillageModel, isOnlySubdistrictModel]);
 
-  // Available subdistricts based on selected model and district filters
+  // โมเดลตำบล (5 ตำบล): ให้เลือกข้อมูลตำบล ในส่วนอำเภอไว้สำหรับดูรายละเอียดของโมเดล
   const allSubdistricts = useMemo(() => {
-    const subs = new Set<string>();
-    
-    // From official EXACT_LOCATION_LIST
-    EXACT_LOCATION_LIST.forEach(loc => {
-      const matchModel = modelFilter.length === 0 || matchesModelFilter({ modelType: loc.model as any }, modelFilter);
-      const matchDist = districtFilter.length === 0 || matchesDistrictFilter(loc.district, districtFilter);
-      if (matchModel && matchDist && loc.subdistrict) {
-        subs.add(cleanSubdistrict(loc.subdistrict));
-      }
-    });
+    return SUBDISTRICT_MODEL_AREAS
+      .filter(loc => districtFilter.length === 0 || matchesDistrictFilter(loc.district, districtFilter))
+      .map(loc => loc.areaName);
+  }, [districtFilter]);
 
-    // From records
-    records.forEach(r => {
-      const matchModel = modelFilter.length === 0 || matchesModelFilter({ modelType: (r.modelType || getRecordModel(r)) as any }, modelFilter);
-      const matchDist = districtFilter.length === 0 || matchesDistrictFilter(r.district, districtFilter);
-      if (matchModel && matchDist) {
-        const sub = cleanSubdistrict(r.subdistrict || getRecordSubdistrict(r));
-        if (sub) subs.add(sub);
-      }
-    });
-
-    return Array.from(subs).filter(Boolean).sort();
-  }, [records, modelFilter, districtFilter]);
-
-  // Available target areas based on selected model, district, and subdistrict filters
+  // โมเดลหมู่บ้าน (10 พื้นที่): ให้เลือกข้อมูล พื้นที่เป้าหมาย (หมู่บ้าน/รพ.สต.) ในส่วนอำเภอไว้สำหรับดูรายละเอียดของโมเดล
   const allTargetAreas = useMemo(() => {
-    const areas = new Set<string>();
+    return VILLAGE_MODEL_AREAS
+      .filter(loc => districtFilter.length === 0 || matchesDistrictFilter(loc.district, districtFilter))
+      .map(loc => loc.areaName);
+  }, [districtFilter]);
 
-    // From official EXACT_LOCATION_LIST
-    EXACT_LOCATION_LIST.forEach(loc => {
-      const matchModel = modelFilter.length === 0 || matchesModelFilter({ modelType: loc.model as any }, modelFilter);
-      const matchDist = districtFilter.length === 0 || matchesDistrictFilter(loc.district, districtFilter);
-      const matchSub = subdistrictFilter.length === 0 || matchesSubdistrictFilter(loc.subdistrict, subdistrictFilter);
-      if (matchModel && matchDist && matchSub && loc.targetArea) {
-        areas.add(cleanTargetArea(loc.targetArea));
-      }
-    });
+  // Cascade clear/prune dependent filters when model or district filter changes
+  useEffect(() => {
+    if (isOnlyVillageModel && subdistrictFilter.length > 0) {
+      setSubdistrictFilter([]);
+    }
+    if (isOnlySubdistrictModel && targetAreaFilter.length > 0) {
+      setTargetAreaFilter([]);
+    }
+  }, [isOnlyVillageModel, isOnlySubdistrictModel]);
 
-    // From records
-    records.forEach(r => {
-      const matchModel = modelFilter.length === 0 || matchesModelFilter({ modelType: (r.modelType || getRecordModel(r)) as any }, modelFilter);
-      const matchDist = districtFilter.length === 0 || matchesDistrictFilter(r.district, districtFilter);
-      const sub = cleanSubdistrict(r.subdistrict || getRecordSubdistrict(r));
-      const matchSub = subdistrictFilter.length === 0 || matchesSubdistrictFilter(sub, subdistrictFilter);
-      if (matchModel && matchDist && matchSub && r.targetArea) {
-        areas.add(cleanTargetArea(r.targetArea));
-      }
-    });
+  useEffect(() => {
+    if (districtFilter.length > 0) {
+      setDistrictFilter(prev => prev.filter(d => allDistricts.includes(d)));
+    }
+  }, [allDistricts]);
 
-    return Array.from(areas).filter(Boolean).sort();
-  }, [records, modelFilter, districtFilter, subdistrictFilter]);
-
-  // Cascade clear/prune dependent subdistricts when district filter changes
   useEffect(() => {
     if (subdistrictFilter.length > 0) {
       setSubdistrictFilter(prev => prev.filter(s => allSubdistricts.includes(s)));
     }
   }, [allSubdistricts]);
 
-  // Cascade clear/prune dependent target areas when district or subdistrict filter changes
   useEffect(() => {
     if (targetAreaFilter.length > 0) {
       setTargetAreaFilter(prev => prev.filter(a => allTargetAreas.includes(a)));
     }
   }, [allTargetAreas]);
 
-  // Filtered records based on participant category, health risk, model, district, subdistrict, and target area
+  // Filtered records based on participant category, health risk, model, district, subdistrict (5 ตำบล), and target area (10 พื้นที่)
   const filteredRecords = useMemo(() => {
     let list = records;
     if (riskFilter.length > 0) {
@@ -369,22 +348,35 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records, hideN
     }
 
     if (modelFilter.length > 0) {
-      list = list.filter(r => matchesModelFilter({ modelType: r.modelType as any }, modelFilter));
-    }
-
-    if (districtFilter.length > 0) {
-      list = list.filter(r => matchesDistrictFilter(r.district, districtFilter));
-    }
-
-    if (subdistrictFilter.length > 0) {
       list = list.filter(r => {
-        const sub = cleanSubdistrict(r.subdistrict || getRecordSubdistrict(r));
-        return matchesSubdistrictFilter(sub, subdistrictFilter);
+        const unit = getRecordPerformanceUnit(r);
+        return modelFilter.includes(unit.model);
       });
     }
 
-    if (targetAreaFilter.length > 0) {
-      list = list.filter(r => matchesTargetAreaFilter(r.targetArea, targetAreaFilter));
+    if (districtFilter.length > 0) {
+      list = list.filter(r => {
+        const unit = getRecordPerformanceUnit(r);
+        return matchesDistrictFilter(unit.district, districtFilter);
+      });
+    }
+
+    if (subdistrictFilter.length > 0 || targetAreaFilter.length > 0) {
+      list = list.filter(r => {
+        const unit = getRecordPerformanceUnit(r);
+        if (subdistrictFilter.length > 0 && targetAreaFilter.length > 0) {
+          const matchSubModel = unit.model === "ตำบล" && (subdistrictFilter.includes(unit.areaName) || matchesSubdistrictFilter(unit.subdistrict, subdistrictFilter));
+          const matchVilModel = unit.model === "หมู่บ้าน" && (targetAreaFilter.includes(unit.areaName) || matchesTargetAreaFilter(r.targetArea, targetAreaFilter));
+          return matchSubModel || matchVilModel;
+        }
+        if (subdistrictFilter.length > 0) {
+          return unit.model === "ตำบล" && (subdistrictFilter.includes(unit.areaName) || matchesSubdistrictFilter(unit.subdistrict, subdistrictFilter));
+        }
+        if (targetAreaFilter.length > 0) {
+          return unit.model === "หมู่บ้าน" && (targetAreaFilter.includes(unit.areaName) || matchesTargetAreaFilter(r.targetArea, targetAreaFilter));
+        }
+        return true;
+      });
     }
 
     return list;
@@ -436,7 +428,8 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records, hideN
 
       const item = map[v];
       item.total += 1;
-      if (r.name) item.uniquePatients.add(r.name);
+      const normName = (r.name || "").trim().replace(/\s+/g, " ");
+      if (normName) item.uniquePatients.add(normName);
 
       if (r.participantType === "คณะทำงาน") {
         item.committeeCount += 1;
@@ -496,11 +489,12 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records, hideN
       };
     });
 
-    const totalUniqueAll = new Set(filteredRecords.map(r => r.name).filter(Boolean)).size;
+    const totalUniqueAll = new Set(filteredRecords.map(r => (r.name || "").trim().replace(/\s+/g, " ")).filter(Boolean)).size;
     const peopleWithMultipleVisits = Object.values(
       filteredRecords.reduce((acc, r) => {
-        if (!r.name) return acc;
-        acc[r.name] = (acc[r.name] || 0) + 1;
+        const normName = (r.name || "").trim().replace(/\s+/g, " ");
+        if (!normName) return acc;
+        acc[normName] = (acc[normName] || 0) + 1;
         return acc;
       }, {} as Record<string, number>)
     ).filter(c => c > 1).length;
@@ -518,7 +512,9 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records, hideN
   }, [filteredRecords]);
 
   const stats = useMemo(() => {
-    // group by: modelType + district + area
+    // group by the 15 official project performance units:
+    // - โมเดลตำบล: 5 ตำบล (ตำบลพิมาน, ตำบลคลองขุด, ตำบลขอนคลาน, ตำบลเขาขาว, ตำบลอุใดเจริญ)
+    // - โมเดลหมู่บ้าน: 10 พื้นที่เป้าหมาย (บ้านผัง 8,11,12, บ้านผัง16,17,19,20, บ้านปาล์มทองพัฒนา, บ้านตำมะลัง, บ้านเขาจีน, บ้านเกาะยาว, ชุมชนท่านายเนาว์, บ้านวังยาว, บ้านสันติสุข, บ้านควนไสน)
     const grouped: Record<string, {
       modelType: string;
       district: string;
@@ -529,14 +525,13 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records, hideN
       records: ScreeningRecord[];
     }> = {};
 
-    // Pre-populate all official project locations so targets can be set and tracked even before records are added
-    EXACT_LOCATION_LIST.forEach(loc => {
-      const key = `${loc.model}|${loc.district}|${loc.targetArea}`;
+    PROJECT_PERFORMANCE_AREAS.forEach(loc => {
+      const key = `${loc.model}|${loc.district}|${loc.areaName}`;
       grouped[key] = {
         modelType: loc.model,
         district: loc.district,
         subdistrict: loc.subdistrict,
-        area: loc.targetArea,
+        area: loc.areaName,
         uniquePatients: new Set(),
         totalVisits: 0,
         records: []
@@ -544,36 +539,23 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records, hideN
     });
 
     filteredRecords.forEach(r => {
-      const mType = r.modelType || getRecordModel(r) || "หมู่บ้าน";
-      const sub = cleanSubdistrict(r.subdistrict || getRecordSubdistrict(r));
-      const dist = cleanDistrict(r.district) || "เมือง";
-
-      // Match with EXACT_LOCATION_LIST entry if targetArea matches
-      const matchedLoc = EXACT_LOCATION_LIST.find(loc => 
-        loc.model === mType && 
-        cleanDistrict(loc.district) === dist &&
-        (loc.targetArea === r.targetArea || (r.targetArea && matchesTargetAreaFilter(r.targetArea, [loc.targetArea])))
-      );
-
-      const area = matchedLoc ? matchedLoc.targetArea : (r.targetArea || (sub ? `ต.${sub}` : "ไม่ระบุพื้นที่"));
-      const finalSub = matchedLoc?.subdistrict || sub;
-      const key = `${mType}|${dist}|${area}`;
+      const unit = getRecordPerformanceUnit(r);
+      const key = `${unit.model}|${unit.district}|${unit.areaName}`;
       
       if (!grouped[key]) {
         grouped[key] = {
-          modelType: mType,
-          district: dist,
-          subdistrict: finalSub,
-          area: area,
+          modelType: unit.model,
+          district: unit.district,
+          subdistrict: unit.subdistrict,
+          area: unit.areaName,
           uniquePatients: new Set(),
           totalVisits: 0,
           records: []
         };
       }
       
-      if (r.name) {
-        grouped[key].uniquePatients.add(r.name);
-      }
+      const normName = (r.name || "").trim().replace(/\s+/g, " ") || `id_${r.id}`;
+      grouped[key].uniquePatients.add(normName);
       grouped[key].totalVisits += 1;
       grouped[key].records.push(r);
     });
@@ -590,16 +572,15 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records, hideN
       data.records.forEach(r => {
         const vNum = r.visitNumber || 1;
         if (!visitBreakdown[vNum]) visitBreakdown[vNum] = new Set();
-        if (r.name) {
-          visitBreakdown[vNum].add(r.name);
-          nameCounts[r.name] = (nameCounts[r.name] || 0) + 1;
-        }
+        const normName = (r.name || "").trim().replace(/\s+/g, " ") || `id_${r.id}`;
+        visitBreakdown[vNum].add(normName);
+        nameCounts[normName] = (nameCounts[normName] || 0) + 1;
       });
 
       for (const [name, count] of Object.entries(nameCounts)) {
         if (count > 1) {
           const personVisits = data.records
-            .filter(r => r.name === name)
+            .filter(r => ((r.name || "").trim().replace(/\s+/g, " ") || `id_${r.id}`) === name)
             .map(r => ({ vNum: r.visitNumber || 1, date: r.date || "" }))
             .sort((a,b) => a.vNum - b.vNum);
           duplicates.push({ name, count, visits: personVisits });
@@ -622,7 +603,7 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records, hideN
         }
       });
       const followUpCount = duplicates.length;
-      const followUpRate = v1Count > 0 ? (followUpCount / v1Count) * 100 : 0;
+      const followUpRate = achieved > 0 ? (followUpCount / achieved) * 100 : 0;
 
       return {
         key,
@@ -643,16 +624,26 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records, hideN
     });
 
     if (modelFilter.length > 0) {
-      result = result.filter(r => matchesModelFilter({ modelType: r.modelType as any }, modelFilter));
+      result = result.filter(r => modelFilter.includes(r.modelType));
     }
     if (districtFilter.length > 0) {
       result = result.filter(r => matchesDistrictFilter(r.district, districtFilter));
     }
-    if (subdistrictFilter.length > 0) {
-      result = result.filter(r => matchesSubdistrictFilter(r.subdistrict, subdistrictFilter));
-    }
-    if (targetAreaFilter.length > 0) {
-      result = result.filter(r => matchesTargetAreaFilter(r.area, targetAreaFilter));
+    if (subdistrictFilter.length > 0 || targetAreaFilter.length > 0) {
+      result = result.filter(r => {
+        if (subdistrictFilter.length > 0 && targetAreaFilter.length > 0) {
+          const matchSub = r.modelType === "ตำบล" && (subdistrictFilter.includes(r.area) || matchesSubdistrictFilter(r.subdistrict, subdistrictFilter));
+          const matchVil = r.modelType === "หมู่บ้าน" && (targetAreaFilter.includes(r.area) || matchesTargetAreaFilter(r.area, targetAreaFilter));
+          return matchSub || matchVil;
+        }
+        if (subdistrictFilter.length > 0) {
+          return r.modelType === "ตำบล" && (subdistrictFilter.includes(r.area) || matchesSubdistrictFilter(r.subdistrict, subdistrictFilter));
+        }
+        if (targetAreaFilter.length > 0) {
+          return r.modelType === "หมู่บ้าน" && (targetAreaFilter.includes(r.area) || matchesTargetAreaFilter(r.area, targetAreaFilter));
+        }
+        return true;
+      });
     }
     if (tableSearch.trim()) {
       const q = tableSearch.toLowerCase().trim();
@@ -907,35 +898,49 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records, hideN
           />
 
           <MultiSelectDropdown 
-            options={["หมู่บ้าน", "ตำบล", "ไม่ระบุโมเดล"]}
+            options={["หมู่บ้าน", "ตำบล"]}
             selected={modelFilter}
-            onChange={setModelFilter}
-            placeholder="ทุกโมเดล"
-            labelKey={(v) => v === "ไม่ระบุโมเดล" ? "ไม่ระบุโมเดล" : `โมเดล${v}`}
+            onChange={(val) => {
+              setModelFilter(val);
+              if (val.includes("หมู่บ้าน") && !val.includes("ตำบล")) {
+                setSubdistrictFilter([]);
+              } else if (val.includes("ตำบล") && !val.includes("หมู่บ้าน")) {
+                setTargetAreaFilter([]);
+              }
+            }}
+            placeholder="ทุกโมเดล (ตำบล 5 / หมู่บ้าน 10)"
+            labelKey={(v) => v === "ตำบล" ? "โมเดลตำบล (5 ตำบล)" : "โมเดลหมู่บ้าน (10 พื้นที่)"}
           />
 
+          {/* 1. โมเดลหมู่บ้าน -> เลือกข้อมูล พื้นที่เป้าหมาย (หมู่บ้าน/รพ.สต.) 10 พื้นที่ */}
+          {!isOnlySubdistrictModel && (
+            <MultiSelectDropdown 
+              options={allTargetAreas}
+              selected={targetAreaFilter}
+              onChange={setTargetAreaFilter}
+              placeholder="พื้นที่เป้าหมาย (หมู่บ้าน/รพ.สต.) (10 พื้นที่)"
+              labelKey={(v) => v}
+            />
+          )}
+
+          {/* 2. โมเดลตำบล -> เลือกข้อมูลตำบล 5 ตำบล */}
+          {!isOnlyVillageModel && (
+            <MultiSelectDropdown 
+              options={allSubdistricts}
+              selected={subdistrictFilter}
+              onChange={setSubdistrictFilter}
+              placeholder="ข้อมูลตำบล (โมเดลตำบล 5 ตำบล)"
+              labelKey={(v) => v.startsWith("ตำบล") ? v : `ตำบล${v}`}
+            />
+          )}
+
+          {/* อำเภอ (จังหวัดสตูล) ไว้สำหรับดูรายละเอียดของโมเดล */}
           <MultiSelectDropdown 
             options={allDistricts}
             selected={districtFilter}
             onChange={setDistrictFilter}
-            placeholder="ทุกอำเภอ"
+            placeholder="อำเภอ (จ.สตูล - ดูรายละเอียดโมเดล)"
             labelKey={(v) => `อ.${v}`}
-          />
-
-          <MultiSelectDropdown 
-            options={allSubdistricts}
-            selected={subdistrictFilter}
-            onChange={setSubdistrictFilter}
-            placeholder="ทุกตำบล"
-            labelKey={(v) => `ต.${v}`}
-          />
-
-          <MultiSelectDropdown 
-            options={allTargetAreas}
-            selected={targetAreaFilter}
-            onChange={setTargetAreaFilter}
-            placeholder="ทุกพื้นที่เป้าหมาย"
-            labelKey={(v) => v}
           />
 
           {hasActiveFilters && (
@@ -957,26 +962,26 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records, hideN
             <span className="text-slate-400 font-bold mr-1 text-[11px]">ตัวกรองที่เลือก:</span>
             {modelFilter.map(m => (
               <span key={m} className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-indigo-50 text-indigo-700 font-semibold border border-indigo-100 text-[11px]">
-                โมเดล: {m}
+                โมเดล: {m === "ตำบล" ? "โมเดลตำบล (5 ตำบล)" : "โมเดลหมู่บ้าน (10 พื้นที่)"}
                 <button type="button" onClick={() => setModelFilter(prev => prev.filter(x => x !== m))} className="hover:text-indigo-900 cursor-pointer ml-0.5 font-bold">×</button>
-              </span>
-            ))}
-            {districtFilter.map(d => (
-              <span key={d} className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-blue-50 text-blue-700 font-semibold border border-blue-100 text-[11px]">
-                อ.{d}
-                <button type="button" onClick={() => setDistrictFilter(prev => prev.filter(x => x !== d))} className="hover:text-blue-900 cursor-pointer ml-0.5 font-bold">×</button>
-              </span>
-            ))}
-            {subdistrictFilter.map(s => (
-              <span key={s} className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-cyan-50 text-cyan-700 font-semibold border border-cyan-100 text-[11px]">
-                ต.{s}
-                <button type="button" onClick={() => setSubdistrictFilter(prev => prev.filter(x => x !== s))} className="hover:text-cyan-900 cursor-pointer ml-0.5 font-bold">×</button>
               </span>
             ))}
             {targetAreaFilter.map(a => (
               <span key={a} className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-emerald-50 text-emerald-700 font-semibold border border-emerald-100 text-[11px]">
-                พื้นที่: {a}
+                พื้นที่เป้าหมาย (หมู่บ้าน/รพ.สต.): {a}
                 <button type="button" onClick={() => setTargetAreaFilter(prev => prev.filter(x => x !== a))} className="hover:text-emerald-900 cursor-pointer ml-0.5 font-bold">×</button>
+              </span>
+            ))}
+            {subdistrictFilter.map(s => (
+              <span key={s} className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-cyan-50 text-cyan-700 font-semibold border border-cyan-100 text-[11px]">
+                ข้อมูลตำบล: {s.startsWith("ตำบล") ? s : `ตำบล${s}`}
+                <button type="button" onClick={() => setSubdistrictFilter(prev => prev.filter(x => x !== s))} className="hover:text-cyan-900 cursor-pointer ml-0.5 font-bold">×</button>
+              </span>
+            ))}
+            {districtFilter.map(d => (
+              <span key={d} className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-blue-50 text-blue-700 font-semibold border border-blue-100 text-[11px]">
+                อำเภอ (จ.สตูล): อ.{d}
+                <button type="button" onClick={() => setDistrictFilter(prev => prev.filter(x => x !== d))} className="hover:text-blue-900 cursor-pointer ml-0.5 font-bold">×</button>
               </span>
             ))}
             {participantFilter.map(p => (

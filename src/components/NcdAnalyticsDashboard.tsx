@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { ScreeningRecord, LOCATION_DATA, DistrictType, DISTRICT_SUBDISTRICT_MAP } from "../types";
+import { ScreeningRecord, LOCATION_DATA, DistrictType, DISTRICT_SUBDISTRICT_MAP, PROJECT_PERFORMANCE_AREAS, SUBDISTRICT_MODEL_AREAS, VILLAGE_MODEL_AREAS } from "../types";
 import { 
   getRecordModel, 
   getRecordSubdistrict,
+  getRecordPerformanceUnit,
   cleanDistrict,
   cleanSubdistrict,
   cleanTargetArea,
@@ -60,76 +61,35 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
     setFilterTargetArea("");
   }, [filterModel]);
 
-  useEffect(() => {
-    setFilterSubdistrict("");
-    setFilterTargetArea("");
-  }, [filterDistrict]);
-
-  useEffect(() => {
-    setFilterTargetArea("");
-  }, [filterSubdistrict]);
-
-  // Dynamic dropdown options strictly adhering to official location configuration
+  // Dynamic dropdown options strictly adhering to 2-model performance configuration (5 ตำบล + 10 หมู่บ้าน)
   const availableDistricts = useMemo(() => {
     const districtsSet = new Set<string>();
-    if (filterModel === "หมู่บ้าน") {
-      Object.keys(LOCATION_DATA["หมู่บ้าน"]).forEach(d => {
-        if (d !== "เมืองสตูล") districtsSet.add(cleanDistrict(d));
-      });
-    } else if (filterModel === "ตำบล") {
-      Object.keys(LOCATION_DATA["ตำบล"]).forEach(d => {
-        if (d !== "เมืองสตูล") districtsSet.add(cleanDistrict(d));
-      });
-    } else {
-      ["ควนกาหลง", "ทุ่งหว้า", "มะนัง", "เมือง", "ละงู"].forEach(d => districtsSet.add(d));
-    }
+    PROJECT_PERFORMANCE_AREAS.forEach(item => {
+      if (filterModel && item.model !== filterModel) return;
+      districtsSet.add(cleanDistrict(item.district));
+    });
     return Array.from(districtsSet) as DistrictType[];
   }, [filterModel]);
 
+  // 2. โมเดลตำบล -> ให้เลือก ข้อมูลตำบล (5 ตำบล)
   const availableSubdistricts = useMemo(() => {
     const subdistSet = new Set<string>();
-    const targetDistricts = filterDistrict 
-      ? [cleanDistrict(filterDistrict)] 
-      : (availableDistricts as string[]);
-
-    targetDistricts.forEach(dist => {
-      if (filterModel === "หมู่บ้าน") {
-        const dData = (LOCATION_DATA["หมู่บ้าน"] as any)?.[dist];
-        if (dData) Object.keys(dData).forEach(s => subdistSet.add(cleanSubdistrict(s)));
-      } else if (filterModel === "ตำบล") {
-        const dData = (LOCATION_DATA["ตำบล"] as any)?.[dist];
-        if (dData) Object.keys(dData).forEach(s => subdistSet.add(cleanSubdistrict(s)));
-      } else {
-        const dMap = DISTRICT_SUBDISTRICT_MAP[dist as DistrictType];
-        if (dMap) Object.keys(dMap).forEach(s => subdistSet.add(cleanSubdistrict(s)));
-      }
+    SUBDISTRICT_MODEL_AREAS.forEach(item => {
+      if (filterDistrict && cleanDistrict(item.district) !== cleanDistrict(filterDistrict)) return;
+      subdistSet.add(cleanSubdistrict(item.subdistrict));
     });
-
     return Array.from(subdistSet);
-  }, [filterModel, filterDistrict, availableDistricts]);
+  }, [filterDistrict]);
 
+  // 1. โมเดลหมู่บ้าน -> ให้เลือก ข้อมูล พื้นที่เป้าหมาย (หมู่บ้าน/รพ.สต.) (10 พื้นที่)
   const availableTargetAreas = useMemo(() => {
     const areaSet = new Set<string>();
-    const targetDistricts = filterDistrict 
-      ? [cleanDistrict(filterDistrict)] 
-      : (availableDistricts as string[]);
-
-    targetDistricts.forEach(dist => {
-      const modelsToCheck = filterModel === "หมู่บ้าน" ? ["หมู่บ้าน"] : (filterModel === "ตำบล" ? ["ตำบล"] : ["หมู่บ้าน", "ตำบล"]);
-      modelsToCheck.forEach(m => {
-        const distData = (LOCATION_DATA[m as keyof typeof LOCATION_DATA] as any)?.[dist];
-        if (distData) {
-          Object.entries(distData).forEach(([sub, areas]) => {
-            if (!filterSubdistrict || matchesSubdistrictFilter(cleanSubdistrict(sub), [filterSubdistrict])) {
-              (areas as string[]).forEach(a => areaSet.add(cleanTargetArea(a)));
-            }
-          });
-        }
-      });
+    VILLAGE_MODEL_AREAS.forEach(item => {
+      if (filterDistrict && cleanDistrict(item.district) !== cleanDistrict(filterDistrict)) return;
+      areaSet.add(item.areaName);
     });
-
     return Array.from(areaSet);
-  }, [filterModel, filterDistrict, filterSubdistrict, availableDistricts]);
+  }, [filterDistrict]);
 
   // Patient latest visit map for deduplication and visit mode
   const latestPatientMap = useMemo(() => {
@@ -176,11 +136,16 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
   // Apply filters to records
   const filteredRecords = useMemo(() => {
     return records.filter((r) => {
+      const perfUnit = getRecordPerformanceUnit(r);
       const matchesModel = filterModel ? matchesModelFilter(r, [filterModel]) : true;
-      const matchesDistrict = filterDistrict ? matchesDistrictFilter(r.district, [filterDistrict]) : true;
-      const recordSub = cleanSubdistrict(r.subdistrict || getRecordSubdistrict(r));
-      const matchesSubdistrict = filterSubdistrict ? matchesSubdistrictFilter(recordSub, [filterSubdistrict]) : true;
-      const matchesTargetArea = matchesTargetAreaFilter(r.targetArea, filterTargetArea ? [filterTargetArea] : []);
+      const matchesDistrict = filterDistrict ? matchesDistrictFilter(perfUnit.district || r.district, [filterDistrict]) : true;
+      const recordSub = cleanSubdistrict(perfUnit.subdistrict || r.subdistrict || getRecordSubdistrict(r));
+      const matchesSubdistrict = filterSubdistrict
+        ? perfUnit.model === "ตำบล" && matchesSubdistrictFilter(recordSub, [filterSubdistrict])
+        : true;
+      const matchesTargetArea = filterTargetArea
+        ? perfUnit.model === "หมู่บ้าน" && matchesTargetAreaFilter(perfUnit.areaName || r.targetArea, [filterTargetArea])
+        : true;
 
       // Visit Mode filter
       const key = `${r.name}_${r.phone || ""}`;
@@ -376,10 +341,11 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
     const healthyNormalPct = healthyCount > 0 ? Math.round((healthyNormalCount / healthyCount) * 100) : 0;
     const unhealthyNormalPct = unhealthyCount > 0 ? Math.round((unhealthyNormalCount / unhealthyCount) * 100) : 0;
 
-    // 3. Hotspot Spatial Risk (Group by Target Area / Village)
+    // 3. Hotspot Spatial Risk (Group by 15 Performance Areas: 5 ตำบล + 10 หมู่บ้าน)
     const areaStats: Record<string, { total: number; riskOrDanger: number }> = {};
     filteredRecords.forEach(r => {
-      const area = r.targetArea || "ไม่ระบุพื้นที่";
+      const perfUnit = getRecordPerformanceUnit(r);
+      const area = perfUnit.areaName || r.targetArea || "ไม่ระบุพื้นที่";
       if (!areaStats[area]) {
         areaStats[area] = { total: 0, riskOrDanger: 0 };
       }
@@ -399,7 +365,7 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
       .filter(a => a.total >= 1) // only count active areas
       .sort((a, b) => b.riskPct - a.riskPct);
 
-    // 4. Model comparison (Village vs Subdistrict)
+    // 4. Model comparison (Village 10 areas vs Subdistrict 5 areas)
     let mbTotal = 0, mbNormal = 0, mbRisk = 0, mbDanger = 0;
     let tbTotal = 0, tbNormal = 0, tbRisk = 0, tbDanger = 0;
 
@@ -414,14 +380,8 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
     };
 
     filteredRecords.forEach(r => {
-      let recordModel = r.modelType || "";
-      if (!recordModel && r.district && r.targetArea) {
-        if ((LOCATION_DATA["หมู่บ้าน"] as any)?.[r.district]?.[r.subdistrict || ""]?.includes(r.targetArea)) {
-          recordModel = "หมู่บ้าน";
-        } else if ((LOCATION_DATA["ตำบล"] as any)?.[r.district]?.[r.subdistrict || ""]?.includes(r.targetArea)) {
-          recordModel = "ตำบล";
-        }
-      }
+      const perfUnit = getRecordPerformanceUnit(r);
+      const recordModel = perfUnit.model || getRecordModel(r);
 
       if (recordModel === "หมู่บ้าน") {
         mbTotal++;
@@ -602,7 +562,7 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
           </div>
         </div>
         
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3">
+        <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 ${filterModel ? "lg:grid-cols-6" : "lg:grid-cols-7"} gap-3`}>
           {/* Month-Year Filter */}
           <div className="space-y-1">
             <label className="block text-[10px] font-bold text-indigo-600 flex items-center gap-1">
@@ -639,61 +599,75 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
 
           {/* Model */}
           <div className="space-y-1">
-            <label className="block text-[10px] font-bold text-slate-400">โมเดลโครงการ</label>
+            <label className="block text-[10px] font-bold text-slate-600">โมเดลการนับผลงาน (2 โมเดล)</label>
             <select 
               value={filterModel} 
               onChange={(e) => setFilterModel(e.target.value as any)}
               className="w-full text-xs border border-slate-300 rounded-xl px-3 py-2.5 bg-white outline-none focus:ring-2 focus:ring-blue-500 font-semibold text-slate-700"
             >
-              <option value="">ทั้งหมด (หมู่บ้าน / ตำบล)</option>
-              <option value="หมู่บ้าน">หมู่บ้านโมเดล</option>
-              <option value="ตำบล">ตำบลโมเดล</option>
+              <option value="">ทั้งหมด (ตำบล 5 / หมู่บ้าน 10)</option>
+              <option value="หมู่บ้าน">1. โมเดลหมู่บ้าน (10 พื้นที่)</option>
+              <option value="ตำบล">2. โมเดลตำบล (5 ตำบล)</option>
             </select>
           </div>
 
-          {/* District */}
+          {/* 1. โมเดลหมู่บ้าน -> เลือกข้อมูล พื้นที่เป้าหมาย (หมู่บ้าน/รพ.สต.) 10 พื้นที่ */}
+          {filterModel !== "ตำบล" && (
+            <div className="space-y-1">
+              <label className="block text-[10px] font-bold text-emerald-700">
+                1. พื้นที่เป้าหมาย (หมู่บ้าน/รพ.สต. 10 พื้นที่)
+              </label>
+              <select 
+                value={filterTargetArea} 
+                onChange={(e) => {
+                  setFilterTargetArea(e.target.value);
+                  if (e.target.value) setFilterSubdistrict("");
+                }}
+                className="w-full text-xs border border-emerald-200 rounded-xl px-3 py-2.5 bg-white outline-none focus:ring-2 focus:ring-emerald-500 font-semibold text-slate-700"
+              >
+                <option value="">ทุกพื้นที่เป้าหมาย (10 พื้นที่)</option>
+                {availableTargetAreas.map((area, idx) => (
+                  <option key={idx} value={area}>{area}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* 2. โมเดลตำบล -> เลือกข้อมูลตำบล 5 ตำบล */}
+          {filterModel !== "หมู่บ้าน" && (
+            <div className="space-y-1">
+              <label className="block text-[10px] font-bold text-indigo-700">
+                2. ข้อมูลตำบล (โมเดลตำบล 5 ตำบล)
+              </label>
+              <select 
+                value={filterSubdistrict} 
+                onChange={(e) => {
+                  setFilterSubdistrict(e.target.value);
+                  if (e.target.value) setFilterTargetArea("");
+                }}
+                className="w-full text-xs border border-indigo-200 rounded-xl px-3 py-2.5 bg-white outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-700"
+              >
+                <option value="">ทุกตำบลในโมเดลตำบล (5 ตำบล)</option>
+                {availableSubdistricts.map((sub, idx) => (
+                  <option key={idx} value={sub}>ตำบล{sub}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* District (อำเภอ จังหวัดสตูล ไว้สำหรับดูรายละเอียดของโมเดล) */}
           <div className="space-y-1">
-            <label className="block text-[10px] font-bold text-slate-400">อำเภอ</label>
+            <label className="block text-[10px] font-bold text-blue-700">
+              อำเภอ (จ.สตูล - ดูรายละเอียดโมเดล)
+            </label>
             <select 
               value={filterDistrict} 
               onChange={(e) => setFilterDistrict(e.target.value)}
               className="w-full text-xs border border-slate-300 rounded-xl px-3 py-2.5 bg-white outline-none focus:ring-2 focus:ring-blue-500 font-semibold text-slate-700"
             >
-              <option value="">ทุกอำเภอ</option>
+              <option value="">ทุกอำเภอ (จ.สตูล)</option>
               {availableDistricts.map((dist) => (
                 <option key={dist} value={dist}>อ.{dist}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Subdistrict */}
-          <div className="space-y-1">
-            <label className="block text-[10px] font-bold text-slate-400">ตำบล</label>
-            <select 
-              value={filterSubdistrict} 
-              onChange={(e) => setFilterSubdistrict(e.target.value)}
-              disabled={!filterDistrict}
-              className="w-full text-xs border border-slate-300 rounded-xl px-3 py-2.5 bg-white outline-none focus:ring-2 focus:ring-blue-500 font-semibold text-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
-            >
-              <option value="">{filterDistrict ? "ทุกตำบล" : "โปรดเลือกอำเภอก่อน"}</option>
-              {availableSubdistricts.map((sub, idx) => (
-                <option key={idx} value={sub}>ต.{sub}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Target Area */}
-          <div className="space-y-1">
-            <label className="block text-[10px] font-bold text-slate-400">พื้นที่เป้าหมาย / หมู่บ้าน</label>
-            <select 
-              value={filterTargetArea} 
-              onChange={(e) => setFilterTargetArea(e.target.value)}
-              disabled={!filterSubdistrict}
-              className="w-full text-xs border border-slate-300 rounded-xl px-3 py-2.5 bg-white outline-none focus:ring-2 focus:ring-blue-500 font-semibold text-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
-            >
-              <option value="">{filterSubdistrict ? "ทุกพื้นที่เป้าหมาย" : "โปรดเลือกตำบลก่อน"}</option>
-              {availableTargetAreas.map((area, idx) => (
-                <option key={idx} value={area}>{area}</option>
               ))}
             </select>
           </div>

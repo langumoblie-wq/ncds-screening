@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { ScreeningRecord, EXACT_LOCATION_LIST } from "../types";
+import { ScreeningRecord, EXACT_LOCATION_LIST, PROJECT_PERFORMANCE_AREAS, SUBDISTRICT_MODEL_AREAS, VILLAGE_MODEL_AREAS } from "../types";
 import { supabase } from "../lib/supabase";
 import {
   getRecordModel,
   getRecordSubdistrict,
+  getRecordPerformanceUnit,
   cleanDistrict,
   cleanSubdistrict,
   cleanTargetArea,
@@ -80,6 +81,7 @@ export const ExecutiveBriefingDashboard: React.FC<ExecutiveBriefingDashboardProp
   const [selectedModel, setSelectedModel] = useState<string>("all");
   const [selectedDistrict, setSelectedDistrict] = useState<string>("all");
   const [selectedSubdistrict, setSelectedSubdistrict] = useState<string>("all");
+  const [selectedTargetArea, setSelectedTargetArea] = useState<string>("all");
   const [selectedParticipantType, setSelectedParticipantType] = useState<string>("all");
   const [trendChartMode, setTrendChartMode] = useState<"risk" | "visit">("risk");
   const [subdistrictSortBy, setSubdistrictSortBy] = useState<"progress" | "screened" | "sick" | "improved">("progress");
@@ -147,10 +149,10 @@ export const ExecutiveBriefingDashboard: React.FC<ExecutiveBriefingDashboardProp
     };
   }, []);
 
-  // Available filter options from EXACT_LOCATION_LIST
+  // Available filter options from PROJECT_PERFORMANCE_AREAS (5 ตำบล + 10 หมู่บ้าน = 15 พื้นที่)
   const districtOptions = useMemo(() => {
     const set = new Set<string>();
-    EXACT_LOCATION_LIST.forEach((loc) => {
+    PROJECT_PERFORMANCE_AREAS.forEach((loc) => {
       if (selectedModel === "all" || loc.model === selectedModel) {
         set.add(loc.district);
       }
@@ -158,18 +160,27 @@ export const ExecutiveBriefingDashboard: React.FC<ExecutiveBriefingDashboardProp
     return Array.from(set);
   }, [selectedModel]);
 
+  // 2. โมเดลตำบล -> ข้อมูลตำบล (5 ตำบล)
   const subdistrictOptions = useMemo(() => {
     const set = new Set<string>();
-    EXACT_LOCATION_LIST.forEach((loc) => {
-      if (
-        (selectedModel === "all" || loc.model === selectedModel) &&
-        (selectedDistrict === "all" || loc.district === selectedDistrict)
-      ) {
+    SUBDISTRICT_MODEL_AREAS.forEach((loc) => {
+      if (selectedDistrict === "all" || loc.district === selectedDistrict) {
         set.add(loc.subdistrict);
       }
     });
     return Array.from(set);
-  }, [selectedModel, selectedDistrict]);
+  }, [selectedDistrict]);
+
+  // 1. โมเดลหมู่บ้าน -> ข้อมูลพื้นที่เป้าหมาย (หมู่บ้าน/รพ.สต.) (10 พื้นที่)
+  const targetAreaOptions = useMemo(() => {
+    const set = new Set<string>();
+    VILLAGE_MODEL_AREAS.forEach((loc) => {
+      if (selectedDistrict === "all" || loc.district === selectedDistrict) {
+        set.add(loc.areaName);
+      }
+    });
+    return Array.from(set);
+  }, [selectedDistrict]);
 
   // Active valid records matching current filters
   const filteredRecords = useMemo(() => {
@@ -180,19 +191,22 @@ export const ExecutiveBriefingDashboard: React.FC<ExecutiveBriefingDashboardProp
         return false;
       }
 
-      const recModel = getRecordModel(r);
-      const recDist = cleanDistrict(r.district);
-      const recSub = cleanSubdistrict(getRecordSubdistrict(r));
+      const perfUnit = getRecordPerformanceUnit(r);
+      const recModel = perfUnit.model || getRecordModel(r);
+      const recDist = cleanDistrict(perfUnit.district || r.district);
+      const recSub = cleanSubdistrict(perfUnit.subdistrict || getRecordSubdistrict(r));
+      const recArea = perfUnit.areaName || cleanTargetArea(r.targetArea);
       const pType = r.participantType || "กลุ่มเป้าหมายโครงการ";
 
       if (selectedModel !== "all" && recModel !== selectedModel) return false;
       if (selectedDistrict !== "all" && recDist !== selectedDistrict) return false;
-      if (selectedSubdistrict !== "all" && recSub !== selectedSubdistrict) return false;
+      if (selectedSubdistrict !== "all" && (recModel !== "ตำบล" || recSub !== selectedSubdistrict)) return false;
+      if (selectedTargetArea !== "all" && (recModel !== "หมู่บ้าน" || recArea !== selectedTargetArea)) return false;
       if (selectedParticipantType !== "all" && pType !== selectedParticipantType) return false;
 
       return true;
     });
-  }, [records, selectedModel, selectedDistrict, selectedSubdistrict, selectedParticipantType]);
+  }, [records, selectedModel, selectedDistrict, selectedSubdistrict, selectedTargetArea, selectedParticipantType]);
 
   // Group records by unique person (normalized name + area/district) to get baseline vs latest visit
   const personHistories = useMemo(() => {
@@ -216,7 +230,8 @@ export const ExecutiveBriefingDashboard: React.FC<ExecutiveBriefingDashboardProp
     const byPerson = new Map<string, ScreeningRecord[]>();
     filteredRecords.forEach((r) => {
       const cleanName = (r.name || "ไม่ระบุ").trim().replace(/\s+/g, " ");
-      const dist = cleanDistrict(r.district);
+      const perfUnit = getRecordPerformanceUnit(r);
+      const dist = cleanDistrict(perfUnit.district || r.district);
       const key = `${cleanName}|${dist}`;
       const list = byPerson.get(key) || [];
       list.push(r);
@@ -231,13 +246,14 @@ export const ExecutiveBriefingDashboard: React.FC<ExecutiveBriefingDashboardProp
       });
       const baseline = sorted[0];
       const latest = sorted[sorted.length - 1];
+      const perfUnit = getRecordPerformanceUnit(latest);
 
       map.set(key, {
         name: (latest.name || "ไม่ระบุ").trim(),
-        model: getRecordModel(latest),
-        district: cleanDistrict(latest.district),
-        subdistrict: cleanSubdistrict(getRecordSubdistrict(latest)),
-        targetArea: cleanTargetArea(latest.targetArea),
+        model: perfUnit.model || getRecordModel(latest),
+        district: cleanDistrict(perfUnit.district || latest.district),
+        subdistrict: cleanSubdistrict(perfUnit.subdistrict || getRecordSubdistrict(latest)),
+        targetArea: perfUnit.areaName || cleanTargetArea(latest.targetArea),
         participantType: latest.participantType || "กลุ่มเป้าหมายโครงการ",
         visits: sorted,
         baseline,
@@ -250,20 +266,28 @@ export const ExecutiveBriefingDashboard: React.FC<ExecutiveBriefingDashboardProp
     return Array.from(map.values());
   }, [filteredRecords]);
 
-  // Filtered target locations and total target count
+  // Filtered target locations (15 areas: 5 ตำบล + 10 หมู่บ้าน) and total target count
   const matchingLocations = useMemo(() => {
-    return EXACT_LOCATION_LIST.filter((loc) => {
+    return PROJECT_PERFORMANCE_AREAS.filter((loc) => {
       if (selectedModel !== "all" && loc.model !== selectedModel) return false;
       if (selectedDistrict !== "all" && loc.district !== selectedDistrict) return false;
-      if (selectedSubdistrict !== "all" && loc.subdistrict !== selectedSubdistrict) return false;
+      if (selectedSubdistrict !== "all" && (loc.model !== "ตำบล" || loc.subdistrict !== selectedSubdistrict)) return false;
+      if (selectedTargetArea !== "all" && (loc.model !== "หมู่บ้าน" || loc.areaName !== selectedTargetArea)) return false;
       return true;
     });
-  }, [selectedModel, selectedDistrict, selectedSubdistrict]);
+  }, [selectedModel, selectedDistrict, selectedSubdistrict, selectedTargetArea]);
 
   const totalTargetPeople = useMemo(() => {
     return matchingLocations.reduce((sum, loc) => {
-      const key = `${loc.model}|${loc.district}|${loc.targetArea}`;
-      return sum + (Number(targets[key]) || 0);
+      const unitKey = `${loc.model}|${loc.district}|${loc.areaName}`;
+      if (targets[unitKey] !== undefined) {
+        return sum + (Number(targets[unitKey]) || 0);
+      }
+      const subSum = loc.subAreas.reduce((s, rawArea) => {
+        const rawKey = `${loc.model}|${loc.district}|${rawArea}`;
+        return s + (Number(targets[rawKey]) || 0);
+      }, 0);
+      return sum + subSum;
     }, 0);
   }, [matchingLocations, targets]);
 
@@ -499,19 +523,29 @@ export const ExecutiveBriefingDashboard: React.FC<ExecutiveBriefingDashboardProp
     };
   }, [personHistories]);
 
-  // 3. Model Comparison (เปรียบเทียบความสำเร็จ โมเดลตำบล vs โมเดลหมู่บ้าน)
+  // 3. Model Comparison (เปรียบเทียบความสำเร็จ โมเดลตำบล 5 ตำบล vs โมเดลหมู่บ้าน 10 พื้นที่)
   const modelComparison = useMemo(() => {
     const models: Array<"ตำบล" | "หมู่บ้าน"> = ["ตำบล", "หมู่บ้าน"];
     return models.map((modelName) => {
-      const locs = EXACT_LOCATION_LIST.filter(
+      const locs = PROJECT_PERFORMANCE_AREAS.filter(
         (l) =>
           l.model === modelName &&
           (selectedDistrict === "all" || l.district === selectedDistrict) &&
-          (selectedSubdistrict === "all" || l.subdistrict === selectedSubdistrict)
+          (selectedSubdistrict === "all" || (l.model === "ตำบล" && l.subdistrict === selectedSubdistrict)) &&
+          (selectedTargetArea === "all" || (l.model === "หมู่บ้าน" && l.areaName === selectedTargetArea))
       );
       const targetSum = locs.reduce((acc, l) => {
-        const key = `${l.model}|${l.district}|${l.targetArea}`;
-        return acc + (Number(targets[key]) || 0);
+        const unitKey = `${l.model}|${l.district}|${l.areaName}`;
+        if (targets[unitKey] !== undefined) {
+          return acc + (Number(targets[unitKey]) || 0);
+        }
+        return (
+          acc +
+          l.subAreas.reduce((s, rawArea) => {
+            const rawKey = `${l.model}|${l.district}|${rawArea}`;
+            return s + (Number(targets[rawKey]) || 0);
+          }, 0)
+        );
       }, 0);
 
       const people = personHistories.filter((p) => p.model === modelName);
@@ -560,9 +594,9 @@ export const ExecutiveBriefingDashboard: React.FC<ExecutiveBriefingDashboardProp
         improvedPct: pct(improved, followedUp),
       };
     });
-  }, [personHistories, targets, selectedDistrict, selectedSubdistrict]);
+  }, [personHistories, targets, selectedDistrict, selectedSubdistrict, selectedTargetArea]);
 
-  // 4. Subdistrict Success Summary (สรุปผลความสำเร็จรายตำบล)
+  // 4. Subdistrict Success Summary (สรุปผลความสำเร็จรายตำบล / พื้นที่โมเดล)
   const subdistrictSummary = useMemo(() => {
     const subMap = new Map<
       string,
@@ -581,7 +615,7 @@ export const ExecutiveBriefingDashboard: React.FC<ExecutiveBriefingDashboardProp
       }
     >();
 
-    // Seed with official subdistricts matching filters
+    // Seed with official performance areas matching filters
     matchingLocations.forEach((loc) => {
       const key = `${loc.district}|${loc.subdistrict}`;
       if (!subMap.has(key)) {
@@ -601,9 +635,16 @@ export const ExecutiveBriefingDashboard: React.FC<ExecutiveBriefingDashboardProp
       }
       const item = subMap.get(key)!;
       item.models.add(loc.model);
-      item.areas.add(loc.targetArea);
-      const tKey = `${loc.model}|${loc.district}|${loc.targetArea}`;
-      item.targetSum += Number(targets[tKey]) || 0;
+      item.areas.add(loc.areaName);
+      const unitKey = `${loc.model}|${loc.district}|${loc.areaName}`;
+      if (targets[unitKey] !== undefined) {
+        item.targetSum += Number(targets[unitKey]) || 0;
+      } else {
+        item.targetSum += loc.subAreas.reduce((s, rawArea) => {
+          const rawKey = `${loc.model}|${loc.district}|${rawArea}`;
+          return s + (Number(targets[rawKey]) || 0);
+        }, 0);
+      }
     });
 
     // Populate with screened people
@@ -860,15 +901,15 @@ export const ExecutiveBriefingDashboard: React.FC<ExecutiveBriefingDashboardProp
         <div className="pt-4 flex flex-wrap items-center gap-2.5 print:hidden">
           <div className="flex items-center gap-1.5 text-xs font-bold text-slate-600 mr-1">
             <Filter className="w-3.5 h-3.5 text-slate-400" />
-            <span>ขอบเขตข้อมูล:</span>
+            <span>การเลือกข้อมูลรายงาน (2 โมเดล):</span>
           </div>
 
           {/* Model Filter */}
           <div className="inline-flex rounded-xl bg-slate-100 p-1">
             {[
-              { id: "all", label: "ทุกโมเดล" },
-              { id: "ตำบล", label: "โมเดลตำบล" },
-              { id: "หมู่บ้าน", label: "โมเดลหมู่บ้าน" },
+              { id: "all", label: "ทุกโมเดล (15 พื้นที่)" },
+              { id: "หมู่บ้าน", label: "1. โมเดลหมู่บ้าน (10 พื้นที่)" },
+              { id: "ตำบล", label: "2. โมเดลตำบล (5 ตำบล)" },
             ].map((m) => (
               <button
                 key={m.id}
@@ -876,6 +917,7 @@ export const ExecutiveBriefingDashboard: React.FC<ExecutiveBriefingDashboardProp
                   setSelectedModel(m.id);
                   setSelectedDistrict("all");
                   setSelectedSubdistrict("all");
+                  setSelectedTargetArea("all");
                 }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   selectedModel === m.id
@@ -888,33 +930,58 @@ export const ExecutiveBriefingDashboard: React.FC<ExecutiveBriefingDashboardProp
             ))}
           </div>
 
-          {/* District Filter */}
+          {/* 1. โมเดลหมู่บ้าน -> เลือกข้อมูล พื้นที่เป้าหมาย (หมู่บ้าน/รพ.สต.) 10 พื้นที่ */}
+          {selectedModel !== "ตำบล" && (
+            <select
+              value={selectedTargetArea}
+              onChange={(e) => {
+                setSelectedTargetArea(e.target.value);
+                if (e.target.value !== "all") setSelectedSubdistrict("all");
+              }}
+              className="text-xs font-semibold text-emerald-800 bg-emerald-50/70 border border-emerald-200 rounded-xl px-3 py-2 outline-none focus:border-emerald-400"
+            >
+              <option value="all">พื้นที่เป้าหมาย (หมู่บ้าน/รพ.สต. {targetAreaOptions.length} พื้นที่)</option>
+              {targetAreaOptions.map((a) => (
+                <option key={a} value={a}>
+                  {a}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {/* 2. โมเดลตำบล -> เลือกข้อมูลตำบล 5 ตำบล */}
+          {selectedModel !== "หมู่บ้าน" && (
+            <select
+              value={selectedSubdistrict}
+              onChange={(e) => {
+                setSelectedSubdistrict(e.target.value);
+                if (e.target.value !== "all") setSelectedTargetArea("all");
+              }}
+              className="text-xs font-semibold text-indigo-800 bg-indigo-50/70 border border-indigo-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-400"
+            >
+              <option value="all">ข้อมูลตำบล (โมเดลตำบล {subdistrictOptions.length} ตำบล)</option>
+              {subdistrictOptions.map((s) => (
+                <option key={s} value={s}>
+                  ตำบล{s}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {/* District Filter (อำเภอ จังหวัดสตูล ไว้สำหรับดูรายละเอียดของโมเดล) */}
           <select
             value={selectedDistrict}
             onChange={(e) => {
               setSelectedDistrict(e.target.value);
               setSelectedSubdistrict("all");
+              setSelectedTargetArea("all");
             }}
             className="text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-slate-400"
           >
-            <option value="all">ทุกอำเภอ ({districtOptions.length} อำเภอ)</option>
+            <option value="all">อำเภอ จ.สตูล (ดูรายละเอียดโมเดล: {districtOptions.length} อำเภอ)</option>
             {districtOptions.map((d) => (
               <option key={d} value={d}>
                 อ.{d}
-              </option>
-            ))}
-          </select>
-
-          {/* Subdistrict Filter */}
-          <select
-            value={selectedSubdistrict}
-            onChange={(e) => setSelectedSubdistrict(e.target.value)}
-            className="text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-slate-400"
-          >
-            <option value="all">ทุกตำบล ({subdistrictOptions.length} ตำบล)</option>
-            {subdistrictOptions.map((s) => (
-              <option key={s} value={s}>
-                ต.{s}
               </option>
             ))}
           </select>
@@ -933,12 +1000,14 @@ export const ExecutiveBriefingDashboard: React.FC<ExecutiveBriefingDashboardProp
           {(selectedModel !== "all" ||
             selectedDistrict !== "all" ||
             selectedSubdistrict !== "all" ||
+            selectedTargetArea !== "all" ||
             selectedParticipantType !== "all") && (
             <button
               onClick={() => {
                 setSelectedModel("all");
                 setSelectedDistrict("all");
                 setSelectedSubdistrict("all");
+                setSelectedTargetArea("all");
                 setSelectedParticipantType("all");
               }}
               className="text-xs font-bold text-rose-600 hover:text-rose-700 px-2.5 py-1.5 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"

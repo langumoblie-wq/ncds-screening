@@ -217,7 +217,7 @@ function getRiskSeverity(r: ScreeningRecord): number {
 function computeAreaEnriched(s: AreaTrackingStatItem): AreaEnrichedStat {
   const byPerson: Record<string, ScreeningRecord[]> = {};
   s.records.forEach((r) => {
-    const key = r.name || `id_${r.id}`;
+    const key = (r.name || "").trim().replace(/\s+/g, " ") || `id_${r.id}`;
     if (!byPerson[key]) byPerson[key] = [];
     byPerson[key].push(r);
   });
@@ -426,7 +426,7 @@ function buildDistrictModelRows(areas: AreaEnrichedStat[]): DistrictModelRiskRow
       return {
         ...row,
         achievementPct: row.target > 0 ? (row.achieved / row.target) * 100 : 0,
-        followUpRate: row.v1Count > 0 ? (row.followUpCount / row.v1Count) * 100 : 0,
+        followUpRate: row.achieved > 0 ? (row.followUpCount / row.achieved) * 100 : 0,
         normalPct: row.achieved > 0 ? Math.round((row.normalCount / totalP) * 100) : 0,
         riskPct: row.achieved > 0 ? Math.round((row.riskCount / totalP) * 100) : 0,
         dangerPct: row.achieved > 0 ? Math.round((row.dangerCount / totalP) * 100) : 0,
@@ -457,6 +457,18 @@ function buildModelAnalytics(
   let v4PlusCount = 0;
   let followUpPeopleCount = 0;
 
+  let normalCount = 0;
+  let riskCount = 0;
+  let dangerCount = 0;
+  let htNormalCount = 0;
+  let htRiskCount = 0;
+  let htDangerCount = 0;
+  let dmNormalCount = 0;
+  let dmRiskCount = 0;
+  let dmDangerCount = 0;
+  let bmiNormalCount = 0;
+  let bmiOverweightCount = 0;
+
   const allRecords: ScreeningRecord[] = [];
   areas.forEach((a) => {
     totalTarget += a.target;
@@ -467,13 +479,24 @@ function buildModelAnalytics(
     v3Count += a.v3Count;
     v4PlusCount += a.v4PlusCount;
     followUpPeopleCount += a.followUpCount;
+    normalCount += a.normalCount;
+    riskCount += a.riskCount;
+    dangerCount += a.dangerCount;
+    htNormalCount += a.htNormalCount;
+    htRiskCount += a.htRiskCount;
+    htDangerCount += a.htDangerCount;
+    dmNormalCount += a.dmNormalCount;
+    dmRiskCount += a.dmRiskCount;
+    dmDangerCount += a.dmDangerCount;
+    bmiNormalCount += a.bmiNormalCount;
+    bmiOverweightCount += a.bmiOverweightCount;
     allRecords.push(...a.records);
   });
 
   const achievementPct = totalTarget > 0 ? (totalAchieved / totalTarget) * 100 : 0;
   const remainingGap = Math.max(0, totalTarget - totalAchieved);
-  const followUpVisitsTotal = Math.max(0, totalVisits - v1Count);
-  const retentionRate = v1Count > 0 ? (followUpPeopleCount / v1Count) * 100 : 0;
+  const followUpVisitsTotal = Math.max(0, totalVisits - totalAchieved);
+  const retentionRate = totalAchieved > 0 ? (followUpPeopleCount / totalAchieved) * 100 : 0;
   const avgVisitsPerPerson = totalAchieved > 0 ? totalVisits / totalAchieved : 0;
 
   const byPerson: Record<string, ScreeningRecord[]> = {};
@@ -481,7 +504,8 @@ function buildModelAnalytics(
   let committeeRecords = 0;
 
   allRecords.forEach((r) => {
-    const key = `${r.name || r.id}_${r.targetArea || ""}`;
+    const normName = (r.name || "").trim().replace(/\s+/g, " ") || `id_${r.id}`;
+    const key = `${normName}_${r.targetArea || ""}`;
     if (!byPerson[key]) byPerson[key] = [];
     byPerson[key].push(r);
 
@@ -491,19 +515,8 @@ function buildModelAnalytics(
 
   let targetGroupUnique = 0;
   let committeeUnique = 0;
-  let normalCount = 0;
-  let riskCount = 0;
-  let dangerCount = 0;
-  let htNormalCount = 0;
-  let htRiskCount = 0;
-  let htDangerCount = 0;
-  let dmNormalCount = 0;
-  let dmRiskCount = 0;
-  let dmDangerCount = 0;
-  let htRiskDangerCount = 0;
-  let dmRiskDangerCount = 0;
-  let bmiNormalCount = 0;
-  let bmiOverweightCount = 0;
+  const htRiskDangerCount = htRiskCount + htDangerCount;
+  const dmRiskDangerCount = dmRiskCount + dmDangerCount;
 
   let bmiSum = 0, bmiN = 0;
   let sysSum = 0, sysN = 0;
@@ -544,41 +557,10 @@ function buildModelAnalytics(
     if (latest.participantType === "คณะทำงาน") committeeUnique++;
     else targetGroupUnique++;
 
-    const sev = getRiskSeverity(latest);
-    if (sev === 2) dangerCount++;
-    else if (sev === 1) riskCount++;
-    else normalCount++;
-
-    const htLvl = latest.htResult?.level || "normal";
-    if (htLvl === "danger") {
-      htDangerCount++;
-      htRiskDangerCount++;
-    } else if (htLvl === "risk") {
-      htRiskCount++;
-      htRiskDangerCount++;
-    } else {
-      htNormalCount++;
-    }
-
-    const dmLvl = latest.dmResult?.level || "normal";
-    if (dmLvl === "danger") {
-      dmDangerCount++;
-      dmRiskDangerCount++;
-    } else if (dmLvl === "risk") {
-      dmRiskCount++;
-      dmRiskDangerCount++;
-    } else {
-      dmNormalCount++;
-    }
-
     const b = parseFloat(latest.bmi);
     if (!isNaN(b) && b > 0) {
       bmiSum += b;
       bmiN++;
-      if (b >= 23.0) bmiOverweightCount++;
-      else bmiNormalCount++;
-    } else {
-      bmiNormalCount++;
     }
     if (latest.bpSys > 0) {
       sysSum += latest.bpSys;
@@ -667,7 +649,7 @@ function buildModelAnalytics(
   const dmRiskPct = totalAchieved > 0 ? Math.round((dmRiskCount / uniqueCount) * 100) : 0;
   const dmDangerPct = totalAchieved > 0 ? Math.round((dmDangerCount / uniqueCount) * 100) : 0;
 
-  const bmiOverweightPct = bmiN > 0 ? Math.round((bmiOverweightCount / bmiN) * 100) : 0;
+  const bmiOverweightPct = totalAchieved > 0 ? Math.round((bmiOverweightCount / uniqueCount) * 100) : 0;
 
   const behaviorsList = [
     { name: "บริโภคอาหารรสหวานจัด", count: sweetRisk, pct: totalAchieved > 0 ? Math.round((sweetRisk / uniqueCount) * 100) : 0 },
@@ -1803,6 +1785,48 @@ export const ExecutiveModelReport: React.FC<ExecutiveModelReportProps> = ({
                       </td>
                     </tr>
                   ))}
+                  {filteredDistrictRows.length > 0 && (
+                    <tr className="bg-slate-100/90 font-black text-slate-900 border-t-2 border-slate-300">
+                      <td className="py-2.5 px-3 font-black text-slate-900" colSpan={2}>
+                        รวมทั้งหมด ({filteredDistrictRows.length} กลุ่มพื้นที่)
+                      </td>
+                      <td className="py-2.5 px-2.5 text-center">
+                        {activeHeadlineModel.activeAreas}/{activeHeadlineModel.totalAreas}
+                      </td>
+                      <td className="py-2.5 px-2.5 text-center">
+                        {activeHeadlineModel.totalTarget > 0 ? activeHeadlineModel.totalTarget.toLocaleString() : "-"}
+                      </td>
+                      <td className="py-2.5 px-2.5 text-center font-black text-indigo-700">
+                        {activeHeadlineModel.totalAchieved.toLocaleString()}
+                        {activeHeadlineModel.totalTarget > 0 && (
+                          <span className="text-[10px] text-slate-500 ml-1">({activeHeadlineModel.achievementPct.toFixed(1)}%)</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-2.5 text-center text-slate-800">{activeHeadlineModel.totalVisits.toLocaleString()}</td>
+                      <td className="py-2.5 px-2.5 text-center text-emerald-700 bg-emerald-50/40">
+                        {activeHeadlineModel.normalCount.toLocaleString()} <span className="text-[10px]">({activeHeadlineModel.normalPct}%)</span>
+                      </td>
+                      <td className="py-2.5 px-2.5 text-center text-amber-700 bg-amber-50/40">
+                        {activeHeadlineModel.riskCount.toLocaleString()} <span className="text-[10px]">({activeHeadlineModel.riskPct}%)</span>
+                      </td>
+                      <td className="py-2.5 px-2.5 text-center text-rose-700 bg-rose-50/40">
+                        {activeHeadlineModel.dangerCount.toLocaleString()} <span className="text-[10px]">({activeHeadlineModel.dangerPct}%)</span>
+                      </td>
+                      <td className="py-2.5 px-2.5 text-center text-[11px]">
+                        <span className="text-emerald-700">{activeHeadlineModel.htNormalCount.toLocaleString()}</span>/
+                        <span className="text-amber-700">{activeHeadlineModel.htRiskCount.toLocaleString()}</span>/
+                        <span className="text-rose-700">{activeHeadlineModel.htDangerCount.toLocaleString()}</span>
+                      </td>
+                      <td className="py-2.5 px-2.5 text-center text-[11px]">
+                        <span className="text-emerald-700">{activeHeadlineModel.dmNormalCount.toLocaleString()}</span>/
+                        <span className="text-amber-700">{activeHeadlineModel.dmRiskCount.toLocaleString()}</span>/
+                        <span className="text-rose-700">{activeHeadlineModel.dmDangerCount.toLocaleString()}</span>
+                      </td>
+                      <td className="py-2.5 px-2.5 text-center font-black text-teal-700">
+                        {activeHeadlineModel.retentionRate > 0 ? `${activeHeadlineModel.retentionRate.toFixed(1)}%` : "0%"}
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -2506,6 +2530,44 @@ export const ExecutiveModelReport: React.FC<ExecutiveModelReportProps> = ({
                     <td style={{ border: "1px solid #cbd5e1", padding: "4px", textAlign: "center", color: "#0f766e", fontWeight: 700 }}>{r.followUpRate.toFixed(1)}%</td>
                   </tr>
                 ))}
+                {filteredDistrictRows.length > 0 && (
+                  <tr style={{ backgroundColor: "#e2e8f0", fontWeight: 800 }}>
+                    <td colSpan={2} style={{ border: "1px solid #cbd5e1", padding: "4px 6px" }}>
+                      รวมทั้งหมด ({filteredDistrictRows.length} กลุ่มพื้นที่)
+                    </td>
+                    <td style={{ border: "1px solid #cbd5e1", padding: "4px", textAlign: "center" }}>
+                      {activeHeadlineModel.activeAreas}/{activeHeadlineModel.totalAreas}
+                    </td>
+                    <td style={{ border: "1px solid #cbd5e1", padding: "4px", textAlign: "center" }}>
+                      {activeHeadlineModel.totalTarget > 0 ? activeHeadlineModel.totalTarget.toLocaleString() : "-"}
+                    </td>
+                    <td style={{ border: "1px solid #cbd5e1", padding: "4px", textAlign: "center", fontWeight: 800, color: "#312e81" }}>
+                      {activeHeadlineModel.totalAchieved.toLocaleString()}{" "}
+                      {activeHeadlineModel.totalTarget > 0 ? `(${activeHeadlineModel.achievementPct.toFixed(1)}%)` : ""}
+                    </td>
+                    <td style={{ border: "1px solid #cbd5e1", padding: "4px", textAlign: "center" }}>
+                      {activeHeadlineModel.totalVisits.toLocaleString()}
+                    </td>
+                    <td style={{ border: "1px solid #cbd5e1", padding: "4px", textAlign: "center", color: "#047857" }}>
+                      {activeHeadlineModel.normalCount} ({activeHeadlineModel.normalPct}%)
+                    </td>
+                    <td style={{ border: "1px solid #cbd5e1", padding: "4px", textAlign: "center", color: "#b45309" }}>
+                      {activeHeadlineModel.riskCount} ({activeHeadlineModel.riskPct}%)
+                    </td>
+                    <td style={{ border: "1px solid #cbd5e1", padding: "4px", textAlign: "center", color: "#be123c" }}>
+                      {activeHeadlineModel.dangerCount} ({activeHeadlineModel.dangerPct}%)
+                    </td>
+                    <td style={{ border: "1px solid #cbd5e1", padding: "4px", textAlign: "center" }}>
+                      {activeHeadlineModel.htNormalCount}/{activeHeadlineModel.htRiskCount}/{activeHeadlineModel.htDangerCount}
+                    </td>
+                    <td style={{ border: "1px solid #cbd5e1", padding: "4px", textAlign: "center" }}>
+                      {activeHeadlineModel.dmNormalCount}/{activeHeadlineModel.dmRiskCount}/{activeHeadlineModel.dmDangerCount}
+                    </td>
+                    <td style={{ border: "1px solid #cbd5e1", padding: "4px", textAlign: "center", color: "#0f766e", fontWeight: 800 }}>
+                      {activeHeadlineModel.retentionRate.toFixed(1)}%
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

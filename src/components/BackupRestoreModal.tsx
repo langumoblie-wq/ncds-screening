@@ -21,7 +21,7 @@ import {
   HelpCircle,
   FileCheck
 } from "lucide-react";
-import { ScreeningRecord, DistrictType, LOCATION_DATA, DISTRICT_SUBDISTRICT_MAP, EXACT_LOCATION_LIST } from "../types";
+import { ScreeningRecord, DistrictType, LOCATION_DATA, DISTRICT_SUBDISTRICT_MAP, EXACT_LOCATION_LIST, PROJECT_PERFORMANCE_AREAS, ProjectPerformanceAreaItem } from "../types";
 import { formatThaiDate } from "../utils";
 
 // Normalization Helpers
@@ -52,6 +52,10 @@ export const cleanTargetArea = (a?: string): string => {
   return clean;
 };
 
+const normalizeAreaNoSpaces = (a?: string): string => {
+  return cleanTargetArea(a).replace(/\s+/g, "");
+};
+
 export const matchesDistrictFilter = (recordDistrict?: string, filterDistricts: string[] = []): boolean => {
   if (!filterDistricts || filterDistricts.length === 0) return true;
   const recD = cleanDistrict(recordDistrict);
@@ -77,11 +81,31 @@ export const matchesTargetAreaFilter = (recordArea?: string, filterAreas: string
   if (!filterAreas || filterAreas.length === 0) return true;
   if (!recordArea) return false;
   const cleanRec = cleanTargetArea(recordArea);
+  const normRec = normalizeAreaNoSpaces(recordArea);
   return filterAreas.some(fa => {
     if (fa === "all") return true;
     if (fa === recordArea) return true;
     const cleanFa = cleanTargetArea(fa);
-    if (cleanFa && (cleanFa === cleanRec || cleanRec.includes(cleanFa) || cleanFa.includes(cleanRec))) return true;
+    const normFa = normalizeAreaNoSpaces(fa);
+    if (cleanFa && (cleanFa === cleanRec || normFa === normRec || cleanRec.includes(cleanFa) || cleanFa.includes(cleanRec))) {
+      return true;
+    }
+    // Also check if filterArea is one of the 15 PROJECT_PERFORMANCE_AREAS and recordArea is in its subAreas
+    const perfUnit = PROJECT_PERFORMANCE_AREAS.find(
+      u => u.areaName === fa || cleanTargetArea(u.areaName) === cleanFa || normalizeAreaNoSpaces(u.areaName) === normFa
+    );
+    if (perfUnit) {
+      if (
+        perfUnit.subAreas.some(
+          sa =>
+            sa === recordArea ||
+            cleanTargetArea(sa) === cleanRec ||
+            normalizeAreaNoSpaces(sa) === normRec
+        )
+      ) {
+        return true;
+      }
+    }
     return false;
   });
 };
@@ -89,13 +113,10 @@ export const matchesTargetAreaFilter = (recordArea?: string, filterAreas: string
 export const matchesModelFilter = (record: Partial<ScreeningRecord>, filterModels: string[] = []): boolean => {
   if (!filterModels || filterModels.length === 0) return true;
   const model = getRecordModel(record);
-  const rawModel = record.modelType || "";
   return filterModels.some(fm => {
     if (fm === "all") return true;
     if (fm === model) return true;
-    if (rawModel && (rawModel.includes(fm) || fm.includes(rawModel))) return true;
-    // Allow legacy records or general category to show when filtering
-    if ((rawModel as any) === "ปิงปอง 7 สี" || (model as any) === "ทั่วไป") return true;
+    if (fm.includes(model) || model.includes(fm)) return true;
     return false;
   });
 };
@@ -105,13 +126,23 @@ export const getRecordModel = (r: Partial<ScreeningRecord>): "หมู่บ้
   // 1. Prioritize official standard list from program table
   if (r.targetArea) {
     const cleanA = cleanTargetArea(r.targetArea);
+    const normA = normalizeAreaNoSpaces(r.targetArea);
     const matched = EXACT_LOCATION_LIST.find(item => 
       cleanTargetArea(item.targetArea) === cleanA ||
+      normalizeAreaNoSpaces(item.targetArea) === normA ||
       r.targetArea === item.targetArea ||
       (cleanA && (cleanTargetArea(item.targetArea).includes(cleanA) || cleanA.includes(cleanTargetArea(item.targetArea))))
     );
     if (matched) {
       return matched.model;
+    }
+    const perfMatched = PROJECT_PERFORMANCE_AREAS.find(unit =>
+      unit.areaName === r.targetArea ||
+      normalizeAreaNoSpaces(unit.areaName) === normA ||
+      unit.subAreas.some(sa => sa === r.targetArea || normalizeAreaNoSpaces(sa) === normA)
+    );
+    if (perfMatched) {
+      return perfMatched.model;
     }
   }
 
@@ -149,9 +180,6 @@ export const getRecordModel = (r: Partial<ScreeningRecord>): "หมู่บ้
 
   // 4. Keyword heuristic if model still undetermined
   const area = r.targetArea || "";
-  if (area.includes("ม.") || area.includes("หมู่") || area.includes("บ้าน") || area.includes("ชุมชน")) {
-    return "หมู่บ้าน";
-  }
   if (area.includes("ตำบล") || area.includes("ต.")) {
     return "ตำบล";
   }
@@ -168,13 +196,24 @@ export const getRecordSubdistrict = (r: Partial<ScreeningRecord>): string => {
 
   // 1. Check EXACT_LOCATION_LIST
   const cleanA = cleanTargetArea(r.targetArea);
+  const normA = normalizeAreaNoSpaces(r.targetArea);
   const matched = EXACT_LOCATION_LIST.find(item => 
     cleanTargetArea(item.targetArea) === cleanA ||
+    normalizeAreaNoSpaces(item.targetArea) === normA ||
     r.targetArea === item.targetArea ||
     (cleanA && (cleanTargetArea(item.targetArea).includes(cleanA) || cleanA.includes(cleanTargetArea(item.targetArea))))
   );
   if (matched) {
     return matched.subdistrict;
+  }
+
+  const perfMatched = PROJECT_PERFORMANCE_AREAS.find(unit =>
+    unit.areaName === r.targetArea ||
+    normalizeAreaNoSpaces(unit.areaName) === normA ||
+    unit.subAreas.some(sa => sa === r.targetArea || normalizeAreaNoSpaces(sa) === normA)
+  );
+  if (perfMatched) {
+    return perfMatched.subdistrict;
   }
   
   const dist = cleanDistrict(r.district);
@@ -200,6 +239,67 @@ export const getRecordSubdistrict = (r: Partial<ScreeningRecord>): string => {
     }
   }
   return "";
+};
+
+// Helper: Map any record to one of the 15 official Project Performance Units
+// - โมเดลตำบล (5 ตำบล): ตำบลพิมาน, ตำบลคลองขุด, ตำบลขอนคลาน, ตำบลเขาขาว, ตำบลอุใดเจริญ
+// - โมเดลหมู่บ้าน (10 พื้นที่): บ้านผัง 8,11,12, บ้านผัง16,17,19,20, บ้านปาล์มทองพัฒนา, บ้านตำมะลัง, บ้านเขาจีน, บ้านเกาะยาว, ชุมชนท่านายเนาว์, บ้านวังยาว, บ้านสันติสุข, บ้านควนไสน
+export const getRecordPerformanceUnit = (r: Partial<ScreeningRecord>): ProjectPerformanceAreaItem => {
+  const mType = getRecordModel(r);
+  const sub = cleanSubdistrict(r.subdistrict || getRecordSubdistrict(r));
+  const dist = cleanDistrict(r.district) || "เมือง";
+  const rawArea = (r.targetArea || "").trim();
+  const cleanA = cleanTargetArea(rawArea);
+  const normA = normalizeAreaNoSpaces(rawArea);
+
+  if (mType === "ตำบล") {
+    // 1. Match by subAreas or subdistrict among the 5 โมเดลตำบล units
+    const bySubArea = PROJECT_PERFORMANCE_AREAS.find(
+      u =>
+        u.model === "ตำบล" &&
+        (u.areaName === rawArea ||
+          u.subAreas.some(
+            sa => sa === rawArea || cleanTargetArea(sa) === cleanA || normalizeAreaNoSpaces(sa) === normA
+          ))
+    );
+    if (bySubArea) return bySubArea;
+
+    const bySubdistrict = PROJECT_PERFORMANCE_AREAS.find(
+      u => u.model === "ตำบล" && cleanSubdistrict(u.subdistrict) === sub
+    );
+    if (bySubdistrict) return bySubdistrict;
+
+    const byDist = PROJECT_PERFORMANCE_AREAS.find(
+      u => u.model === "ตำบล" && cleanDistrict(u.district) === dist
+    );
+    if (byDist) return byDist;
+  } else {
+    // โมเดลหมู่บ้าน (10 พื้นที่เป้าหมาย)
+    const byVillageArea = PROJECT_PERFORMANCE_AREAS.find(
+      u =>
+        u.model === "หมู่บ้าน" &&
+        (u.areaName === rawArea ||
+          cleanTargetArea(u.areaName) === cleanA ||
+          normalizeAreaNoSpaces(u.areaName) === normA ||
+          u.subAreas.some(
+            sa =>
+              sa === rawArea ||
+              cleanTargetArea(sa) === cleanA ||
+              normalizeAreaNoSpaces(sa) === normA ||
+              (cleanA && (cleanTargetArea(sa).includes(cleanA) || cleanA.includes(cleanTargetArea(sa))))
+          ))
+    );
+    if (byVillageArea) return byVillageArea;
+  }
+
+  return {
+    model: mType,
+    areaName: mType === "ตำบล" ? (sub ? `ตำบล${sub}` : rawArea || "ไม่ระบุตำบล") : (rawArea || "ไม่ระบุพื้นที่"),
+    district: dist,
+    subdistrict: sub,
+    subdistrictDisplay: mType === "ตำบล" ? sub : (sub ? `ตำบล${sub}` : ""),
+    subAreas: rawArea ? [rawArea] : [],
+  };
 };
 
 // Helper: Parse CSV formatted data into ScreeningRecord items

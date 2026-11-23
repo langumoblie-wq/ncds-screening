@@ -7,13 +7,14 @@ import { RefreshCw,
   Layers, UserCheck, Calendar, Check, GitBranch, TrendingUp, CalendarRange, Clock, BarChart2, Printer,
   Droplet, Ruler
 } from "lucide-react";
-import { ScreeningRecord, DistrictType, LOCATION_DATA, DISTRICT_SUBDISTRICT_MAP } from "../types";
+import { ScreeningRecord, DistrictType, LOCATION_DATA, DISTRICT_SUBDISTRICT_MAP, PROJECT_PERFORMANCE_AREAS, SUBDISTRICT_MODEL_AREAS, VILLAGE_MODEL_AREAS } from "../types";
 import { parseDateToIso, formatYearMonthThai, formatYearMonthThaiShort, getRecordYearMonth, formatThaiDate, maskPatientName, maskPhoneNumber } from "../utils";
 import { 
   BackupExportModal, 
   BackupImportModal, 
   getRecordModel, 
   getRecordSubdistrict,
+  getRecordPerformanceUnit,
   cleanDistrict,
   cleanSubdistrict,
   cleanTargetArea,
@@ -744,11 +745,18 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
 
     (records || []).forEach(r => {
       if (!r || !r.date) return;
+      const perfUnit = getRecordPerformanceUnit(r);
       if (!matchesModelFilter(r, filterModel)) return;
-      if (!matchesDistrictFilter(r.district, filterDistrict)) return;
-      const recSub = cleanSubdistrict(r.subdistrict || getRecordSubdistrict(r));
-      if (!matchesSubdistrictFilter(recSub, filterSubdistrict)) return;
-      if (!matchesTargetAreaFilter(r.targetArea, filterTargetArea)) return;
+      if (!matchesDistrictFilter(perfUnit.district || r.district, filterDistrict)) return;
+      if (filterSubdistrict.length > 0) {
+        if (perfUnit.model !== "ตำบล") return;
+        const recSub = cleanSubdistrict(perfUnit.subdistrict || r.subdistrict || getRecordSubdistrict(r));
+        if (!matchesSubdistrictFilter(recSub, filterSubdistrict)) return;
+      }
+      if (filterTargetArea.length > 0) {
+        if (perfUnit.model !== "หมู่บ้าน") return;
+        if (!matchesTargetAreaFilter(perfUnit.areaName || r.targetArea, filterTargetArea)) return;
+      }
       const pType = r.participantType || "กลุ่มเป้าหมายโครงการ";
       if (filterParticipantType.length > 0 && !filterParticipantType.includes(pType)) return;
 
@@ -815,77 +823,42 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
   const [passwordError, setPasswordError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Dynamic options for filters strictly adhering to official location configuration
+  // Dynamic options for filters strictly adhering to 2-model performance configuration (5 ตำบล + 10 หมู่บ้าน)
+  const isOnlyVillageModel = filterModel.includes("หมู่บ้าน") && !filterModel.includes("ตำบล");
+  const isOnlySubdistrictModel = filterModel.includes("ตำบล") && !filterModel.includes("หมู่บ้าน");
+
   const availableDistricts = useMemo(() => {
     const districtsSet = new Set<string>();
-    const isModelVillage = filterModel.includes("หมู่บ้าน") && !filterModel.includes("ตำบล");
-    const isModelSubdistrict = filterModel.includes("ตำบล") && !filterModel.includes("หมู่บ้าน");
-
-    if (isModelVillage) {
-      Object.keys(LOCATION_DATA["หมู่บ้าน"]).forEach(d => {
-        if (d !== "เมืองสตูล") districtsSet.add(cleanDistrict(d));
-      });
-    } else if (isModelSubdistrict) {
-      Object.keys(LOCATION_DATA["ตำบล"]).forEach(d => {
-        if (d !== "เมืองสตูล") districtsSet.add(cleanDistrict(d));
-      });
-    } else {
-      ["ควนกาหลง", "ทุ่งหว้า", "มะนัง", "เมือง", "ละงู"].forEach(d => districtsSet.add(d));
-    }
-
+    PROJECT_PERFORMANCE_AREAS.forEach(item => {
+      if (filterModel.length > 0 && !filterModel.includes(item.model)) return;
+      districtsSet.add(cleanDistrict(item.district));
+    });
     return Array.from(districtsSet) as DistrictType[];
   }, [filterModel]);
 
+  // 2. โมเดลตำบล -> ให้เลือก ข้อมูลตำบล (5 ตำบล)
   const availableSubdistricts = useMemo(() => {
     const subdistSet = new Set<string>();
-    const isModelVillage = filterModel.includes("หมู่บ้าน") && !filterModel.includes("ตำบล");
-    const isModelSubdistrict = filterModel.includes("ตำบล") && !filterModel.includes("หมู่บ้าน");
-
-    const targetDistricts = filterDistrict.length > 0 
-      ? filterDistrict.map(cleanDistrict) 
-      : (availableDistricts as string[]);
-
-    targetDistricts.forEach(dist => {
-      if (isModelVillage) {
-        const dData = (LOCATION_DATA["หมู่บ้าน"] as any)?.[dist];
-        if (dData) Object.keys(dData).forEach(s => subdistSet.add(cleanSubdistrict(s)));
-      } else if (isModelSubdistrict) {
-        const dData = (LOCATION_DATA["ตำบล"] as any)?.[dist];
-        if (dData) Object.keys(dData).forEach(s => subdistSet.add(cleanSubdistrict(s)));
-      } else {
-        const dMap = DISTRICT_SUBDISTRICT_MAP[dist as DistrictType];
-        if (dMap) Object.keys(dMap).forEach(s => subdistSet.add(cleanSubdistrict(s)));
+    SUBDISTRICT_MODEL_AREAS.forEach(item => {
+      if (filterDistrict.length > 0 && !filterDistrict.some(fd => cleanDistrict(fd) === cleanDistrict(item.district))) {
+        return;
       }
+      subdistSet.add(cleanSubdistrict(item.subdistrict));
     });
-
     return Array.from(subdistSet);
-  }, [filterModel, filterDistrict, availableDistricts]);
+  }, [filterDistrict]);
 
+  // 1. โมเดลหมู่บ้าน -> ให้เลือก ข้อมูล พื้นที่เป้าหมาย (หมู่บ้าน/รพ.สต.) (10 พื้นที่)
   const availableTargetAreas = useMemo(() => {
     const areaSet = new Set<string>();
-    const isModelVillage = filterModel.includes("หมู่บ้าน") && !filterModel.includes("ตำบล");
-    const isModelSubdistrict = filterModel.includes("ตำบล") && !filterModel.includes("หมู่บ้าน");
-
-    const targetDistricts = filterDistrict.length > 0 
-      ? filterDistrict.map(cleanDistrict) 
-      : (availableDistricts as string[]);
-
-    targetDistricts.forEach(dist => {
-      const modelsToCheck = isModelVillage ? ["หมู่บ้าน"] : (isModelSubdistrict ? ["ตำบล"] : ["หมู่บ้าน", "ตำบล"]);
-      modelsToCheck.forEach(m => {
-        const distData = (LOCATION_DATA[m as keyof typeof LOCATION_DATA] as any)?.[dist];
-        if (distData) {
-          Object.entries(distData).forEach(([sub, areas]) => {
-            if (filterSubdistrict.length === 0 || matchesSubdistrictFilter(cleanSubdistrict(sub), filterSubdistrict)) {
-              (areas as string[]).forEach(a => areaSet.add(cleanTargetArea(a)));
-            }
-          });
-        }
-      });
+    VILLAGE_MODEL_AREAS.forEach(item => {
+      if (filterDistrict.length > 0 && !filterDistrict.some(fd => cleanDistrict(fd) === cleanDistrict(item.district))) {
+        return;
+      }
+      areaSet.add(item.areaName);
     });
-
     return Array.from(areaSet);
-  }, [filterModel, filterDistrict, filterSubdistrict, availableDistricts]);
+  }, [filterDistrict]);
 
   // Cascading dropdown updates for filters - only filter out invalid options rather than hard clearing
   useEffect(() => {
@@ -995,18 +968,23 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
           ((r.name || "").toLowerCase().includes(searchTerm.toLowerCase())) || 
           ((r.phone || "").includes(searchTerm));
         
-        // Model type filter
+        // Model type filter (2 โมเดล: ตำบล 5 พื้นที่, หมู่บ้าน 10 พื้นที่)
+        const perfUnit = getRecordPerformanceUnit(r);
         const matchesModel = matchesModelFilter(r, filterModel);
 
-        // District filter
-        const matchesDistrict = matchesDistrictFilter(r.district, filterDistrict);
+        // District filter (อำเภอ จ.สตูล ไว้สำหรับดูรายละเอียดของโมเดล)
+        const matchesDistrict = matchesDistrictFilter(perfUnit.district || r.district, filterDistrict);
 
-        // Subdistrict filter
-        const recordSubdistrict = cleanSubdistrict(r.subdistrict || getRecordSubdistrict(r));
-        const matchesSubdistrict = matchesSubdistrictFilter(recordSubdistrict, filterSubdistrict);
+        // Subdistrict filter (2. โมเดลตำบล -> เลือกข้อมูลตำบล 5 ตำบล)
+        const recordSubdistrict = cleanSubdistrict(perfUnit.subdistrict || r.subdistrict || getRecordSubdistrict(r));
+        const matchesSubdistrict =
+          filterSubdistrict.length === 0 ||
+          (perfUnit.model === "ตำบล" && matchesSubdistrictFilter(recordSubdistrict, filterSubdistrict));
 
-        // Target Area filter
-        const matchesTargetArea = matchesTargetAreaFilter(r.targetArea, filterTargetArea);
+        // Target Area filter (1. โมเดลหมู่บ้าน -> เลือกข้อมูลพื้นที่เป้าหมาย หมู่บ้าน/รพ.สต. 10 พื้นที่)
+        const matchesTargetArea =
+          filterTargetArea.length === 0 ||
+          (perfUnit.model === "หมู่บ้าน" && matchesTargetAreaFilter(perfUnit.areaName || r.targetArea, filterTargetArea));
 
         // Visit Scope filter
         const key = `${r.name}_${r.phone || ""}`;
@@ -1490,53 +1468,71 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
           </div>
         </div>
         
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className={`grid grid-cols-1 sm:grid-cols-2 ${isOnlyVillageModel || isOnlySubdistrictModel ? "lg:grid-cols-3" : "lg:grid-cols-4"} gap-4`}>
           
           {/* 1. Model Filter */}
           <div className="space-y-1">
-            <label className="block text-[10px] font-bold text-slate-400">โมเดล</label>
+            <label className="block text-[10px] font-bold text-slate-500">โมเดลการนับผลงาน (2 โมเดล: 15 พื้นที่)</label>
             <MultiSelectDropdown 
               options={["หมู่บ้าน", "ตำบล"]}
               selected={filterModel}
-              onChange={setFilterModel}
-              placeholder="ทั้งหมด (หมู่บ้าน / ตำบล)"
+              onChange={(val) => {
+                setFilterModel(val);
+                if (val.includes("หมู่บ้าน") && !val.includes("ตำบล")) {
+                  setFilterSubdistrict([]);
+                } else if (val.includes("ตำบล") && !val.includes("หมู่บ้าน")) {
+                  setFilterTargetArea([]);
+                }
+              }}
+              placeholder="ทั้งหมด (ตำบล 5 ตำบล / หมู่บ้าน 10 พื้นที่)"
+              labelKey={(v) => v === "ตำบล" ? "โมเดลตำบล (5 ตำบล)" : "โมเดลหมู่บ้าน (10 พื้นที่)"}
             />
           </div>
 
-          {/* 2. District Filter */}
+          {/* 2. Target Area Filter (สำหรับโมเดลหมู่บ้าน 10 พื้นที่) */}
+          {!isOnlySubdistrictModel && (
+            <div className="space-y-1">
+              <label className="block text-[10px] font-bold text-emerald-700">
+                1. โมเดลหมู่บ้าน: พื้นที่เป้าหมาย (หมู่บ้าน/รพ.สต.) (10 พื้นที่)
+              </label>
+              <MultiSelectDropdown 
+                options={availableTargetAreas}
+                selected={filterTargetArea}
+                onChange={setFilterTargetArea}
+                placeholder="ทุกพื้นที่เป้าหมาย (หมู่บ้าน/รพ.สต. 10 พื้นที่)"
+                disabled={false}
+              />
+            </div>
+          )}
+
+          {/* 3. Subdistrict Filter (สำหรับโมเดลตำบล 5 ตำบล) */}
+          {!isOnlyVillageModel && (
+            <div className="space-y-1">
+              <label className="block text-[10px] font-bold text-indigo-700">
+                2. โมเดลตำบล: ข้อมูลตำบล (5 ตำบล)
+              </label>
+              <MultiSelectDropdown 
+                options={availableSubdistricts}
+                selected={filterSubdistrict}
+                onChange={setFilterSubdistrict}
+                placeholder="ทุกตำบลในโมเดลตำบล (5 ตำบล)"
+                disabled={false}
+                labelKey={(v) => v.startsWith("ตำบล") ? v : `ตำบล${v}`}
+              />
+            </div>
+          )}
+
+          {/* 4. District Filter (อำเภอ จ.สตูล ไว้สำหรับดูรายละเอียดของโมเดล) */}
           <div className="space-y-1">
-            <label className="block text-[10px] font-bold text-slate-400">อำเภอ</label>
+            <label className="block text-[10px] font-bold text-blue-700">
+              อำเภอ (จังหวัดสตูล) — ไว้ดูรายละเอียดของโมเดล
+            </label>
             <MultiSelectDropdown 
               options={availableDistricts}
               selected={filterDistrict}
               onChange={setFilterDistrict}
-              placeholder="ทุกอำเภอ"
+              placeholder="ทุกอำเภอ (จ.สตูล)"
               labelKey={(v) => `อ.${v}`}
-            />
-          </div>
-
-          {/* 3. Subdistrict Filter */}
-          <div className="space-y-1">
-            <label className="block text-[10px] font-bold text-slate-400">ตำบล</label>
-            <MultiSelectDropdown 
-              options={availableSubdistricts}
-              selected={filterSubdistrict}
-              onChange={setFilterSubdistrict}
-              placeholder="ทุกตำบล"
-              disabled={false}
-              labelKey={(v) => `ต.${v}`}
-            />
-          </div>
-
-          {/* 4. Target Area Filter */}
-          <div className="space-y-1">
-            <label className="block text-[10px] font-bold text-slate-400">พื้นที่เป้าหมาย / หมู่บ้าน</label>
-            <MultiSelectDropdown 
-              options={availableTargetAreas}
-              selected={filterTargetArea}
-              onChange={setFilterTargetArea}
-              placeholder="ทุกพื้นที่เป้าหมาย / หมู่บ้าน"
-              disabled={false}
             />
           </div>
 

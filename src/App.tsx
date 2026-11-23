@@ -118,6 +118,13 @@ export default function App() {
         isDeleted: true
       };
     }
+    const numId = Number(r.id);
+    if (!isNaN(numId) && numId > 0 && numId < 1784000000000) {
+      return {
+        ...r,
+        isDeleted: true
+      };
+    }
     return r;
   };
 

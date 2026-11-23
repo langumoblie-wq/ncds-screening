@@ -88,7 +88,147 @@ export interface LocationMappingItem {
   targetArea: string;
 }
 
-// 21 official locations defined in program table
+// Official 15 Project Performance Units:
+// - โมเดลตำบล: 5 ตำบล (นับผลงานรายตำบล ส่วนอำเภอไว้ดูรายละเอียดของโมเดล)
+// - โมเดลหมู่บ้าน: 10 พื้นที่เป้าหมาย (หมู่บ้าน/รพ.สต.) (นับผลงานรายพื้นที่เป้าหมาย ส่วนอำเภอไว้ดูรายละเอียดของโมเดล)
+export interface ProjectPerformanceAreaItem {
+  model: "ตำบล" | "หมู่บ้าน";
+  areaName: string;
+  district: string;
+  subdistrict: string;
+  subdistrictDisplay: string;
+  subAreas: string[];
+}
+
+export const PROJECT_PERFORMANCE_AREAS: ProjectPerformanceAreaItem[] = [
+  // โมเดลตำบล (5 ตำบล)
+  {
+    model: "ตำบล",
+    areaName: "ตำบลพิมาน",
+    district: "เมือง",
+    subdistrict: "พิมาน",
+    subdistrictDisplay: "พิมาน",
+    subAreas: ["ชุมชนปานชูรำลึก", "สันตยาราม", "ตำบลพิมาน", "พิมาน"],
+  },
+  {
+    model: "ตำบล",
+    areaName: "ตำบลคลองขุด",
+    district: "เมือง",
+    subdistrict: "คลองขุด",
+    subdistrictDisplay: "คลองขุด",
+    subAreas: ["บ้านคลองขุด", "บ้านเกาะนก", "คลองขุดเหนือ", "ตำบลคลองขุด", "คลองขุด"],
+  },
+  {
+    model: "ตำบล",
+    areaName: "ตำบลขอนคลาน",
+    district: "ทุ่งหว้า",
+    subdistrict: "ขอนคลาน",
+    subdistrictDisplay: "ขอนคลาน",
+    subAreas: ["ม.1 ขอนคลานตะวันออก", "ม.2 ราไวย์ใต้", "ม.3 ขอนคลานตะวันตก", "ม.4 ราไวย์เหนือ", "ตำบลขอนคลาน", "ขอนคลาน"],
+  },
+  {
+    model: "ตำบล",
+    areaName: "ตำบลเขาขาว",
+    district: "ละงู",
+    subdistrict: "เขาขาว",
+    subdistrictDisplay: "เขาขาว",
+    subAreas: ["ม.5 ดาหลำ", "ม.6 ทุ่งเกาะปราบ", "ม.7 นาข่าใต้", "ตำบลเขาขาว", "เขาขาว"],
+  },
+  {
+    model: "ตำบล",
+    areaName: "ตำบลอุใดเจริญ",
+    district: "ควนกาหลง",
+    subdistrict: "อุใดเจริญ",
+    subdistrictDisplay: "อุใดเจริญ",
+    subAreas: ["ม.2 บ้านผัง 32.34.39", "ม.3 บ้านผัง 35,36,41", "ม.5 ผัง 31 (อุใดใต้,คลองโลน)", "ตำบลอุใดเจริญ", "อุใดเจริญ"],
+  },
+  // โมเดลหมู่บ้าน (10 พื้นที่)
+  {
+    model: "หมู่บ้าน",
+    areaName: "บ้านผัง 8,11,12",
+    district: "มะนัง",
+    subdistrict: "นิคมพัฒนา",
+    subdistrictDisplay: "ตำบลนิคมพัฒนา",
+    subAreas: ["ม.4 บ้านผัง 8,11,12", "บ้านผัง 8,11,12"],
+  },
+  {
+    model: "หมู่บ้าน",
+    areaName: "บ้านผัง16,17,19,20",
+    district: "มะนัง",
+    subdistrict: "นิคมพัฒนา",
+    subdistrictDisplay: "ตำบลนิคมพัฒนา",
+    subAreas: ["ม.8 บ้านผัง 16,17,19,20", "บ้านผัง16,17,19,20", "บ้านผัง 16,17,19,20"],
+  },
+  {
+    model: "หมู่บ้าน",
+    areaName: "บ้านปาล์มทองพัฒนา",
+    district: "มะนัง",
+    subdistrict: "ปาล์มพัฒนา",
+    subdistrictDisplay: "ตำบลปาล์มพัฒนา",
+    subAreas: ["ม.8 บ้านปาล์มทองพัฒนา", "บ้านปาล์มทองพัฒนา"],
+  },
+  {
+    model: "หมู่บ้าน",
+    areaName: "บ้านตำมะลัง",
+    district: "เมือง",
+    subdistrict: "ตำมะลัง",
+    subdistrictDisplay: "ตำบลตำมะลัง",
+    subAreas: ["บ้านตำมะลัง", "ตำมะลัง"],
+  },
+  {
+    model: "หมู่บ้าน",
+    areaName: "บ้านเขาจีน",
+    district: "เมือง",
+    subdistrict: "คลองขุด",
+    subdistrictDisplay: "ตำบลคลองขุด",
+    subAreas: ["บ้านเขาจีน", "เขาจีน"],
+  },
+  {
+    model: "หมู่บ้าน",
+    areaName: "บ้านเกาะยาว",
+    district: "เมือง",
+    subdistrict: "ปูยู",
+    subdistrictDisplay: "ตำบลปูยู",
+    subAreas: ["เกาะยาว", "บ้านเกาะยาว"],
+  },
+  {
+    model: "หมู่บ้าน",
+    areaName: "ชุมชนท่านายเนาว์",
+    district: "เมือง",
+    subdistrict: "พิมาน",
+    subdistrictDisplay: "ตำบลพิมาน",
+    subAreas: ["ท่านายเนาว์", "ชุมชนท่านายเนาว์"],
+  },
+  {
+    model: "หมู่บ้าน",
+    areaName: "บ้านวังยาว",
+    district: "ละงู",
+    subdistrict: "น้ำผุด",
+    subdistrictDisplay: "ตำบลน้ำผุด",
+    subAreas: ["ม.11 บ้านวังยาว", "บ้านวังยาว", "วังยาว"],
+  },
+  {
+    model: "หมู่บ้าน",
+    areaName: "บ้านสันติสุข",
+    district: "ละงู",
+    subdistrict: "เขาขาว",
+    subdistrictDisplay: "ตำบลเขาขาว",
+    subAreas: ["ม.1 บ้านสันติสุข", "บ้านสันติสุข", "สันติสุข"],
+  },
+  {
+    model: "หมู่บ้าน",
+    areaName: "บ้านควนไสน",
+    district: "ละงู",
+    subdistrict: "กำแพง",
+    subdistrictDisplay: "ตำบลกำแพง",
+    subAreas: ["ม.1 บ้านควนไสน", "บ้านควนไสน", "ควนไสน"],
+  },
+];
+
+export const SUBDISTRICT_MODEL_AREAS = PROJECT_PERFORMANCE_AREAS.filter((a) => a.model === "ตำบล");
+export const VILLAGE_MODEL_AREAS = PROJECT_PERFORMANCE_AREAS.filter((a) => a.model === "หมู่บ้าน");
+
+// 25 detailed sub-locations defined for data entry form (NcdForm)
 export const EXACT_LOCATION_LIST: LocationMappingItem[] = [
   { model: "ตำบล", district: "ควนกาหลง", subdistrict: "อุใดเจริญ", targetArea: "ม.2 บ้านผัง 32.34.39" },
   { model: "ตำบล", district: "ควนกาหลง", subdistrict: "อุใดเจริญ", targetArea: "ม.3 บ้านผัง 35,36,41" },
@@ -99,6 +239,7 @@ export const EXACT_LOCATION_LIST: LocationMappingItem[] = [
   { model: "ตำบล", district: "ทุ่งหว้า", subdistrict: "ขอนคลาน", targetArea: "ม.4 ราไวย์เหนือ" },
   { model: "หมู่บ้าน", district: "มะนัง", subdistrict: "นิคมพัฒนา", targetArea: "ม.4 บ้านผัง 8,11,12" },
   { model: "หมู่บ้าน", district: "มะนัง", subdistrict: "นิคมพัฒนา", targetArea: "ม.8 บ้านผัง 16,17,19,20" },
+  { model: "หมู่บ้าน", district: "มะนัง", subdistrict: "ปาล์มพัฒนา", targetArea: "ม.8 บ้านปาล์มทองพัฒนา" },
   { model: "หมู่บ้าน", district: "เมือง", subdistrict: "คลองขุด", targetArea: "บ้านเขาจีน" },
   { model: "หมู่บ้าน", district: "เมือง", subdistrict: "ตำมะลัง", targetArea: "บ้านตำมะลัง" },
   { model: "หมู่บ้าน", district: "เมือง", subdistrict: "ปูยู", targetArea: "เกาะยาว" },
@@ -122,6 +263,9 @@ export const LOCATION_DATA = {
       นิคมพัฒนา: [
         "ม.4 บ้านผัง 8,11,12",
         "ม.8 บ้านผัง 16,17,19,20",
+      ],
+      ปาล์มพัฒนา: [
+        "ม.8 บ้านปาล์มทองพัฒนา",
       ],
     },
     เมือง: {
