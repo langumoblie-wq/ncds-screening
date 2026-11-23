@@ -5,14 +5,15 @@ import {
   Search, ArrowRight, Activity, Calendar, MapPin, 
   Heart, User, Phone, Sparkles, TrendingUp, ChevronRight,
   Info, AlertCircle, Droplet, History,
-  Target, CheckCircle2, XCircle, Pencil, Trash2, Eye, EyeOff
+  Target, CheckCircle2, XCircle, Pencil, Trash2, Eye, EyeOff, Filter, RotateCcw
 } from "lucide-react";
-import { ScreeningRecord } from "../types";
+import { ScreeningRecord, SUBDISTRICT_MODEL_AREAS, VILLAGE_MODEL_AREAS } from "../types";
 import { 
   getHTPingPong, getDMPingPong, getCombinedPingPong, 
   PING_PONG_COLORS, PingPongColorInfo, formatThaiDate,
   maskPatientName, maskPhoneNumber
 } from "../utils";
+import { getRecordModel, getRecordSubdistrict, cleanSubdistrict } from "./BackupRestoreModal";
 
 interface IndividualProfileProps {
   isAdmin?: boolean;
@@ -38,30 +39,50 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
   onToggleHideNames
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
+  const [filterModel, setFilterModel] = useState<"all" | "ตำบล" | "หมู่บ้าน">("all");
+  const [filterSubdistrict, setFilterSubdistrict] = useState<string>("all");
   const [selectedPatientId, setSelectedPatientId] = useState<string>("");
   const [patientVisitCohortFilter, setPatientVisitCohortFilter] = useState<"all" | "multi" | "single">("all");
   const [selectedVisitId, setSelectedVisitId] = useState<number | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // Group records by unique patient (Key: name + phone)
+  // Group records by unique patient (Key: name + phone) with resolved model & subdistrict
   const uniquePatients = useMemo(() => {
-    const patientsMap: Record<string, { name: string; phone: string; latestRecord: ScreeningRecord; count: number }> = {};
+    const patientsMap: Record<
+      string,
+      {
+        name: string;
+        phone: string;
+        latestRecord: ScreeningRecord;
+        count: number;
+        model: "ตำบล" | "หมู่บ้าน";
+        subdistrict: string;
+      }
+    > = {};
     
-    // Process backwards or forwards to get count and latest
     records.forEach((r) => {
       const key = `${r.name}_${r.phone || ""}`;
+      const recModel = getRecordModel(r);
+      const recSub = cleanSubdistrict(r.subdistrict || getRecordSubdistrict(r)) || "";
       if (!patientsMap[key]) {
         patientsMap[key] = {
           name: r.name,
           phone: r.phone || "ไม่มีเบอร์โทร",
           latestRecord: r,
-          count: 1
+          count: 1,
+          model: recModel,
+          subdistrict: recSub
         };
       } else {
         patientsMap[key].count += 1;
+        if (!patientsMap[key].subdistrict && recSub) {
+          patientsMap[key].subdistrict = recSub;
+        }
         // Keep the record with latest date/visitNumber as latest
         if (r.visitNumber > patientsMap[key].latestRecord.visitNumber) {
           patientsMap[key].latestRecord = r;
+          patientsMap[key].model = recModel;
+          if (recSub) patientsMap[key].subdistrict = recSub;
         }
       }
     });
@@ -72,36 +93,80 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
     }));
   }, [records]);
 
-  // Filter patients based on query and visit count
-  const filteredPatients = useMemo(() => {
+  // Available subdistricts based on selected filterModel (ordered by official project areas first)
+  const availableSubdistricts = useMemo(() => {
+    const officialSubdistricts =
+      filterModel === "ตำบล"
+        ? SUBDISTRICT_MODEL_AREAS.map(u => u.subdistrict)
+        : filterModel === "หมู่บ้าน"
+        ? Array.from(new Set(VILLAGE_MODEL_AREAS.map(u => u.subdistrict)))
+        : Array.from(
+            new Set([
+              ...SUBDISTRICT_MODEL_AREAS.map(u => u.subdistrict),
+              ...VILLAGE_MODEL_AREAS.map(u => u.subdistrict)
+            ])
+          );
+
+    const countBySub = new Map<string, number>();
+    officialSubdistricts.forEach(s => countBySub.set(s, 0));
+
+    uniquePatients.forEach(p => {
+      if (filterModel !== "all" && p.model !== filterModel) return;
+      if (p.subdistrict) {
+        countBySub.set(p.subdistrict, (countBySub.get(p.subdistrict) || 0) + 1);
+      }
+    });
+
+    return Array.from(countBySub.entries())
+      .filter(([sub, cnt]) => sub && (cnt > 0 || officialSubdistricts.includes(sub)))
+      .map(([subdistrict, count]) => ({ subdistrict, count }));
+  }, [uniquePatients, filterModel]);
+
+  // Patients matching Model + Subdistrict + Search query (before cohort tab split)
+  const modelAndSubdistrictFilteredPatients = useMemo(() => {
     let list = uniquePatients;
+    if (filterModel !== "all") {
+      list = list.filter(p => p.model === filterModel);
+    }
+    if (filterSubdistrict !== "all") {
+      list = list.filter(p => cleanSubdistrict(p.subdistrict) === cleanSubdistrict(filterSubdistrict));
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      list = list.filter(
+        p =>
+          p.name.toLowerCase().includes(q) ||
+          p.phone.includes(q) ||
+          p.subdistrict.toLowerCase().includes(q) ||
+          (p.latestRecord.targetArea || "").toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [uniquePatients, filterModel, filterSubdistrict, searchQuery]);
+
+  // Final filtered patients including visit count cohort tab
+  const filteredPatients = useMemo(() => {
     if (patientVisitCohortFilter === "multi") {
-      list = list.filter(p => p.count > 1);
+      return modelAndSubdistrictFilteredPatients.filter(p => p.count > 1);
     } else if (patientVisitCohortFilter === "single") {
-      list = list.filter(p => p.count === 1);
+      return modelAndSubdistrictFilteredPatients.filter(p => p.count === 1);
     }
+    return modelAndSubdistrictFilteredPatients;
+  }, [modelAndSubdistrictFilteredPatients, patientVisitCohortFilter]);
 
-    if (!searchQuery.trim()) return list;
-    return list.filter(p => 
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.phone.includes(searchQuery)
-    );
-  }, [uniquePatients, searchQuery, patientVisitCohortFilter]);
-
-  // Set first patient as default when selectedPatientId is empty and patients exist
-  useState(() => {
-    if (uniquePatients.length > 0 && !selectedPatientId) {
-      setSelectedPatientId(uniquePatients[0].id);
-    }
-  });
-
-  // Ensure we select something if nothing is selected but patients are available
+  // Ensure we select a visible patient when filters change
   const activePatientId = useMemo(() => {
+    if (selectedPatientId && filteredPatients.some(p => p.id === selectedPatientId)) {
+      return selectedPatientId;
+    }
+    if (filteredPatients.length > 0) {
+      return filteredPatients[0].id;
+    }
     if (selectedPatientId && uniquePatients.some(p => p.id === selectedPatientId)) {
       return selectedPatientId;
     }
     return uniquePatients.length > 0 ? uniquePatients[0].id : "";
-  }, [selectedPatientId, uniquePatients]);
+  }, [selectedPatientId, filteredPatients, uniquePatients]);
 
   // Reset selectedVisitId when activePatientId changes
   useEffect(() => {
@@ -170,12 +235,12 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
       
       {/* LEFT: Patient list and search selector (4 cols) */}
-      <div className="lg:col-span-4 bg-white rounded-2xl border border-slate-200 shadow-2xs p-5 space-y-4 h-[640px] flex flex-col justify-between">
-        <div className="space-y-3.5 flex-1 flex flex-col overflow-hidden">
+      <div className="lg:col-span-4 bg-white rounded-2xl border border-slate-200 shadow-2xs p-5 space-y-4 h-[680px] flex flex-col justify-between">
+        <div className="space-y-3 flex-1 flex flex-col overflow-hidden">
           <div className="flex items-start justify-between gap-2">
             <div>
               <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">ค้นหาประวัติรายบุคคล</h4>
-              <p className="text-[10px] text-slate-500 mt-0.5">ค้นหาและเลือกผู้รับการตรวจเพื่อวิเคราะห์พฤติกรรมสะสม</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">ค้นหาและกรองตามโมเดล / ตำบล เพื่อเลือกผู้รับการตรวจ</p>
             </div>
             {onToggleHideNames && (
               <button
@@ -195,14 +260,77 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
           </div>
 
           <div className="relative shrink-0">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input 
               type="text" 
-              placeholder="พิมพ์ชื่อหรือเบอร์โทร..."
+              placeholder="พิมพ์ชื่อ, เบอร์โทร หรือพื้นที่..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full text-xs rounded-xl border border-slate-250 pl-9 pr-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all"
+              className="w-full text-xs rounded-xl border border-slate-250 pl-9 pr-4 py-2 outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all"
             />
+          </div>
+
+          {/* Model & Subdistrict Filters */}
+          <div className="grid grid-cols-2 gap-2 shrink-0">
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 mb-1 flex items-center gap-1">
+                <Filter className="w-2.5 h-2.5 text-indigo-500" />
+                <span>โมเดล</span>
+              </label>
+              <select
+                value={filterModel}
+                onChange={(e) => {
+                  const nextModel = e.target.value as "all" | "ตำบล" | "หมู่บ้าน";
+                  setFilterModel(nextModel);
+                  setFilterSubdistrict("all");
+                }}
+                className="w-full text-[11px] font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl px-2.5 py-2 outline-none focus:ring-2 focus:ring-blue-500/15 focus:border-blue-500 transition-all cursor-pointer"
+              >
+                <option value="all">ทุกโมเดล ({uniquePatients.length})</option>
+                <option value="ตำบล">
+                  โมเดลตำบล ({uniquePatients.filter(p => p.model === "ตำบล").length})
+                </option>
+                <option value="หมู่บ้าน">
+                  โมเดลหมู่บ้าน ({uniquePatients.filter(p => p.model === "หมู่บ้าน").length})
+                </option>
+              </select>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[10px] font-bold text-slate-500 flex items-center gap-1">
+                  <MapPin className="w-2.5 h-2.5 text-blue-500" />
+                  <span>ตำบล</span>
+                </label>
+                {(filterModel !== "all" || filterSubdistrict !== "all" || searchQuery.trim() !== "") && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFilterModel("all");
+                      setFilterSubdistrict("all");
+                      setSearchQuery("");
+                    }}
+                    className="text-[9px] font-bold text-rose-600 hover:text-rose-700 flex items-center gap-0.5 cursor-pointer"
+                    title="ล้างตัวกรองทั้งหมด"
+                  >
+                    <RotateCcw className="w-2.5 h-2.5" />
+                    ล้าง
+                  </button>
+                )}
+              </div>
+              <select
+                value={filterSubdistrict}
+                onChange={(e) => setFilterSubdistrict(e.target.value)}
+                className="w-full text-[11px] font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl px-2.5 py-2 outline-none focus:ring-2 focus:ring-blue-500/15 focus:border-blue-500 transition-all cursor-pointer"
+              >
+                <option value="all">ทุกตำบล ({availableSubdistricts.length} ตำบล)</option>
+                {availableSubdistricts.map(({ subdistrict, count }) => (
+                  <option key={subdistrict} value={subdistrict}>
+                    ต.{subdistrict} ({count} คน)
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {/* Cohort Tabs: All / Follow-up / Single */}
@@ -216,7 +344,7 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
                   : "text-slate-500 hover:text-slate-800"
               }`}
             >
-              ทั้งหมด ({uniquePatients.length})
+              ทั้งหมด ({modelAndSubdistrictFilteredPatients.length})
             </button>
             <button
               type="button"
@@ -227,7 +355,7 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
                   : "text-slate-500 hover:text-slate-800"
               }`}
             >
-              ติดตาม ≥2 ครั้ง ({uniquePatients.filter(p => p.count > 1).length})
+              ติดตาม ≥2 ครั้ง ({modelAndSubdistrictFilteredPatients.filter(p => p.count > 1).length})
             </button>
             <button
               type="button"
@@ -238,7 +366,7 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
                   : "text-slate-500 hover:text-slate-800"
               }`}
             >
-              ตรวจ 1 ครั้ง ({uniquePatients.filter(p => p.count === 1).length})
+              ตรวจ 1 ครั้ง ({modelAndSubdistrictFilteredPatients.filter(p => p.count === 1).length})
             </button>
           </div>
 
@@ -246,7 +374,7 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
           <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
             {filteredPatients.length === 0 ? (
               <div className="text-center py-12 text-slate-400 text-xs">
-                ไม่พบรายชื่อผู้รับการตรวจ
+                ไม่พบรายชื่อผู้รับการตรวจตามเงื่อนไขที่เลือก
               </div>
             ) : (
               filteredPatients.map((p) => {
@@ -268,7 +396,7 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
                         : "bg-white hover:bg-slate-50/80 border-slate-200"
                     }`}
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
                       {/* MoPH Ping Pong dot indicator */}
                       <span className={`w-3.5 h-3.5 rounded-full shrink-0 border border-slate-200/50 block relative ${latestCombinedPingPong.glowClass}`} style={{
                         backgroundColor: 
@@ -286,13 +414,27 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
                       
                       <div className="truncate">
                         <div className="text-xs font-bold text-slate-700 truncate">{maskPatientName(p.name, hideNames)}</div>
-                        <div className="text-[9px] text-slate-400 flex items-center gap-1 mt-0.5">
-                          <Phone className="w-2.5 h-2.5" /> {maskPhoneNumber(p.phone, hideNames)}
+                        <div className="text-[9px] text-slate-400 flex items-center gap-1.5 mt-0.5 flex-wrap">
+                          <span className="inline-flex items-center gap-0.5">
+                            <Phone className="w-2.5 h-2.5" /> {maskPhoneNumber(p.phone, hideNames)}
+                          </span>
+                          {p.subdistrict && (
+                            <span className="text-slate-500 font-semibold">
+                              • ต.{p.subdistrict}
+                            </span>
+                          )}
+                          <span className={`px-1.5 py-0.1 rounded text-[8.5px] font-bold ${
+                            p.model === "ตำบล"
+                              ? "bg-purple-50 text-purple-700 border border-purple-200/70"
+                              : "bg-blue-50 text-blue-700 border border-blue-200/70"
+                          }`}>
+                            {p.model}
+                          </span>
                         </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center gap-1 shrink-0 ml-1">
                       <span className="text-[9px] bg-slate-100 text-slate-500 font-bold px-2 py-0.5 rounded-full">
                         {p.count} ครั้ง
                       </span>
