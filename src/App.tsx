@@ -1201,6 +1201,11 @@ export default function App() {
                   onSubmitSuccess={handleAddRecordSuccess} 
                   initialRecord={editingRecord}
                   isFollowUp={isFollowUpMode}
+                  allRecords={records}
+                  onSelectRecordToEdit={(record, asFollowUp = false) => {
+                    setEditingRecord(record);
+                    setIsFollowUpMode(asFollowUp);
+                  }}
                   onCancelEdit={() => {
                     setEditingRecord(null);
                     setIsFollowUpMode(false);
@@ -1350,6 +1355,12 @@ export default function App() {
             onClose={() => setSelectedRecord(null)}
             onUpdateRecord={handleUpdateRecord}
             onDeleteRecord={handleDeleteRecord}
+            onEditRecord={(rec) => {
+              setSelectedRecord(null);
+              setEditingRecord(rec);
+              setIsFollowUpMode(false);
+              setActiveTab("form");
+            }}
           />
         )}
       </AnimatePresence>

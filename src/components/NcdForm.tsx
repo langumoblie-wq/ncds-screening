@@ -1,29 +1,55 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { 
   User, MapPin, Phone, HeartPulse, ShieldAlert, Activity, ClipboardCheck, 
   HelpCircle, Coffee, Flame, AlertTriangle, Droplet, PlusCircle, CheckCircle2,
-  Calendar, Users
+  Calendar, Users, History, Pencil, Search, X
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { DistrictType, ScreeningRecord, DISTRICT_TARGET_AREAS, DISTRICT_SUBDISTRICT_MAP, LOCATION_DATA, PersonalPlan, ParticipantType } from "../types";
-import { calculateBMI, calculateHTRisk, calculateDMRisk, evaluateFoodHabit, parseDateToIso, isoToThaiDateString, formatThaiDateReadable } from "../utils";
+import { calculateBMI, calculateHTRisk, calculateDMRisk, evaluateFoodHabit, parseDateToIso, isoToThaiDateString, formatThaiDateReadable, formatThaiDate } from "../utils";
 import { FOOD_HABIT_QUESTIONS } from "../data/questions";
 import { ConsentModal } from "./ConsentModal";
-import { getRecordModel, getRecordSubdistrict, cleanDistrict } from "./BackupRestoreModal";
+import { getRecordModel, getRecordSubdistrict, cleanDistrict, cleanSubdistrict } from "./BackupRestoreModal";
 import { ThaiDatePicker } from "./ThaiDatePicker";
+
+function reconstructFoodHabitAnswers(rec?: ScreeningRecord | null): Record<string, number> {
+  const existing = rec?.foodHabitAnswers ? { ...rec.foodHabitAnswers } : {};
+  FOOD_HABIT_QUESTIONS.forEach((cat) => {
+    const allPresent = cat.questions.every((q) => existing[q.id] !== undefined);
+    if (allPresent) return;
+
+    const savedScore = Number(rec?.foodHabit?.[cat.key]?.score);
+    const targetScore = !isNaN(savedScore) && savedScore >= 5 && savedScore <= 15 ? savedScore : 5;
+    let remainingExtra = targetScore - 5; // each question starts at score 1 (total 5)
+
+    cat.questions.forEach((q) => {
+      if (existing[q.id] !== undefined) return;
+      const add = Math.min(2, Math.max(0, remainingExtra));
+      remainingExtra -= add;
+      const desiredScore = 1 + add; // 1, 2, or 3
+      const choiceIdx = q.scoreMapping.indexOf(desiredScore);
+      existing[q.id] = choiceIdx !== -1 ? choiceIdx : q.scoreMapping.indexOf(1);
+    });
+  });
+  return existing;
+}
 
 interface NcdFormProps {
   onSubmitSuccess: (record: ScreeningRecord, isEdit: boolean) => void;
   initialRecord?: ScreeningRecord | null;
   isFollowUp?: boolean;
   onCancelEdit?: () => void;
+  allRecords?: ScreeningRecord[];
+  onSelectRecordToEdit?: (record: ScreeningRecord, asFollowUp?: boolean) => void;
 }
 
 export const NcdForm: React.FC<NcdFormProps> = ({ 
   onSubmitSuccess,
   initialRecord = null,
   isFollowUp = false,
-  onCancelEdit
+  onCancelEdit,
+  allRecords = [],
+  onSelectRecordToEdit
 }) => {
   const [showConsentModal, setShowConsentModal] = useState(false);
   const [hasConsented, setHasConsented] = useState(false);
@@ -145,13 +171,15 @@ export const NcdForm: React.FC<NcdFormProps> = ({
 
       // Infer modelType and subdistrict if not present
       const initialModel = initialRecord.modelType || getRecordModel(initialRecord);
-      setModelType(initialModel as "หมู่บ้าน" | "ตำบล");
-      setDistrict(initialRecord.district);
+      setModelType((initialModel === "หมู่บ้าน" || initialModel === "ตำบล" ? initialModel : "หมู่บ้าน") as "หมู่บ้าน" | "ตำบล");
+      const cleanedDist = (cleanDistrict(initialRecord.district) || initialRecord.district || "") as DistrictType | "";
+      setDistrict(cleanedDist);
       
-      const sub = initialRecord.subdistrict || getRecordSubdistrict(initialRecord);
+      const rawSub = initialRecord.subdistrict || getRecordSubdistrict(initialRecord);
+      const sub = cleanSubdistrict(rawSub) || rawSub || "";
       setSubdistrict(sub);
-      setTargetArea(initialRecord.targetArea);
-      setPhone(initialRecord.phone);
+      setTargetArea(initialRecord.targetArea || "");
+      setPhone(initialRecord.phone || "");
       
       // Diseases History
       const diseases = initialRecord.familyHistory || [];
@@ -219,8 +247,8 @@ export const NcdForm: React.FC<NcdFormProps> = ({
         });
       }
       
-      // Food Habit Answers
-      setFoodHabitAnswers(initialRecord.foodHabitAnswers || {});
+      // Food Habit Answers (reconstruct from saved scores if individual answers were not stored)
+      setFoodHabitAnswers(reconstructFoodHabitAnswers(initialRecord));
     } else {
       // Reset form to defaults
       const now = new Date();
@@ -281,6 +309,61 @@ export const NcdForm: React.FC<NcdFormProps> = ({
     }
   }, [initialRecord, isFollowUp]);
 
+  // Quick search state for finding an existing patient to edit directly from the form tab
+  const [editSearchQuery, setEditSearchQuery] = useState("");
+  const [showQuickEditFinder, setShowQuickEditFinder] = useState(false);
+
+  // All visits belonging to the currently edited/followed-up patient (or matched by name)
+  const patientVisits = useMemo(() => {
+    const targetName = (initialRecord?.name || name || "").trim().replace(/\s+/g, " ");
+    if (!targetName || targetName.length < 2) return [];
+    return (allRecords || [])
+      .filter((r) => {
+        if (!r || r.isDeleted) return false;
+        const rName = (r.name || "").trim().replace(/\s+/g, " ");
+        return rName === targetName;
+      })
+      .sort((a, b) => {
+        const vDiff = (Number(a.visitNumber) || 1) - (Number(b.visitNumber) || 1);
+        if (vDiff !== 0) return vDiff;
+        return parseDateToIso(a.date).localeCompare(parseDateToIso(b.date));
+      });
+  }, [allRecords, initialRecord?.name, name]);
+
+  // Quick search results grouped by patient name so user can pick which person and which visit (ครั้งที่) to edit
+  const quickEditPatientGroups = useMemo(() => {
+    const q = editSearchQuery.trim().toLowerCase();
+    if (!q) return [];
+    const map = new Map<string, { name: string; district: string; targetArea: string; visits: ScreeningRecord[] }>();
+    (allRecords || []).forEach((r) => {
+      if (!r || r.isDeleted) return;
+      const nameStr = (r.name || "").trim();
+      const phoneStr = (r.phone || "").trim();
+      const areaStr = (r.targetArea || "").trim();
+      if (
+        nameStr.toLowerCase().includes(q) ||
+        phoneStr.includes(q) ||
+        areaStr.toLowerCase().includes(q)
+      ) {
+        const key = nameStr.replace(/\s+/g, " ");
+        if (!map.has(key)) {
+          map.set(key, {
+            name: nameStr,
+            district: r.district || "",
+            targetArea: r.targetArea || "",
+            visits: [],
+          });
+        }
+        map.get(key)!.visits.push(r);
+      }
+    });
+    const list = Array.from(map.values()).slice(0, 15);
+    list.forEach((g) => {
+      g.visits.sort((a, b) => (Number(a.visitNumber) || 1) - (Number(b.visitNumber) || 1));
+    });
+    return list;
+  }, [allRecords, editSearchQuery]);
+
   // Real-time BMI
   const liveBmi = weight && height ? calculateBMI(Number(weight), Number(height)) : "0.0";
   
@@ -290,27 +373,37 @@ export const NcdForm: React.FC<NcdFormProps> = ({
   // Real-time DM risk
   const liveDmResult = sugar ? calculateDMRisk(Number(sugar), sugarFasting) : null;
 
-  // Cascading location helper arrays
-  const availableDistricts = (modelType && LOCATION_DATA[modelType])
-    ? (Object.keys(LOCATION_DATA[modelType]) as DistrictType[]).filter(d => d !== "เมืองสตูล")
-    : (Object.keys(DISTRICT_SUBDISTRICT_MAP) as DistrictType[]).filter(d => d !== "เมืองสตูล");
+  // Cascading location helper arrays (preserving existing record values during edits)
+  const baseDistricts: DistrictType[] = (modelType && LOCATION_DATA[modelType])
+    ? (Object.keys(LOCATION_DATA[modelType]) as DistrictType[]).filter((d): d is DistrictType => d !== "เมืองสตูล")
+    : (Object.keys(DISTRICT_SUBDISTRICT_MAP) as DistrictType[]).filter((d): d is DistrictType => d !== "เมืองสตูล");
+  const availableDistricts: DistrictType[] = district && !baseDistricts.includes(district as DistrictType)
+    ? [...baseDistricts, district as DistrictType]
+    : baseDistricts;
 
   const cleanD = cleanDistrict(district);
-  const availableSubdistricts = district
+  const baseSubdistricts = district
     ? (modelType
         ? Object.keys((LOCATION_DATA[modelType] as any)?.[cleanD] || (LOCATION_DATA[modelType] as any)?.[district] || {})
         : Object.keys(DISTRICT_SUBDISTRICT_MAP[cleanD as DistrictType] || DISTRICT_SUBDISTRICT_MAP[district as DistrictType] || {})
       )
     : [];
+  const availableSubdistricts = subdistrict && !baseSubdistricts.includes(subdistrict)
+    ? [...baseSubdistricts, subdistrict]
+    : baseSubdistricts;
 
-  const availableAreas = district && subdistrict
+  const baseAreas: string[] = district && subdistrict
     ? (modelType
         ? (LOCATION_DATA[modelType] as any)?.[cleanD]?.[subdistrict] ||
-          (LOCATION_DATA[modelType] as any)?.[district]?.[subdistrict] || []
+          (LOCATION_DATA[modelType] as any)?.[district]?.[subdistrict] ||
+          DISTRICT_SUBDISTRICT_MAP[cleanD as DistrictType]?.[subdistrict] || []
         : DISTRICT_SUBDISTRICT_MAP[cleanD as DistrictType]?.[subdistrict] ||
           DISTRICT_SUBDISTRICT_MAP[district as DistrictType]?.[subdistrict] || []
       )
     : [];
+  const availableAreas = targetArea && !baseAreas.includes(targetArea)
+    ? [...baseAreas, targetArea]
+    : baseAreas;
 
   // Real-time food scores
   const getCategoryScoreAndEvaluation = (catKey: "sweet" | "fat" | "salt") => {
@@ -414,11 +507,16 @@ export const NcdForm: React.FC<NcdFormProps> = ({
   };
 
   const proceedSubmit = async () => {
+    // Ensure foodHabitAnswers is populated when editing an existing record
+    const effectiveFoodAnswers = initialRecord
+      ? { ...reconstructFoodHabitAnswers(initialRecord), ...foodHabitAnswers }
+      : foodHabitAnswers;
+
     // Validation for food questions
     let missingQuestions: string[] = [];
     FOOD_HABIT_QUESTIONS.forEach((cat) => {
       cat.questions.forEach((q) => {
-        if (foodHabitAnswers[q.id] === undefined) {
+        if (effectiveFoodAnswers[q.id] === undefined) {
           missingQuestions.push(q.text.split(".")[0]);
         }
       });
@@ -450,7 +548,7 @@ export const NcdForm: React.FC<NcdFormProps> = ({
       if (!category) return 5;
       let score = 0;
       category.questions.forEach((q) => {
-        score += q.scoreMapping[foodHabitAnswers[q.id] || 0];
+        score += q.scoreMapping[effectiveFoodAnswers[q.id] ?? 0];
       });
       return score < 5 ? 5 : score;
     };
@@ -503,7 +601,7 @@ export const NcdForm: React.FC<NcdFormProps> = ({
         fat: evaluateFoodHabit(fatScore, "fat"),
         salt: evaluateFoodHabit(saltScore, "salt"),
       },
-      foodHabitAnswers,
+      foodHabitAnswers: effectiveFoodAnswers,
       personalPlan,
       hasConsented: initialRecord?.hasConsented || hasConsented,
     };
@@ -615,32 +713,210 @@ export const NcdForm: React.FC<NcdFormProps> = ({
     <div className="max-w-4xl mx-auto space-y-6">
       
       {/* Introduction Card - Clean Minimalism */}
-      <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h2 className="text-lg sm:text-xl font-bold text-slate-800 flex items-center gap-2">
-            <HeartPulse className="w-5.5 h-5.5 text-blue-600 animate-pulse" />
-            {initialRecord 
-              ? isFollowUp 
-                ? `บันทึกการติดตามตรวจสุขภาพ (ครั้งที่ ${initialRecord.visitNumber + 1}): คุณ${initialRecord.name}` 
-                : `แก้ไขข้อมูลคัดกรอง: คุณ${initialRecord.name}` 
-              : `ระบบบันทึกและคัดกรองเบาหวาน-ความดันโลหิตสูง`}
-          </h2>
-          <p className="text-xs text-slate-500 mt-1 max-w-2xl leading-relaxed">
-            {initialRecord 
-              ? isFollowUp
-                ? `ขณะนี้กำลังทำการติดตามคัดกรองครั้งถัดไป โดยอ้างอิงข้อมูลพื้นฐานจากการคัดกรองรอบก่อนหน้า (ครั้งที่ ${initialRecord.visitNumber}) คุณสามารถแก้ไขสัญญาณชีพ พฤติกรรม และแบบประเมินสำหรับครั้งนี้แล้วบันทึกเป็นประวัติใหม่ได้`
-                : `ขณะนี้คุณกำลังทำการแก้ไขข้อมูลประวัติพฤติกรรมและข้อมูลทางคลินิกของผู้รับการคัดกรอง เมื่อทำการแก้ไขเสร็จแล้วสามารถบันทึกข้อมูลได้ทันที`
-              : `บันทึกข้อมูลประวัติพฤติกรรม สัญญาณชีพทางคลินิก และประเมินพฤติกรรมการบริโภค หวาน มัน เค็ม ตามเกณฑ์มาตรฐาน เพื่อป้องกันกลุ่มเสี่ยงและวางแผนการจัดการสุขภาพ`}
-          </p>
+      <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h2 className="text-lg sm:text-xl font-bold text-slate-800 flex items-center gap-2 flex-wrap">
+              <HeartPulse className="w-5.5 h-5.5 text-blue-600 animate-pulse" />
+              {initialRecord 
+                ? isFollowUp 
+                  ? `บันทึกการติดตามตรวจสุขภาพ (ครั้งที่ ${visitNumber}): คุณ${initialRecord.name}` 
+                  : `แก้ไขข้อมูลคัดกรอง (ครั้งที่ ${visitNumber}): คุณ${initialRecord.name}` 
+                : `ระบบบันทึกและคัดกรองเบาหวาน-ความดันโลหิตสูง`}
+              {initialRecord && !isFollowUp && (
+                <span className="text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-300 font-bold">
+                  โหมดแก้ไขข้อมูล • ครั้งที่ {visitNumber}
+                </span>
+              )}
+            </h2>
+            <p className="text-xs text-slate-500 mt-1 max-w-2xl leading-relaxed">
+              {initialRecord 
+                ? isFollowUp
+                  ? `ขณะนี้กำลังทำการติดตามคัดกรองครั้งถัดไป โดยอ้างอิงข้อมูลพื้นฐานจากการคัดกรองรอบก่อนหน้า (ครั้งที่ ${initialRecord.visitNumber}) คุณสามารถแก้ไขสัญญาณชีพ พฤติกรรม และแบบประเมินสำหรับครั้งนี้แล้วบันทึกเป็นประวัติใหม่ได้`
+                  : `คุณสามารถเลือกสลับ "ครั้งที่" ที่ต้องการแก้ไขได้จากแถบประวัติการคัดกรองด้านล่าง หรือปรับเปลี่ยนข้อมูลและลำดับครั้งที่แล้วกด "บันทึกการแก้ไข" ได้ทันที`
+                : `บันทึกข้อมูลประวัติพฤติกรรม สัญญาณชีพทางคลินิก และประเมินพฤติกรรมการบริโภค หวาน มัน เค็ม ตามเกณฑ์มาตรฐาน หรือค้นหารายชื่อเดิมเพื่อเลือกครั้งที่ต้องการแก้ไข`}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 self-stretch sm:self-auto">
+            {onSelectRecordToEdit && (
+              <button
+                type="button"
+                onClick={() => setShowQuickEditFinder((prev) => !prev)}
+                className={`text-xs py-2 px-3.5 rounded-xl transition-all font-bold flex items-center justify-center gap-1.5 cursor-pointer border ${
+                  showQuickEditFinder
+                    ? "bg-amber-600 text-white border-amber-600 shadow-xs"
+                    : "bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200"
+                }`}
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                <span>ค้นหารายชื่อเพื่อแก้ไข / เลือกครั้งที่แก้ไข</span>
+              </button>
+            )}
+            {!initialRecord && (
+              <button
+                type="button"
+                onClick={fillMockHealthyAnswers}
+                className="bg-slate-50 hover:bg-slate-100 active:scale-95 text-slate-700 border border-slate-200 text-xs py-2 px-3.5 rounded-xl transition-all font-semibold text-center cursor-pointer"
+              >
+                ใส่คำตอบปกติเป็นข้อมูลตัวอย่าง
+              </button>
+            )}
+          </div>
         </div>
-        {!initialRecord && (
-          <button
-            type="button"
-            onClick={fillMockHealthyAnswers}
-            className="bg-slate-50 hover:bg-slate-100 active:scale-95 text-slate-700 border border-slate-200 text-xs py-2 px-3.5 rounded-xl transition-all font-semibold self-stretch sm:self-auto text-center cursor-pointer"
-          >
-            ใส่คำตอบปกติเป็นข้อมูลตัวอย่าง
-          </button>
+
+        {/* Quick Patient & Visit Finder to Edit Any Visit */}
+        {showQuickEditFinder && onSelectRecordToEdit && (
+          <div className="bg-amber-50/70 border border-amber-200 rounded-2xl p-4 space-y-3 animate-in fade-in duration-150">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Search className="w-4 h-4 text-amber-700" />
+                <span className="text-xs font-extrabold text-amber-900">
+                  ค้นหาผู้รับการคัดกรองเพื่อเลือก &ldquo;ครั้งที่&rdquo; ที่ต้องการแก้ไขข้อมูล
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowQuickEditFinder(false)}
+                className="text-amber-700 hover:text-amber-900 p-1 rounded-lg hover:bg-amber-100 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={editSearchQuery}
+                onChange={(e) => setEditSearchQuery(e.target.value)}
+                placeholder="พิมพ์ชื่อ-นามสกุล, เบอร์โทรศัพท์ หรือชื่อพื้นที่เป้าหมาย เพื่อค้นหา..."
+                className="w-full pl-10 pr-4 py-2.5 text-xs rounded-xl border border-amber-300 bg-white focus:ring-2 focus:ring-amber-500 outline-none font-semibold text-slate-800"
+              />
+            </div>
+            {editSearchQuery.trim().length > 0 && (
+              <div className="max-h-64 overflow-y-auto divide-y divide-amber-100 bg-white rounded-xl border border-amber-200">
+                {quickEditPatientGroups.length === 0 ? (
+                  <div className="p-4 text-center text-xs text-slate-400 font-medium">
+                    ไม่พบรายชื่อที่ค้นหา
+                  </div>
+                ) : (
+                  quickEditPatientGroups.map((group) => (
+                    <div key={group.name} className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-amber-50/40">
+                      <div>
+                        <div className="text-xs font-bold text-slate-800">{group.name}</div>
+                        <div className="text-[11px] text-slate-500">
+                          อ.{group.district} • {group.targetArea} (มีประวัติ {group.visits.length} ครั้ง)
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {group.visits.map((v) => {
+                          const vNum = v.visitNumber || 1;
+                          const isCurrent = initialRecord?.id === v.id && !isFollowUp;
+                          return (
+                            <button
+                              key={v.id}
+                              type="button"
+                              onClick={() => {
+                                onSelectRecordToEdit(v, false);
+                                setShowQuickEditFinder(false);
+                              }}
+                              className={`text-[11px] px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 border transition-all cursor-pointer ${
+                                isCurrent
+                                  ? "bg-amber-600 text-white border-amber-600 shadow-2xs"
+                                  : "bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200"
+                              }`}
+                            >
+                              <Pencil className="w-3 h-3" />
+                              <span>แก้ไข ครั้งที่ {vNum}</span>
+                              <span className={`text-[10px] ${isCurrent ? "text-amber-100" : "text-slate-500"}`}>
+                                ({formatThaiDate(v.date, "slash")})
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Visit Switcher Bar for the Currently Selected Patient (เลือกครั้งที่ต้องการแก้ไข) */}
+        {patientVisits.length > 0 && onSelectRecordToEdit && (
+          <div className="bg-gradient-to-r from-amber-50/90 via-indigo-50/60 to-blue-50/70 border border-amber-200/90 rounded-2xl p-4 space-y-2.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="bg-amber-500 text-white p-1.5 rounded-lg shrink-0">
+                  <History className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-xs font-extrabold text-slate-800">
+                    เลือก &ldquo;ครั้งที่มาคัดกรอง&rdquo; ที่ต้องการแก้ไขของ คุณ{initialRecord?.name || name}
+                  </span>
+                  <span className="ml-2 text-[11px] font-bold px-2 py-0.5 rounded-full bg-white text-indigo-700 border border-indigo-200">
+                    มีประวัติทั้งหมด {patientVisits.length} ครั้ง
+                  </span>
+                </div>
+              </div>
+              <span className="text-[11px] text-slate-600 font-medium">
+                คลิกเลือกครั้งที่ด้านล่างเพื่อดึงข้อมูลครั้งนั้นขึ้นมาแก้ไข
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              {patientVisits.map((v) => {
+                const vNum = v.visitNumber || 1;
+                const isSelectedForEdit = initialRecord?.id === v.id && !isFollowUp;
+                return (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => onSelectRecordToEdit(v, false)}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-2 cursor-pointer ${
+                      isSelectedForEdit
+                        ? "bg-amber-600 text-white border-amber-600 shadow-xs ring-2 ring-amber-500/25"
+                        : "bg-white hover:bg-amber-50 text-slate-700 border-slate-200"
+                    }`}
+                  >
+                    <Pencil className={`w-3.5 h-3.5 ${isSelectedForEdit ? "text-white" : "text-amber-600"}`} />
+                    <div className="text-left">
+                      <div className="flex items-center gap-1.5">
+                        <span>ครั้งที่ {vNum} {vNum === 1 ? "(แรกรับ)" : `(ติดตาม #${vNum - 1})`}</span>
+                        {isSelectedForEdit && (
+                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-white/20 text-white font-extrabold">
+                            กำลังแก้ไข
+                          </span>
+                        )}
+                      </div>
+                      <div className={`text-[10px] font-normal ${isSelectedForEdit ? "text-amber-100" : "text-slate-400"}`}>
+                        วันที่ {formatThaiDate(v.date, "slash")} • BP {v.bpSys}/{v.bpDia} • น้ำตาล {v.sugar || "-"}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+
+              {/* Button to record next follow-up visit based on latest visit */}
+              <button
+                type="button"
+                onClick={() => {
+                  const latestV = patientVisits[patientVisits.length - 1];
+                  if (latestV) onSelectRecordToEdit(latestV, true);
+                }}
+                className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
+                  isFollowUp
+                    ? "bg-emerald-600 text-white border-emerald-600 shadow-xs ring-2 ring-emerald-500/25"
+                    : "bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200"
+                }`}
+              >
+                <PlusCircle className="w-3.5 h-3.5" />
+                <span>
+                  + เพิ่มการตรวจครั้งถัดไป (ครั้งที่ {(patientVisits[patientVisits.length - 1]?.visitNumber || 1) + 1})
+                </span>
+              </button>
+            </div>
+          </div>
         )}
       </div>
 
@@ -760,15 +1036,67 @@ export const NcdForm: React.FC<NcdFormProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">ครั้งที่มาคัดกรอง <span className="text-rose-500">*</span></label>
-              <input 
-                type="number" 
-                required 
-                min={1} 
-                value={visitNumber} 
-                onChange={(e) => setVisitNumber(Number(e.target.value))}
-                className="w-full text-sm rounded-xl border border-slate-300 p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-              />
+              <label className="block text-xs font-semibold text-slate-500 mb-1">
+                ครั้งที่มาคัดกรอง (เลือกครั้งที่) <span className="text-rose-500">*</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <select
+                  value={visitNumber <= 12 ? visitNumber : "custom"}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val !== "custom") {
+                      const num = Number(val);
+                      setVisitNumber(num);
+                    }
+                  }}
+                  className="flex-1 text-sm rounded-xl border border-slate-300 p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white font-semibold text-slate-800"
+                >
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((num) => {
+                    const existingForNum = patientVisits.find((v) => (v.visitNumber || 1) === num);
+                    return (
+                      <option key={num} value={num}>
+                        ครั้งที่ {num} {num === 1 ? "(คัดกรองแรกรับ)" : `(ติดตามครั้งที่ ${num - 1})`}
+                        {existingForNum ? ` • มีข้อมูลวันที่ ${formatThaiDate(existingForNum.date, "slash")}` : ""}
+                      </option>
+                    );
+                  })}
+                  {visitNumber > 12 && (
+                    <option value="custom">ครั้งที่ {visitNumber}</option>
+                  )}
+                </select>
+                <input 
+                  type="number" 
+                  required 
+                  min={1} 
+                  value={visitNumber} 
+                  onChange={(e) => setVisitNumber(Math.max(1, Number(e.target.value) || 1))}
+                  title="ระบุเลขครั้งที่มาคัดกรอง"
+                  className="w-20 text-sm text-center font-bold rounded-xl border border-slate-300 p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                />
+              </div>
+              {/* If another visit record exists for this patient with the chosen visitNumber, offer 1-click switch to edit that visit */}
+              {(() => {
+                const matchedExistingVisit = patientVisits.find(
+                  (v) => (v.visitNumber || 1) === Number(visitNumber) && v.id !== initialRecord?.id
+                );
+                if (matchedExistingVisit && onSelectRecordToEdit) {
+                  return (
+                    <div className="mt-1.5 p-2 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-between gap-2 text-[11px]">
+                      <span className="text-amber-800 font-semibold">
+                        พบข้อมูล <strong>ครั้งที่ {visitNumber}</strong> ({formatThaiDate(matchedExistingVisit.date, "slash")}) ของผู้รับการตรวจรายนี้ในระบบ
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onSelectRecordToEdit(matchedExistingVisit, false)}
+                        className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold shrink-0 cursor-pointer transition-colors"
+                      >
+                        ดึงข้อมูลครั้งที่ {visitNumber} มาแก้ไข
+                      </button>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </div>
 
             <div>
@@ -799,10 +1127,12 @@ export const NcdForm: React.FC<NcdFormProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">เบอร์โทรศัพท์ <span className="text-rose-500">*</span></label>
+              <label className="block text-xs font-semibold text-slate-500 mb-1">
+                เบอร์โทรศัพท์ {!initialRecord && <span className="text-rose-500">*</span>}
+              </label>
               <input 
                 type="tel" 
-                required 
+                required={!initialRecord}
                 value={phone} 
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="เช่น 0812345678"
@@ -811,10 +1141,12 @@ export const NcdForm: React.FC<NcdFormProps> = ({
             </div>
 
             <div className="sm:col-span-2">
-              <label className="block text-xs font-semibold text-slate-500 mb-1">ที่อยู่ (บ้านเลขที่ หมู่ ซอย ชุมชน) <span className="text-rose-500">*</span></label>
+              <label className="block text-xs font-semibold text-slate-500 mb-1">
+                ที่อยู่ (บ้านเลขที่ หมู่ ซอย ชุมชน) {!initialRecord && <span className="text-rose-500">*</span>}
+              </label>
               <input 
                 type="text" 
-                required 
+                required={!initialRecord}
                 value={address} 
                 onChange={(e) => setAddress(e.target.value)}
                 placeholder="บ้านเลขที่ ถนน ชุมชน..."

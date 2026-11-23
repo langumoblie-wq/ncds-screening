@@ -369,14 +369,14 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
               {/* Combined Status Banner */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto shrink-0">
                 
-                {isAdmin && onEditRecord && (
+                {onEditRecord && (
                   <button
                     onClick={() => onEditRecord(latestVisit)}
-                    className="bg-amber-100/50 border border-amber-200 hover:bg-amber-100 text-amber-600 font-bold text-xs py-3 px-4 rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all shadow-xs"
-                    title="แก้ไขข้อมูลล่าสุด"
+                    className="bg-amber-100/70 border border-amber-300 hover:bg-amber-100 text-amber-800 font-bold text-xs py-3 px-4 rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all shadow-xs"
+                    title={`แก้ไขข้อมูลการคัดกรอง ครั้งที่ ${latestVisit.visitNumber || 1}`}
                   >
-                    <Pencil className="w-4 h-4" />
-                    แก้ไข
+                    <Pencil className="w-4 h-4 text-amber-600" />
+                    <span>แก้ไขข้อมูล (ครั้งที่ {latestVisit.visitNumber || 1})</span>
                   </button>
                 )}
                 {isAdmin && onDeleteRecord && (

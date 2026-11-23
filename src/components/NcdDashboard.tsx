@@ -656,6 +656,7 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
   onToggleHideNames
 }) => {
   const [recordToDelete, setRecordToDelete] = useState<ScreeningRecord | null>(null);
+  const [recordForVisitEditSelection, setRecordForVisitEditSelection] = useState<ScreeningRecord | null>(null);
   const [isCloudSyncing, setIsCloudSyncing] = useState(false);
   
   // Filters state
@@ -2878,11 +2879,18 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
                           >
                             <Eye className="w-4 h-4" />
                           </button>
-                          {isAdmin && onEditRecord && (
+                          {onEditRecord && (
                             <button
-                              onClick={() => onEditRecord(r)}
+                              onClick={() => {
+                                const pGroup = patientVisitMapping[`${r.name}_${r.phone || ""}`];
+                                if (pGroup && pGroup.records && pGroup.records.length > 1) {
+                                  setRecordForVisitEditSelection(r);
+                                } else {
+                                  onEditRecord(r);
+                                }
+                              }}
                               className="bg-amber-50 hover:bg-amber-100 text-amber-600 p-1.5 rounded-lg transition-colors cursor-pointer"
-                              title="แก้ไขข้อมูล"
+                              title="แก้ไขข้อมูลคัดกรอง (สามารถเลือกครั้งที่ต้องการแก้ไขได้)"
                             >
                               <Pencil className="w-4 h-4" />
                             </button>
@@ -2944,6 +2952,98 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
                 className="flex-1 py-2.5 text-sm font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl transition-colors shadow-sm"
               >
                 ยืนยันการลบ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Visit Selection Modal for Editing a Patient with Multiple Visits */}
+      {recordForVisitEditSelection && onEditRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col p-6 animate-in zoom-in-95 duration-200 space-y-4">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="bg-amber-100 text-amber-700 p-2 rounded-xl shrink-0">
+                  <Pencil className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-800">
+                    เลือก &ldquo;ครั้งที่มาคัดกรอง&rdquo; ที่ต้องการแก้ไข
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    {maskPatientName(recordForVisitEditSelection.name, hideNames, recordForVisitEditSelection.id)} • อ.{recordForVisitEditSelection.district}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRecordForVisitEditSelection(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 cursor-pointer text-sm font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+              {(
+                patientVisitMapping[`${recordForVisitEditSelection.name}_${recordForVisitEditSelection.phone || ""}`]?.records || [
+                  recordForVisitEditSelection,
+                ]
+              )
+                .slice()
+                .sort((a, b) => (Number(a.visitNumber) || 1) - (Number(b.visitNumber) || 1))
+                .map((v) => {
+                  const vNum = v.visitNumber || 1;
+                  const isClickedRow = v.id === recordForVisitEditSelection.id;
+                  return (
+                    <button
+                      key={v.id}
+                      type="button"
+                      onClick={() => {
+                        setRecordForVisitEditSelection(null);
+                        onEditRecord(v);
+                      }}
+                      className={`w-full p-3.5 rounded-xl border text-left transition-all flex items-center justify-between gap-3 cursor-pointer ${
+                        isClickedRow
+                          ? "bg-amber-50/80 border-amber-400 hover:bg-amber-100/80 shadow-2xs"
+                          : "bg-white hover:bg-slate-50 border-slate-200"
+                      }`}
+                    >
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-extrabold text-slate-800">
+                            ครั้งที่ {vNum} {vNum === 1 ? "(คัดกรองแรกรับ)" : `(ติดตาม #${vNum - 1})`}
+                          </span>
+                          {isClickedRow && (
+                            <span className="text-[10px] font-bold px-2 py-0.2 rounded-full bg-amber-200/80 text-amber-900">
+                              รายการที่คลิก
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          วันที่ตรวจ: {formatThaiDate(v.date, "medium")} ({formatThaiDate(v.date, "slash")})
+                        </div>
+                        <div className="text-[11px] text-slate-600 font-semibold">
+                          ความดัน: {v.bpSys}/{v.bpDia} mmHg • น้ำตาล: {v.sugar || "-"} • BMI: {v.bmi || "-"}
+                        </div>
+                      </div>
+                      <span className="px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-bold shrink-0 flex items-center gap-1">
+                        <Pencil className="w-3.5 h-3.5" />
+                        แก้ไขครั้งที่ {vNum}
+                      </span>
+                    </button>
+                  );
+                })}
+            </div>
+
+            <div className="pt-2 border-t border-slate-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setRecordForVisitEditSelection(null)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+              >
+                ปิดหน้าต่าง
               </button>
             </div>
           </div>

@@ -795,7 +795,6 @@ export const ExecutiveModelReport: React.FC<ExecutiveModelReportProps> = ({
   const [pageBreakPerModel, setPageBreakPerModel] = useState<boolean>(true);
   const [showProcessSection, setShowProcessSection] = useState<boolean>(true);
   const [showOutcomeSection, setShowOutcomeSection] = useState<boolean>(true);
-  const [showSignatureBlock, setShowSignatureBlock] = useState<boolean>(true);
   const [isExpandedOnScreen, setIsExpandedOnScreen] = useState<boolean>(true);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
   const [exportStatusMsg, setExportStatusMsg] = useState<string>("");
@@ -1411,16 +1410,6 @@ export const ExecutiveModelReport: React.FC<ExecutiveModelReportProps> = ({
                 className="rounded text-indigo-500 focus:ring-0"
               />
               <span>ผลลัพธ์ปรับพฤติกรรม & สุขภาพ</span>
-            </label>
-
-            <label className="inline-flex items-center gap-1.5 cursor-pointer text-slate-200 hover:text-white">
-              <input
-                type="checkbox"
-                checked={showSignatureBlock}
-                onChange={(e) => setShowSignatureBlock(e.target.checked)}
-                className="rounded text-indigo-500 focus:ring-0"
-              />
-              <span>ช่องลงนามผู้บริหาร</span>
             </label>
 
             <button
@@ -2307,40 +2296,6 @@ export const ExecutiveModelReport: React.FC<ExecutiveModelReportProps> = ({
               </ul>
             </div>
           </div>
-
-          {showSignatureBlock && (
-            <div className="pt-6 mt-4 border-t border-indigo-200/80 grid grid-cols-1 sm:grid-cols-3 gap-6 text-center text-xs text-slate-700 print:grid-cols-3 print:pt-8 print:break-inside-avoid">
-              <div className="space-y-8">
-                <div className="font-bold text-slate-800">ผู้จัดทำและสรุปรายงาน</div>
-                <div className="space-y-1">
-                  <div>ลงชื่อ...........................................................</div>
-                  <div className="font-bold text-slate-800">(...........................................................)</div>
-                  <div className="text-[11px] text-slate-500">ผู้รับผิดชอบโครงการ / เจ้าหน้าที่สาธารณสุข</div>
-                  <div className="text-[11px] text-slate-500">วันที่ {todayThai}</div>
-                </div>
-              </div>
-
-              <div className="space-y-8">
-                <div className="font-bold text-slate-800">ผู้ตรวจสอบและเสนอรายงาน</div>
-                <div className="space-y-1">
-                  <div>ลงชื่อ...........................................................</div>
-                  <div className="font-bold text-slate-800">(...........................................................)</div>
-                  <div className="text-[11px] text-slate-500">หัวหน้ากลุ่มงาน / ผู้อำนวยการ รพ.สต.</div>
-                  <div className="text-[11px] text-slate-500">วันที่ ........../........../2569</div>
-                </div>
-              </div>
-
-              <div className="space-y-8">
-                <div className="font-bold text-slate-800">ความเห็นผู้บริหาร / ประธานที่ประชุม</div>
-                <div className="space-y-1">
-                  <div>[  ] ทราบ   [  ] เห็นชอบดำเนินการตามข้อเสนอ</div>
-                  <div className="pt-2">ลงชื่อ...........................................................</div>
-                  <div className="font-bold text-slate-800">(...........................................................)</div>
-                  <div className="text-[11px] text-slate-500">ผู้บริหาร / ประธานคณะกรรมการโครงการระดับอำเภอ</div>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
@@ -2570,29 +2525,6 @@ export const ExecutiveModelReport: React.FC<ExecutiveModelReportProps> = ({
                 )}
               </tbody>
             </table>
-          </div>
-
-
-          {/* PDF Footer Signature */}
-          <div style={{ marginTop: "22px", paddingTop: "14px", borderTop: "1px solid #cbd5e1", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", textAlign: "center", fontSize: "10px" }}>
-            <div>
-              <div style={{ fontWeight: 700, marginBottom: "22px" }}>ผู้จัดทำและสรุปรายงาน</div>
-              <div>ลงชื่อ......................................................</div>
-              <div style={{ marginTop: "3px" }}>(......................................................)</div>
-              <div style={{ color: "#64748b", fontSize: "9px", marginTop: "2px" }}>วันที่ {todayThai}</div>
-            </div>
-            <div>
-              <div style={{ fontWeight: 700, marginBottom: "22px" }}>ผู้ตรวจสอบและเสนอรายงาน</div>
-              <div>ลงชื่อ......................................................</div>
-              <div style={{ marginTop: "3px" }}>(......................................................)</div>
-              <div style={{ color: "#64748b", fontSize: "9px", marginTop: "2px" }}>หัวหน้ากลุ่มงาน / ผอ.รพ.สต.</div>
-            </div>
-            <div>
-              <div style={{ fontWeight: 700, marginBottom: "22px" }}>ประธานที่ประชุม / ผู้บริหารรับทราบ</div>
-              <div>ลงชื่อ......................................................</div>
-              <div style={{ marginTop: "3px" }}>(......................................................)</div>
-              <div style={{ color: "#64748b", fontSize: "9px", marginTop: "2px" }}>ผู้บริหารระดับอำเภอ / จังหวัด</div>
-            </div>
           </div>
         </div>
       </div>

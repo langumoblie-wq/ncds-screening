@@ -4,7 +4,7 @@ import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { 
   X, Activity, Heart, User, MapPin, Phone, Calendar, ClipboardList, 
-  Trash2, Check, ShieldAlert, Printer, Download, FileCheck, Loader2, History
+  Trash2, Check, ShieldAlert, Printer, Download, FileCheck, Loader2, History, Pencil
 } from "lucide-react";
 import { ScreeningRecord } from "../types";
 import { formatThaiDate, maskPatientName, maskPhoneNumber } from "../utils";
@@ -18,6 +18,7 @@ interface RecordModalProps {
   onClose: () => void;
   onUpdateRecord: (updatedRecord: ScreeningRecord) => void;
   onDeleteRecord?: (id: number) => void;
+  onEditRecord?: (record: ScreeningRecord) => void;
   hideNames?: boolean;
 }
 
@@ -28,6 +29,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
   onClose, 
   onUpdateRecord, 
   onDeleteRecord,
+  onEditRecord,
   hideNames = false
 }) => {
   const [activeRecordId, setActiveRecordId] = useState<number>(initialRecord.id);
@@ -195,6 +197,16 @@ export const RecordModal: React.FC<RecordModalProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {onEditRecord && (
+              <button
+                onClick={() => onEditRecord(record)}
+                className="p-2 text-amber-800 hover:text-amber-900 hover:bg-amber-100 rounded-lg transition-colors flex items-center gap-1.5 text-sm font-bold border border-amber-300 bg-amber-50 shadow-xs cursor-pointer"
+                title={`แก้ไขข้อมูลการคัดกรอง ครั้งที่ ${record.visitNumber || 1}`}
+              >
+                <Pencil className="w-4 h-4 text-amber-600" />
+                <span>แก้ไข (ครั้งที่ {record.visitNumber || 1})</span>
+              </button>
+            )}
             <button
               onClick={handleDownloadReportPdf}
               disabled={isGeneratingReportPdf}
