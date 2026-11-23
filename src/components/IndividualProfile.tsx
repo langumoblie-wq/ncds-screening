@@ -5,12 +5,13 @@ import {
   Search, ArrowRight, Activity, Calendar, MapPin, 
   Heart, User, Phone, Sparkles, TrendingUp, ChevronRight,
   Info, AlertCircle, Droplet, History,
-  Target, CheckCircle2, XCircle, Pencil, Trash2
+  Target, CheckCircle2, XCircle, Pencil, Trash2, Eye, EyeOff
 } from "lucide-react";
 import { ScreeningRecord } from "../types";
 import { 
   getHTPingPong, getDMPingPong, getCombinedPingPong, 
-  PING_PONG_COLORS, PingPongColorInfo, formatThaiDate
+  PING_PONG_COLORS, PingPongColorInfo, formatThaiDate,
+  maskPatientName, maskPhoneNumber
 } from "../utils";
 
 interface IndividualProfileProps {
@@ -20,6 +21,8 @@ interface IndividualProfileProps {
   onFollowUpRecord?: (record: ScreeningRecord) => void;
   onEditRecord?: (record: ScreeningRecord) => void;
   onDeleteRecord?: (record: ScreeningRecord) => void;
+  hideNames?: boolean;
+  onToggleHideNames?: () => void;
 }
 
 // Sparkline/Line Chart component using plain responsive SVGs
@@ -30,7 +33,9 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
   onSelectRecord,
   onFollowUpRecord,
   onEditRecord,
-  onDeleteRecord
+  onDeleteRecord,
+  hideNames = false,
+  onToggleHideNames
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPatientId, setSelectedPatientId] = useState<string>("");
@@ -167,9 +172,26 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
       {/* LEFT: Patient list and search selector (4 cols) */}
       <div className="lg:col-span-4 bg-white rounded-2xl border border-slate-200 shadow-2xs p-5 space-y-4 h-[640px] flex flex-col justify-between">
         <div className="space-y-3.5 flex-1 flex flex-col overflow-hidden">
-          <div>
-            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">ค้นหาประวัติรายบุคคล</h4>
-            <p className="text-[10px] text-slate-500 mt-0.5">ค้นหาและเลือกผู้รับการตรวจเพื่อวิเคราะห์พฤติกรรมสะสม</p>
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">ค้นหาประวัติรายบุคคล</h4>
+              <p className="text-[10px] text-slate-500 mt-0.5">ค้นหาและเลือกผู้รับการตรวจเพื่อวิเคราะห์พฤติกรรมสะสม</p>
+            </div>
+            {onToggleHideNames && (
+              <button
+                type="button"
+                onClick={onToggleHideNames}
+                className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold border transition-all cursor-pointer shrink-0 ${
+                  hideNames
+                    ? "bg-amber-100 border-amber-300 text-amber-800 hover:bg-amber-200"
+                    : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                }`}
+                title={hideNames ? "คลิกเพื่อแสดงรายชื่อจริง" : "คลิกเพื่อปกปิดรายชื่อและเบอร์โทร"}
+              >
+                {hideNames ? <EyeOff className="w-3 h-3 text-amber-700" /> : <Eye className="w-3 h-3 text-slate-500" />}
+                <span>{hideNames ? "ปกปิดอยู่" : "ปกปิดชื่อ"}</span>
+              </button>
+            )}
           </div>
 
           <div className="relative shrink-0">
@@ -263,9 +285,9 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
                       </span>
                       
                       <div className="truncate">
-                        <div className="text-xs font-bold text-slate-700 truncate">{p.name}</div>
+                        <div className="text-xs font-bold text-slate-700 truncate">{maskPatientName(p.name, hideNames)}</div>
                         <div className="text-[9px] text-slate-400 flex items-center gap-1 mt-0.5">
-                          <Phone className="w-2.5 h-2.5" /> {p.phone}
+                          <Phone className="w-2.5 h-2.5" /> {maskPhoneNumber(p.phone, hideNames)}
                         </div>
                       </div>
                     </div>
@@ -310,7 +332,7 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
                 </div>
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-base font-bold text-slate-800">{latestVisit.name}</h3>
+                    <h3 className="text-base font-bold text-slate-800">{maskPatientName(latestVisit.name, hideNames, latestVisit.id)}</h3>
                     <span className="text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-100 px-2.5 py-0.5 rounded-lg">
                       {latestVisit.gender} • อายุ {latestVisit.age} ปี
                     </span>
@@ -746,7 +768,7 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
               {/* BP Comparison & Trend using Recharts */}
               <BloodPressureTrendRecharts 
                 visits={patientVisits}
-                patientName={latestVisit?.name}
+                patientName={maskPatientName(latestVisit?.name, hideNames, latestVisit?.id)}
               />
 
               {/* Sugar Trend Graph */}

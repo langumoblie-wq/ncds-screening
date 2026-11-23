@@ -8,7 +8,7 @@ import { RefreshCw,
   Droplet, Ruler
 } from "lucide-react";
 import { ScreeningRecord, DistrictType, LOCATION_DATA, DISTRICT_SUBDISTRICT_MAP } from "../types";
-import { parseDateToIso, formatYearMonthThai, formatYearMonthThaiShort, getRecordYearMonth, formatThaiDate } from "../utils";
+import { parseDateToIso, formatYearMonthThai, formatYearMonthThaiShort, getRecordYearMonth, formatThaiDate, maskPatientName, maskPhoneNumber } from "../utils";
 import { 
   BackupExportModal, 
   BackupImportModal, 
@@ -34,6 +34,8 @@ interface NcdDashboardProps {
   onImportRecords?: (records: ScreeningRecord[]) => Promise<any> | void;
   onSyncCloud?: () => Promise<any> | void;
   onOpenExecutiveReport?: () => void;
+  hideNames?: boolean;
+  onToggleHideNames?: () => void;
 }
 
 
@@ -96,7 +98,7 @@ const MultiSelectDropdown = ({ options, selected, onChange, placeholder, disable
   );
 };
 
-// Reusable custom circular progress gauge
+// Reusable custom circular progress gauge for BMI
 const BMIDoughnut: React.FC<{
   underweight: number;
   normal: number;
@@ -111,99 +113,105 @@ const BMIDoughnut: React.FC<{
   const pctOW = total > 0 ? (overweight / total) * 100 : 0;
   const pctOB1 = total > 0 ? (obese1 / total) * 100 : 0;
   const pctOB2 = total > 0 ? (obese2 / total) * 100 : 0;
-  const size = 160;
+
+  const size = 152;
   const strokeWidth = 14;
   const center = size / 2;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const dasharray = circumference;
+
+  const bmiItems = [
+    { label: "ผอม (<18.5)", count: underweight, pct: Math.round(pctUW), dot: "bg-blue-500", bg: "bg-blue-50/50 border-blue-100", text: "text-blue-700" },
+    { label: "ปกติ (18.5-22.9)", count: normal, pct: Math.round(pctN), dot: "bg-emerald-500", bg: "bg-emerald-50/50 border-emerald-100", text: "text-emerald-700" },
+    { label: "ท้วม (23-24.9)", count: overweight, pct: Math.round(pctOW), dot: "bg-amber-500", bg: "bg-amber-50/50 border-amber-100", text: "text-amber-700" },
+    { label: "อ้วน (25-29.9)", count: obese1, pct: Math.round(pctOB1), dot: "bg-rose-500", bg: "bg-rose-50/50 border-rose-100", text: "text-rose-700" },
+    { label: "อ้วนมาก (≥30)", count: obese2, pct: Math.round(pctOB2), dot: "bg-purple-500", bg: "bg-purple-50/50 border-purple-100", text: "text-purple-700" },
+  ];
+
+  const overweightTotal = overweight + obese1 + obese2;
+  const overweightPct = total > 0 ? Math.round((overweightTotal / total) * 100) : 0;
+
   return (
-    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col items-center">
-      <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center mb-4">{title}</h4>
-      {total === 0 ? (
-        <div className="h-[160px] flex flex-col items-center justify-center text-slate-400 text-xs text-center space-y-1">
-          <EyeOff className="w-8 h-8 text-slate-300" />
-          <p>ไม่มีข้อมูลแสดงผล</p>
+    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between h-full">
+      <div>
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-4 rounded-full bg-indigo-500 shrink-0" />
+            <h4 className="text-xs font-black text-slate-800 tracking-wide">{title}</h4>
+          </div>
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-slate-100 text-slate-600 shrink-0">
+            BMI เกณฑ์เอเชีย
+          </span>
         </div>
-      ) : (
-        <div className="flex flex-col sm:flex-row items-center gap-6 w-full justify-center">
-          <div className="relative w-[160px] h-[160px] shrink-0">
-            <svg width={size} height={size} className="-rotate-90 transform">
-              <circle cx={center} cy={center} r={radius} fill="transparent" stroke="#f1f5f9" strokeWidth={strokeWidth} />
-              {pctUW > 0 && <circle cx={center} cy={center} r={radius} fill="transparent" stroke="#3b82f6" strokeWidth={strokeWidth} strokeDasharray={dasharray} strokeDashoffset={circumference - (circumference * pctUW) / 100} />}
-              {pctN > 0 && <circle cx={center} cy={center} r={radius} fill="transparent" stroke="#10b981" strokeWidth={strokeWidth} strokeDasharray={dasharray} strokeDashoffset={circumference - (circumference * pctN) / 100} style={{ transform: `rotate(${pctUW * 3.6}deg)`, transformOrigin: "center" }} />}
-              {pctOW > 0 && <circle cx={center} cy={center} r={radius} fill="transparent" stroke="#f59e0b" strokeWidth={strokeWidth} strokeDasharray={dasharray} strokeDashoffset={circumference - (circumference * pctOW) / 100} style={{ transform: `rotate(${(pctUW + pctN) * 3.6}deg)`, transformOrigin: "center" }} />}
-              {pctOB1 > 0 && <circle cx={center} cy={center} r={radius} fill="transparent" stroke="#f43f5e" strokeWidth={strokeWidth} strokeDasharray={dasharray} strokeDashoffset={circumference - (circumference * pctOB1) / 100} style={{ transform: `rotate(${(pctUW + pctN + pctOW) * 3.6}deg)`, transformOrigin: "center" }} />}
-              {pctOB2 > 0 && <circle cx={center} cy={center} r={radius} fill="transparent" stroke="#8b5cf6" strokeWidth={strokeWidth} strokeDasharray={dasharray} strokeDashoffset={circumference - (circumference * pctOB2) / 100} style={{ transform: `rotate(${(pctUW + pctN + pctOW + pctOB1) * 3.6}deg)`, transformOrigin: "center" }} />}
-            </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-2xl font-black text-slate-800">{total}</span>
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">เคสทั้งหมด</span>
+
+        {total === 0 ? (
+          <div className="h-[220px] flex flex-col items-center justify-center text-slate-400 text-xs text-center space-y-1">
+            <EyeOff className="w-8 h-8 text-slate-300" />
+            <p>ไม่มีข้อมูลแสดงผล</p>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-4">
+            {/* Circular SVG Chart Centered */}
+            <div className="relative w-[152px] h-[152px] shrink-0">
+              <svg width={size} height={size} className="-rotate-90 transform">
+                <circle cx={center} cy={center} r={radius} fill="transparent" stroke="#f1f5f9" strokeWidth={strokeWidth} />
+                {pctUW > 0 && <circle cx={center} cy={center} r={radius} fill="transparent" stroke="#3b82f6" strokeWidth={strokeWidth} strokeDasharray={dasharray} strokeDashoffset={circumference - (circumference * pctUW) / 100} />}
+                {pctN > 0 && <circle cx={center} cy={center} r={radius} fill="transparent" stroke="#10b981" strokeWidth={strokeWidth} strokeDasharray={dasharray} strokeDashoffset={circumference - (circumference * pctN) / 100} style={{ transform: `rotate(${pctUW * 3.6}deg)`, transformOrigin: "center" }} />}
+                {pctOW > 0 && <circle cx={center} cy={center} r={radius} fill="transparent" stroke="#f59e0b" strokeWidth={strokeWidth} strokeDasharray={dasharray} strokeDashoffset={circumference - (circumference * pctOW) / 100} style={{ transform: `rotate(${(pctUW + pctN) * 3.6}deg)`, transformOrigin: "center" }} />}
+                {pctOB1 > 0 && <circle cx={center} cy={center} r={radius} fill="transparent" stroke="#f43f5e" strokeWidth={strokeWidth} strokeDasharray={dasharray} strokeDashoffset={circumference - (circumference * pctOB1) / 100} style={{ transform: `rotate(${(pctUW + pctN + pctOW) * 3.6}deg)`, transformOrigin: "center" }} />}
+                {pctOB2 > 0 && <circle cx={center} cy={center} r={radius} fill="transparent" stroke="#8b5cf6" strokeWidth={strokeWidth} strokeDasharray={dasharray} strokeDashoffset={circumference - (circumference * pctOB2) / 100} style={{ transform: `rotate(${(pctUW + pctN + pctOW + pctOB1) * 3.6}deg)`, transformOrigin: "center" }} />}
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-2xl font-black text-slate-800 leading-none">{total.toLocaleString()}</span>
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">เคสทั้งหมด</span>
+              </div>
+            </div>
+
+            {/* Clean Structured Legend Rows (No collision) */}
+            <div className="w-full space-y-1.5">
+              {bmiItems.map((item) => (
+                <div
+                  key={item.label}
+                  className={`flex items-center justify-between px-3 py-1.5 rounded-xl border ${item.bg} text-xs`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${item.dot}`} />
+                    <span className="text-slate-700 font-bold truncate">{item.label}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0 pl-2">
+                    <span className="font-black text-slate-800">{item.count.toLocaleString()} ราย</span>
+                    <span className={`text-[11px] font-bold px-1.5 py-0.2 rounded-md bg-white/80 ${item.text} min-w-[40px] text-right`}>
+                      {item.pct}%
+                    </span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-          <div className="space-y-3 w-full max-w-[140px]">
-            <div className="flex justify-between items-start text-xs">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 bg-blue-500 rounded-full" />
-                <span className="text-slate-600 font-medium whitespace-nowrap">ผอม</span>
-              </div>
-              <div className="flex flex-col items-end">
-                <span className="font-bold text-slate-800 whitespace-nowrap">{underweight} ราย</span>
-                <span className="text-[10px] font-semibold text-slate-500">({Math.round(pctUW)}%)</span>
-              </div>
-            </div>
-            <div className="flex justify-between items-start text-xs">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full" />
-                <span className="text-slate-600 font-medium whitespace-nowrap">ปกติ</span>
-              </div>
-              <div className="flex flex-col items-end">
-                <span className="font-bold text-slate-800 whitespace-nowrap">{normal} ราย</span>
-                <span className="text-[10px] font-semibold text-slate-500">({Math.round(pctN)}%)</span>
-              </div>
-            </div>
-            <div className="flex justify-between items-start text-xs">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 bg-amber-500 rounded-full" />
-                <span className="text-slate-600 font-medium whitespace-nowrap">ท้วม</span>
-              </div>
-              <div className="flex flex-col items-end">
-                <span className="font-bold text-slate-800 whitespace-nowrap">{overweight} ราย</span>
-                <span className="text-[10px] font-semibold text-slate-500">({Math.round(pctOW)}%)</span>
-              </div>
-            </div>
-            <div className="flex justify-between items-start text-xs">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 bg-rose-500 rounded-full" />
-                <span className="text-slate-600 font-medium whitespace-nowrap">อ้วน</span>
-              </div>
-              <div className="flex flex-col items-end">
-                <span className="font-bold text-slate-800 whitespace-nowrap">{obese1} ราย</span>
-                <span className="text-[10px] font-semibold text-slate-500">({Math.round(pctOB1)}%)</span>
-              </div>
-            </div>
-            <div className="flex justify-between items-start text-xs">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 bg-purple-500 rounded-full" />
-                <span className="text-slate-600 font-medium whitespace-nowrap">อ้วนมาก</span>
-              </div>
-              <div className="flex flex-col items-end">
-                <span className="font-bold text-slate-800 whitespace-nowrap">{obese2} ราย</span>
-                <span className="text-[10px] font-semibold text-slate-500">({Math.round(pctOB2)}%)</span>
-              </div>
-            </div>
-          </div>
+        )}
+      </div>
+
+      {total > 0 && (
+        <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px]">
+          <span className="text-slate-500 font-semibold">น้ำหนักเกินเกณฑ์ (BMI ≥ 23):</span>
+          <span className="font-black text-rose-600">
+            {overweightTotal.toLocaleString()} ราย ({overweightPct}%)
+          </span>
         </div>
       )}
     </div>
   );
 };
+
 const RiskDoughnut: React.FC<{
   normal: number;
   risk: number;
   danger: number;
   title: string;
-}> = ({ normal, risk, danger, title }) => {
+  accentColor?: string;
+  badgeText?: string;
+}> = ({ normal, risk, danger, title, accentColor = "bg-blue-600", badgeText = "เกณฑ์คัดกรอง" }) => {
   const total = normal + risk + danger;
   
   const pctNormal = total > 0 ? Math.round((normal / total) * 100) : 0;
@@ -211,131 +219,133 @@ const RiskDoughnut: React.FC<{
   const pctDanger = total > 0 ? Math.round((danger / total) * 100) : 0;
 
   // SVG parameters
-  const size = 160;
+  const size = 152;
   const strokeWidth = 14;
   const center = size / 2;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
 
-  // Segments calculation
-  const offsetNormal = circumference;
-  const offsetRisk = offsetNormal - (circumference * pctNormal) / 100;
-  const offsetDanger = offsetRisk - (circumference * pctRisk) / 100;
+  const riskRows = [
+    { label: "ปกติ", count: normal, pct: pctNormal, dot: "bg-emerald-500", bg: "bg-emerald-50/50 border-emerald-100", text: "text-emerald-700" },
+    { label: "กลุ่มเสี่ยงสูง", count: risk, pct: pctRisk, dot: "bg-amber-500", bg: "bg-amber-50/50 border-amber-100", text: "text-amber-700" },
+    { label: "สงสัยป่วย", count: danger, pct: pctDanger, dot: "bg-rose-500", bg: "bg-rose-50/50 border-rose-100", text: "text-rose-700" },
+  ];
+
+  const abnormalTotal = risk + danger;
+  const abnormalPct = total > 0 ? Math.round((abnormalTotal / total) * 100) : 0;
 
   return (
-    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col items-center">
-      <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center mb-4">{title}</h4>
-      
-      {total === 0 ? (
-        <div className="h-[160px] flex flex-col items-center justify-center text-slate-400 text-xs text-center space-y-1">
-          <EyeOff className="w-8 h-8 text-slate-300" />
-          <p>ไม่มีข้อมูลแสดงผล</p>
+    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between h-full">
+      <div>
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+          <div className="flex items-center gap-2">
+            <span className={`w-2 h-4 rounded-full ${accentColor} shrink-0`} />
+            <h4 className="text-xs font-black text-slate-800 tracking-wide">{title}</h4>
+          </div>
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-slate-100 text-slate-600 shrink-0">
+            {badgeText}
+          </span>
         </div>
-      ) : (
-        <div className="flex flex-col sm:flex-row items-center gap-6 w-full justify-center">
-          
-          {/* Circular SVG Chart */}
-          <div className="relative w-[160px] h-[160px] shrink-0">
-            <svg width={size} height={size} className="transform -rotate-90">
-              {/* Background circle */}
-              <circle
-                cx={center}
-                cy={center}
-                r={radius}
-                fill="transparent"
-                stroke="#f1f5f9"
-                strokeWidth={strokeWidth}
-              />
-              
-              {/* Normal Segment (White/Greenish) */}
-              {pctNormal > 0 && (
-                <circle
-                  cx={center}
-                  cy={center}
-                  r={radius}
-                  fill="transparent"
-                  stroke="#10b981" // emerald-500
-                  strokeWidth={strokeWidth}
-                  strokeDasharray={circumference}
-                  strokeDashoffset={circumference - (circumference * pctNormal) / 100}
-                />
-              )}
-              {/* Risk Segment */}
-              {pctRisk > 0 && (
-                <circle
-                  cx={center}
-                  cy={center}
-                  r={radius}
-                  fill="transparent"
-                  stroke="#f59e0b" // amber-500
-                  strokeWidth={strokeWidth}
-                  strokeDasharray={circumference}
-                  strokeDashoffset={circumference - (circumference * pctRisk) / 100}
-                  style={{ transform: `rotate(${pctNormal * 3.6}deg)`, transformOrigin: "center" }}
-                />
-              )}
-              {/* Danger Segment */}
-              {pctDanger > 0 && (
-                <circle
-                  cx={center}
-                  cy={center}
-                  r={radius}
-                  fill="transparent"
-                  stroke="#ef4444" // red-500
-                  strokeWidth={strokeWidth}
-                  strokeDasharray={circumference}
-                  strokeDashoffset={circumference - (circumference * pctDanger) / 100}
-                  style={{ transform: `rotate(${(pctNormal + pctRisk) * 3.6}deg)`, transformOrigin: "center" }}
-                />
-              )}
-            </svg>
-            {/* Inner Content */}
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-2xl font-black text-slate-800">{total}</span>
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">เคสทั้งหมด</span>
-            </div>
+        
+        {total === 0 ? (
+          <div className="h-[220px] flex flex-col items-center justify-center text-slate-400 text-xs text-center space-y-1">
+            <EyeOff className="w-8 h-8 text-slate-300" />
+            <p>ไม่มีข้อมูลแสดงผล</p>
           </div>
-
-          {/* Legend Table */}
-          <div className="space-y-3 w-full max-w-[140px]">
-            <div className="flex justify-between items-start text-xs">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full" />
-                <span className="text-slate-600 font-medium whitespace-nowrap">ปกติ</span>
-              </div>
-              <div className="flex flex-col items-end">
-                <span className="font-bold text-slate-800 whitespace-nowrap">{normal} ราย</span>
-                <span className="text-[10px] font-semibold text-slate-500">({pctNormal}%)</span>
-              </div>
-            </div>
-            
-            <div className="flex justify-between items-start text-xs">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 bg-amber-500 rounded-full" />
-                <span className="text-slate-600 font-medium whitespace-nowrap">กลุ่มเสี่ยง</span>
-              </div>
-              <div className="flex flex-col items-end">
-                <span className="font-bold text-slate-800 whitespace-nowrap">{risk} ราย</span>
-                <span className="text-[10px] font-semibold text-slate-500">({pctRisk}%)</span>
+        ) : (
+          <div className="flex flex-col items-center gap-5">
+            {/* Circular SVG Chart Centered */}
+            <div className="relative w-[152px] h-[152px] shrink-0">
+              <svg width={size} height={size} className="transform -rotate-90">
+                <circle
+                  cx={center}
+                  cy={center}
+                  r={radius}
+                  fill="transparent"
+                  stroke="#f1f5f9"
+                  strokeWidth={strokeWidth}
+                />
+                {pctNormal > 0 && (
+                  <circle
+                    cx={center}
+                    cy={center}
+                    r={radius}
+                    fill="transparent"
+                    stroke="#10b981"
+                    strokeWidth={strokeWidth}
+                    strokeDasharray={circumference}
+                    strokeDashoffset={circumference - (circumference * pctNormal) / 100}
+                  />
+                )}
+                {pctRisk > 0 && (
+                  <circle
+                    cx={center}
+                    cy={center}
+                    r={radius}
+                    fill="transparent"
+                    stroke="#f59e0b"
+                    strokeWidth={strokeWidth}
+                    strokeDasharray={circumference}
+                    strokeDashoffset={circumference - (circumference * pctRisk) / 100}
+                    style={{ transform: `rotate(${pctNormal * 3.6}deg)`, transformOrigin: "center" }}
+                  />
+                )}
+                {pctDanger > 0 && (
+                  <circle
+                    cx={center}
+                    cy={center}
+                    r={radius}
+                    fill="transparent"
+                    stroke="#ef4444"
+                    strokeWidth={strokeWidth}
+                    strokeDasharray={circumference}
+                    strokeDashoffset={circumference - (circumference * pctDanger) / 100}
+                    style={{ transform: `rotate(${(pctNormal + pctRisk) * 3.6}deg)`, transformOrigin: "center" }}
+                  />
+                )}
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-2xl font-black text-slate-800 leading-none">{total.toLocaleString()}</span>
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">เคสทั้งหมด</span>
               </div>
             </div>
 
-            <div className="flex justify-between items-start text-xs">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 bg-red-500 rounded-full" />
-                <span className="text-slate-600 font-medium whitespace-nowrap">สงสัยป่วย</span>
-              </div>
-              <div className="flex flex-col items-end">
-                <span className="font-bold text-slate-800 whitespace-nowrap">{danger} ราย</span>
-                <span className="text-[10px] font-semibold text-slate-500">({pctDanger}%)</span>
-              </div>
+            {/* Clean Structured Legend Table (No text overlap) */}
+            <div className="w-full space-y-2">
+              {riskRows.map((row) => (
+                <div
+                  key={row.label}
+                  className={`flex items-center justify-between px-3.5 py-2 rounded-xl border ${row.bg} text-xs`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${row.dot}`} />
+                    <span className="text-slate-700 font-bold">{row.label}</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="font-black text-slate-800">{row.count.toLocaleString()} ราย</span>
+                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md bg-white/80 ${row.text} min-w-[44px] text-right`}>
+                      {row.pct}%
+                    </span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
+        )}
+      </div>
+
+      {total > 0 && (
+        <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px]">
+          <span className="text-slate-500 font-semibold">รวมกลุ่มเสี่ยง + สงสัยป่วย:</span>
+          <span className="font-black text-amber-700">
+            {abnormalTotal.toLocaleString()} ราย ({abnormalPct}%)
+          </span>
         </div>
       )}
     </div>
   );
 };
+
 const LifestyleBehaviors3O2S: React.FC<{
   smokeCount: number;
   alcoholCount: number;
@@ -370,8 +380,9 @@ const LifestyleBehaviors3O2S: React.FC<{
       pct: getPct(foodSweetCount),
       color: "bg-red-500",
       barColor: "from-red-400 to-rose-500",
+      badgeBg: "bg-red-50 text-red-700 border-red-100",
       icon: <Apple className="w-3.5 h-3.5" />,
-      desc: "ทานหวานจัด/ปรุงเพิ่มหวานเป็นประจำ"
+      desc: "ทานหวานจัด / ปรุงเพิ่มหวานเป็นประจำ"
     },
     {
       id: "fat",
@@ -381,8 +392,9 @@ const LifestyleBehaviors3O2S: React.FC<{
       pct: getPct(foodFatCount),
       color: "bg-orange-500",
       barColor: "from-orange-400 to-amber-500",
+      badgeBg: "bg-orange-50 text-orange-700 border-orange-100",
       icon: <Apple className="w-3.5 h-3.5" />,
-      desc: "นิยมทานของทอด/ของมันจัดสูง"
+      desc: "นิยมทานของทอด / ของมันจัดสูง"
     },
     {
       id: "salt",
@@ -392,8 +404,9 @@ const LifestyleBehaviors3O2S: React.FC<{
       pct: getPct(foodSaltCount),
       color: "bg-amber-500",
       barColor: "from-amber-400 to-yellow-500",
+      badgeBg: "bg-amber-50 text-amber-700 border-amber-100",
       icon: <Flame className="w-3.5 h-3.5" />,
-      desc: "ปรุงเพิ่มเค็ม/ทานสำเร็จรูป/หมักดองบ่อย"
+      desc: "ปรุงเพิ่มเค็ม / ทานสำเร็จรูป / หมักดองบ่อย"
     },
     {
       id: "water",
@@ -403,8 +416,9 @@ const LifestyleBehaviors3O2S: React.FC<{
       pct: getPct(lowWaterCount),
       color: "bg-cyan-500",
       barColor: "from-cyan-400 to-sky-500",
+      badgeBg: "bg-cyan-50 text-cyan-700 border-cyan-100",
       icon: <Droplet className="w-3.5 h-3.5" />,
-      desc: "ดื่มน้ำสะอาดน้อยกว่า 6 แก้ว/วัน เสี่ยงภาวะขาดน้ำและระบบเผาผลาญต่ำ"
+      desc: "ดื่มน้ำสะอาดน้อยกว่า 6 แก้ว/วัน เสี่ยงภาวะขาดน้ำ"
     },
     {
       id: "exercise",
@@ -414,8 +428,9 @@ const LifestyleBehaviors3O2S: React.FC<{
       pct: getPct(noExerciseCount),
       color: "bg-blue-500",
       barColor: "from-blue-400 to-indigo-500",
+      badgeBg: "bg-blue-50 text-blue-700 border-blue-100",
       icon: <Dumbbell className="w-3.5 h-3.5" />,
-      desc: "ขาดการขยับ/นั่งทำงานนาน/ไม่ออกกำลังกาย"
+      desc: "ขาดการขยับ / นั่งทำงานนาน / ไม่ออกกำลังกาย"
     },
     {
       id: "sleep",
@@ -425,8 +440,9 @@ const LifestyleBehaviors3O2S: React.FC<{
       pct: getPct(poorSleepCount),
       color: "bg-purple-500",
       barColor: "from-purple-400 to-violet-500",
+      badgeBg: "bg-purple-50 text-purple-700 border-purple-100",
       icon: <Moon className="w-3.5 h-3.5" />,
-      desc: "นอนเฉลี่ยน้อยกว่า 6 ชม./หลับยาก/เครียดสะสม"
+      desc: "นอนเฉลี่ยน้อยกว่า 6 ชม. / หลับยาก / เครียดสะสม"
     },
     {
       id: "smoke",
@@ -436,8 +452,9 @@ const LifestyleBehaviors3O2S: React.FC<{
       pct: getPct(smokeCount),
       color: "bg-slate-600",
       barColor: "from-slate-500 to-slate-700",
+      badgeBg: "bg-slate-100 text-slate-700 border-slate-200",
       icon: <Cigarette className="w-3.5 h-3.5" />,
-      desc: "ยังสูบประจำ/เลิกสูบยังไม่ถึง 1 ปี"
+      desc: "ยังสูบประจำ / เลิกสูบยังไม่ถึง 1 ปี"
     },
     {
       id: "alcohol",
@@ -447,6 +464,7 @@ const LifestyleBehaviors3O2S: React.FC<{
       pct: getPct(alcoholCount),
       color: "bg-pink-600",
       barColor: "from-pink-500 to-rose-600",
+      badgeBg: "bg-pink-50 text-pink-700 border-pink-100",
       icon: <Wine className="w-3.5 h-3.5" />,
       desc: "ดื่มแอลกอฮอล์เป็นประจำหรือครั้งคราว"
     }
@@ -456,111 +474,165 @@ const LifestyleBehaviors3O2S: React.FC<{
   const maxRiskItem = [...items].sort((a, b) => b.count - a.count)[0];
 
   return (
-    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between h-full">
-      <div className="space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-          <div className="flex items-center gap-1.5">
-            <div className="bg-rose-50 text-rose-600 p-1.5 rounded-xl shrink-0">
-              <Apple className="w-4 h-4" />
-            </div>
-            <div>
-              <h4 className="text-xs font-bold text-slate-800">พฤติกรรมเสี่ยงสูง (3อ. 2ส.)</h4>
-              <p className="text-[9px] text-slate-400">สรุปอัตราความเสี่ยงตามหลัก 3อ. 2ส.</p>
-            </div>
+    <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5">
+      {/* Header Row */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3.5">
+        <div className="flex items-center gap-2.5">
+          <div className="bg-rose-50 text-rose-600 p-2.5 rounded-xl shrink-0">
+            <Apple className="w-5 h-5" />
           </div>
-          <span className="text-[9px] bg-slate-50 text-slate-500 font-bold px-2 py-1 rounded-lg border border-slate-100 shrink-0">
-            วิเคราะห์ {total} ราย
-          </span>
+          <div>
+            <h4 className="text-sm font-black text-slate-800">
+              การวิเคราะห์พฤติกรรมเสี่ยงทางสุขภาพ (หลัก 3อ. 2ส. และการดื่มน้ำเปล่า)
+            </h4>
+            <p className="text-[11px] text-slate-500 font-semibold">
+              สรุปอัตราความเสี่ยงด้านพฤติกรรมการบริโภค การออกกำลังกาย การพักผ่อน และปัจจัยเสี่ยง 2ส.
+            </p>
+          </div>
         </div>
 
-        {total === 0 ? (
-          <div className="py-12 flex flex-col items-center justify-center text-slate-400 text-xs text-center space-y-1">
-            <EyeOff className="w-8 h-8 text-slate-300" />
-            <p>ไม่มีข้อมูลแสดงผลพฤติกรรมสุขภาพ</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            
-            {/* Group: 3อ */}
-            <div className="space-y-2.5">
-              <div className="flex items-center gap-1.5 bg-blue-50/50 p-1 rounded-lg border border-blue-100">
-                <span className="text-[9px] font-black bg-blue-600 text-white px-1.5 py-0.5 rounded-md">3อ</span>
-                <span className="text-[9px] text-blue-800 font-bold tracking-wide">อาหาร • ออกกำลังกาย • อารมณ์</span>
-              </div>
-              
-              <div className="space-y-3">
-                {items.filter(i => i.group === "3อ").map((item) => (
-                  <div key={item.id} className="space-y-1">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="font-bold text-slate-700 flex items-center gap-1.5">
-                        <span className={`${item.color} text-white p-1 rounded-md shrink-0`}>
-                          {item.icon}
-                        </span>
-                        {item.title}
-                      </span>
-                      <span className="text-slate-500 font-semibold text-[11px] shrink-0">
-                        {item.count} ราย <span className="text-slate-400">({item.pct}%)</span>
-                      </span>
-                    </div>
-                    <div className="relative">
-                      <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
-                        <div 
-                          className={`bg-gradient-to-r ${item.barColor} h-full rounded-full transition-all duration-500`} 
-                          style={{ width: `${item.pct}%` }}
-                        />
-                      </div>
-                      <span className="text-[9px] text-slate-400 block mt-0.5 font-medium pl-7 leading-none">{item.desc}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {total > 0 && maxRiskItem && maxRiskItem.count > 0 && (
+            <div className="hidden xl:flex items-center gap-1.5 text-[11px] bg-rose-50 text-rose-700 border border-rose-200/80 px-3 py-1.5 rounded-xl font-bold">
+              <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+              <span>
+                ความเสี่ยงสูงสุด: <strong>{maxRiskItem.title}</strong> ({maxRiskItem.pct}% • {maxRiskItem.count.toLocaleString()} ราย)
+              </span>
             </div>
-
-            {/* Group: 2ส */}
-            <div className="space-y-2.5 pt-1">
-              <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-lg border border-slate-200">
-                <span className="text-[9px] font-black bg-slate-600 text-white px-1.5 py-0.5 rounded-md">2ส</span>
-                <span className="text-[9px] text-slate-700 font-bold tracking-wide">สูบบุหรี่ • สุรา</span>
-              </div>
-              
-              <div className="space-y-3">
-                {items.filter(i => i.group === "2ส").map((item) => (
-                  <div key={item.id} className="space-y-1">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="font-bold text-slate-700 flex items-center gap-1.5">
-                        <span className={`${item.color} text-white p-1 rounded-md shrink-0`}>
-                          {item.icon}
-                        </span>
-                        {item.title}
-                      </span>
-                      <span className="text-slate-500 font-semibold text-[11px] shrink-0">
-                        {item.count} ราย <span className="text-slate-400">({item.pct}%)</span>
-                      </span>
-                    </div>
-                    <div className="relative">
-                      <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
-                        <div 
-                          className={`bg-gradient-to-r ${item.barColor} h-full rounded-full transition-all duration-500`} 
-                          style={{ width: `${item.pct}%` }}
-                        />
-                      </div>
-                      <span className="text-[9px] text-slate-400 block mt-0.5 font-medium pl-7 leading-none">{item.desc}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-          </div>
-        )}
+          )}
+          <span className="text-xs bg-slate-100 text-slate-700 font-black px-3 py-1.5 rounded-xl border border-slate-200/80">
+            กลุ่มตัวอย่าง {total.toLocaleString()} ราย
+          </span>
+        </div>
       </div>
 
-      {total > 0 && maxRiskItem && maxRiskItem.count > 0 && (
-        <div className="text-[10px] text-slate-500 border-t border-slate-150 pt-2.5 mt-3 flex items-start gap-1.5 bg-rose-50/40 p-2.5 rounded-xl border border-rose-100/60">
-          <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
-          <div className="leading-relaxed">
-            <span className="font-bold text-slate-700 block text-[10px]">พฤติกรรมเสี่ยงสูงหลักในชุมชน:</span>
-            <span>คือ <strong className="text-rose-700">{maxRiskItem.title}</strong> สูงถึง <strong className="text-rose-700">{maxRiskItem.pct}%</strong> ({maxRiskItem.count} เคส) แนะนำจัดกิจกรรมปรับเปลี่ยนพฤติกรรมเน้นหัวข้อนี้เป็นหลัก</span>
+      {total === 0 ? (
+        <div className="py-10 flex flex-col items-center justify-center text-slate-400 text-xs text-center space-y-1">
+          <EyeOff className="w-8 h-8 text-slate-300" />
+          <p>ไม่มีข้อมูลแสดงผลพฤติกรรมสุขภาพ</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+          {/* Group 3อ (Left 8 cols): 2-column grid of 6 items */}
+          <div className="lg:col-span-8 bg-slate-50/60 border border-slate-200/70 rounded-2xl p-4 space-y-3.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-black bg-blue-600 text-white px-2 py-0.5 rounded-lg shadow-2xs">
+                  3อ
+                </span>
+                <span className="text-xs text-slate-800 font-black">
+                  อาหาร (หวาน • มัน • เค็ม • น้ำเปล่า) • ออกกำลังกาย • อารมณ์
+                </span>
+              </div>
+              <span className="text-[10px] text-slate-400 font-bold hidden sm:inline">
+                6 ปัจจัยหลัก
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {items.filter(i => i.group === "3อ").map((item) => (
+                <div
+                  key={item.id}
+                  className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs flex flex-col justify-between gap-2 hover:border-slate-300 transition-colors"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className={`${item.color} text-white p-1.5 rounded-lg shrink-0 shadow-2xs`}>
+                        {item.icon}
+                      </span>
+                      <div className="min-w-0">
+                        <span className="text-xs font-black text-slate-800 block truncate">
+                          {item.title}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-semibold block truncate">
+                          {item.desc}
+                        </span>
+                      </div>
+                    </div>
+                    <span className={`text-[11px] font-black px-2 py-0.5 rounded-lg border shrink-0 ${item.badgeBg}`}>
+                      {item.count.toLocaleString()} ราย ({item.pct}%)
+                    </span>
+                  </div>
+
+                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                    <div
+                      className={`bg-gradient-to-r ${item.barColor} h-full rounded-full transition-all duration-500`}
+                      style={{ width: `${Math.max(item.pct, item.count > 0 ? 3 : 0)}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Group 2ส + Top Risk Callout (Right 4 cols) */}
+          <div className="lg:col-span-4 flex flex-col justify-between gap-3.5 h-full">
+            <div className="bg-slate-50/60 border border-slate-200/70 rounded-2xl p-4 space-y-3.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-black bg-slate-700 text-white px-2 py-0.5 rounded-lg shadow-2xs">
+                    2ส
+                  </span>
+                  <span className="text-xs text-slate-800 font-black">
+                    สูบบุหรี่ • ดื่มสุรา/แอลกอฮอล์
+                  </span>
+                </div>
+                <span className="text-[10px] text-slate-400 font-bold">2 ปัจจัยเสี่ยง</span>
+              </div>
+
+              <div className="space-y-3">
+                {items.filter(i => i.group === "2ส").map((item) => (
+                  <div
+                    key={item.id}
+                    className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs flex flex-col justify-between gap-2 hover:border-slate-300 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className={`${item.color} text-white p-1.5 rounded-lg shrink-0 shadow-2xs`}>
+                          {item.icon}
+                        </span>
+                        <div className="min-w-0">
+                          <span className="text-xs font-black text-slate-800 block truncate">
+                            {item.title}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-semibold block truncate">
+                            {item.desc}
+                          </span>
+                        </div>
+                      </div>
+                      <span className={`text-[11px] font-black px-2 py-0.5 rounded-lg border shrink-0 ${item.badgeBg}`}>
+                        {item.count.toLocaleString()} ราย ({item.pct}%)
+                      </span>
+                    </div>
+
+                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                      <div
+                        className={`bg-gradient-to-r ${item.barColor} h-full rounded-full transition-all duration-500`}
+                        style={{ width: `${Math.max(item.pct, item.count > 0 ? 3 : 0)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Key Community Behavior Recommendation Box */}
+            {total > 0 && maxRiskItem && maxRiskItem.count > 0 && (
+              <div className="bg-gradient-to-br from-rose-50/80 to-orange-50/60 border border-rose-200/80 p-4 rounded-2xl flex items-start gap-2.5 shadow-2xs">
+                <div className="bg-rose-100 text-rose-600 p-2 rounded-xl shrink-0 mt-0.5">
+                  <AlertTriangle className="w-4 h-4" />
+                </div>
+                <div className="text-xs leading-relaxed text-slate-600 font-semibold">
+                  <span className="font-black text-rose-900 block mb-0.5">
+                    พฤติกรรมเสี่ยงสูงหลักในชุมชน:
+                  </span>
+                  <span>
+                    พบ <strong className="text-rose-700">{maxRiskItem.title}</strong> สูงถึง{" "}
+                    <strong className="text-rose-700">{maxRiskItem.pct}%</strong> ({maxRiskItem.count.toLocaleString()} เคส) แนะนำจัดกิจกรรมปรับเปลี่ยนพฤติกรรมเน้นหัวข้อนี้เป็นลำดับแรก
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -578,7 +650,9 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
   onFollowUpRecord,
   onImportRecords,
   onSyncCloud,
-  onOpenExecutiveReport
+  onOpenExecutiveReport,
+  hideNames = false,
+  onToggleHideNames
 }) => {
   const [recordToDelete, setRecordToDelete] = useState<ScreeningRecord | null>(null);
   const [isCloudSyncing, setIsCloudSyncing] = useState(false);
@@ -1276,10 +1350,10 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
         `"${visitType}"`,
         isLatest ? "ใช่ (ผลล่าสุด)" : "ประวัติครั้งก่อน",
         pInfo ? pInfo.total : 1,
-        `"${r.name}"`,
+        `"${maskPatientName(r.name, hideNames, r.id)}"`,
         r.age,
         r.gender,
-        r.phone,
+        maskPhoneNumber(r.phone, hideNames),
         r.district,
         `"${r.targetArea}"`,
         r.bmi,
@@ -1949,15 +2023,16 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
 
       </div>
 
-      {/* Doughnut Gauges and Lifestyle Risk Bars */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        
+      {/* Row 1: 3 Clinical Doughnut Gauges (HT, BMI, DM) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         {/* Hypertension Gauge */}
         <RiskDoughnut 
           normal={stats.ht.normal} 
           risk={stats.ht.risk} 
           danger={stats.ht.danger} 
-          title="สัดส่วนความเสี่ยงโรคความดันโลหิตสูง (HT)" 
+          title="สัดส่วนความเสี่ยงความดันโลหิตสูง (HT)"
+          accentColor="bg-rose-500"
+          badgeText="ความดันโลหิต"
         />
 
         {/* BMI Gauge */}
@@ -1967,7 +2042,7 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
           overweight={stats.bmiStats.overweight}
           obese1={stats.bmiStats.obese1}
           obese2={stats.bmiStats.obese2}
-          title="สัดส่วนความเสี่ยงดัชนีมวลกาย (BMI)"
+          title="สัดส่วนดัชนีมวลกาย (BMI)"
         />
 
         {/* Diabetes Gauge */}
@@ -1975,23 +2050,24 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
           normal={stats.dm.normal} 
           risk={stats.dm.risk} 
           danger={stats.dm.danger} 
-          title="สัดส่วนความเสี่ยงโรคเบาหวาน (DM)" 
+          title="สัดส่วนความเสี่ยงโรคเบาหวาน (DM)"
+          accentColor="bg-amber-500"
+          badgeText="น้ำตาลปลายนิ้ว"
         />
-
-        {/* Lifestyle Risks 3O2S Chart Component */}
-        <LifestyleBehaviors3O2S 
-          smokeCount={stats.lifestyle.smokeCount}
-          alcoholCount={stats.lifestyle.alcoholCount}
-          noExerciseCount={stats.lifestyle.noExerciseCount}
-          poorSleepCount={stats.lifestyle.poorSleepCount}
-          foodSweetCount={stats.lifestyle.foodSweetCount}
-          foodFatCount={stats.lifestyle.foodFatCount}
-          foodSaltCount={stats.lifestyle.foodSaltCount}
-          lowWaterCount={stats.lifestyle.lowWaterCount}
-          total={stats.total}
-        />
-
       </div>
+
+      {/* Row 2: Full-Width Balanced Lifestyle Risks 3O2S Panel */}
+      <LifestyleBehaviors3O2S 
+        smokeCount={stats.lifestyle.smokeCount}
+        alcoholCount={stats.lifestyle.alcoholCount}
+        noExerciseCount={stats.lifestyle.noExerciseCount}
+        poorSleepCount={stats.lifestyle.poorSleepCount}
+        foodSweetCount={stats.lifestyle.foodSweetCount}
+        foodFatCount={stats.lifestyle.foodFatCount}
+        foodSaltCount={stats.lifestyle.foodSaltCount}
+        lowWaterCount={stats.lifestyle.lowWaterCount}
+        total={stats.total}
+      />
 
       {/* 4. Health Analysis & Interpretation Panel */}
       {interpretation && (
@@ -2281,324 +2357,6 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
         </div>
       )}
 
-      {/* Monthly Screening Trends & Progression Panel (สถิติและแนวโน้มการคัดกรองรายเดือน) */}
-      {monthlyTrendsData.list.length > 0 && (
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
-            <div className="flex items-center gap-2.5">
-              <div className="bg-gradient-to-tr from-indigo-500 to-blue-600 text-white p-2.5 rounded-xl shrink-0 shadow-sm">
-                <TrendingUp className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-sm font-black text-slate-800 uppercase tracking-wide">
-                    สถิติและแนวโน้มการคัดกรองรายเดือน (Monthly Screening Trends)
-                  </h3>
-                  {filterMonthMode === "single" && filterSelectedMonth && (
-                    <span className="text-[10px] bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                      <span>กรองเดือน: {formatYearMonthThaiShort(filterSelectedMonth)}</span>
-                      <button 
-                        onClick={() => {
-                          setFilterMonthMode("all");
-                          setFilterSelectedMonth("");
-                        }}
-                        className="hover:text-indigo-900 cursor-pointer font-black"
-                        title="ยกเลิกการกรองเดือนนี้"
-                      >
-                        ×
-                      </button>
-                    </span>
-                  )}
-                  {filterMonthMode === "range" && (filterStartMonth || filterEndMonth) && (
-                    <span className="text-[10px] bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                      <span>ช่วง: {filterStartMonth ? formatYearMonthThaiShort(filterStartMonth) : "เริ่มต้น"} - {filterEndMonth ? formatYearMonthThaiShort(filterEndMonth) : "ปัจจุบัน"}</span>
-                      <button 
-                        onClick={() => {
-                          setFilterMonthMode("all");
-                          setFilterStartMonth("");
-                          setFilterEndMonth("");
-                        }}
-                        className="hover:text-indigo-900 cursor-pointer font-black"
-                        title="ยกเลิกการกรองช่วงเดือน"
-                      >
-                        ×
-                      </button>
-                    </span>
-                  )}
-                </div>
-                <p className="text-[10px] text-slate-500 font-semibold">
-                  วิเคราะห์แนวโน้มการคัดกรองรายเดือน จำแนกตามกลุ่มเป้าหมายโครงการ คณะทำงาน และระดับความเสี่ยงสะสม
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setShowMonthlyTrends(!showMonthlyTrends)}
-                className="text-xs font-bold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
-              >
-                <span>{showMonthlyTrends ? "ย่อหน้าต่าง" : "แสดงรายละเอียดแนวโน้ม"}</span>
-                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showMonthlyTrends ? "rotate-180" : ""}`} />
-              </button>
-            </div>
-          </div>
-
-          {/* Quick Metrics Bar */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-200/60">
-              <span className="text-[10px] font-bold text-slate-400 block uppercase">คัดกรองสะสมในไทม์ไลน์</span>
-              <div className="flex items-baseline gap-1 mt-0.5">
-                <span className="text-xl font-black text-slate-800">{monthlyTrendsData.totalScreenings}</span>
-                <span className="text-[11px] text-slate-500">บันทึก</span>
-              </div>
-            </div>
-
-            <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-200/60">
-              <span className="text-[10px] font-bold text-slate-400 block uppercase">จำนวนเดือนที่มีการตรวจ</span>
-              <div className="flex items-baseline gap-1 mt-0.5">
-                <span className="text-xl font-black text-indigo-600">{monthlyTrendsData.list.length}</span>
-                <span className="text-[11px] text-slate-500">เดือน</span>
-              </div>
-            </div>
-
-            <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-200/60">
-              <span className="text-[10px] font-bold text-slate-400 block uppercase">ค่าเฉลี่ยต่อเดือน</span>
-              <div className="flex items-baseline gap-1 mt-0.5">
-                <span className="text-xl font-black text-blue-600">{monthlyTrendsData.avgScreeningPerMonth}</span>
-                <span className="text-[11px] text-slate-500">ราย/เดือน</span>
-              </div>
-            </div>
-
-            <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-200/60">
-              <span className="text-[10px] font-bold text-slate-400 block uppercase">เดือนที่มีการตรวจสูงสุด</span>
-              <div className="flex items-baseline gap-1 mt-0.5">
-                <span className="text-sm font-black text-emerald-700 truncate">
-                  {monthlyTrendsData.peakMonth ? `${monthlyTrendsData.peakMonth.labelShort}` : "-"}
-                </span>
-                {monthlyTrendsData.peakMonth && (
-                  <span className="text-[11px] font-bold text-emerald-600">({monthlyTrendsData.peakMonth.total} ราย)</span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {showMonthlyTrends && (
-            <div className="space-y-6 pt-2">
-              {/* Visual Interactive Bar Chart */}
-              <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-200/80 space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-                  <span className="font-bold text-slate-700 flex items-center gap-1.5">
-                    <BarChart2 className="w-4 h-4 text-indigo-600" />
-                    กราฟแสดงแนวโน้มยอดคัดกรองรายเดือน (คลิกที่แท่งกราฟเพื่อกรองข้อมูลเฉพาะเดือนนั้น)
-                  </span>
-                  
-                  {/* Legend */}
-                  <div className="flex items-center gap-3 text-[11px] flex-wrap">
-                    <span className="flex items-center gap-1 text-slate-600">
-                      <span className="w-3 h-3 rounded-sm bg-blue-500 inline-block" />
-                      กลุ่มเป้าหมายโครงการ
-                    </span>
-                    <span className="flex items-center gap-1 text-slate-600">
-                      <span className="w-3 h-3 rounded-sm bg-purple-500 inline-block" />
-                      คณะทำงาน
-                    </span>
-                  </div>
-                </div>
-
-                {/* Bars Container */}
-                <div className="pt-4 pb-2 overflow-x-auto">
-                  <div className="flex items-end justify-around gap-3 sm:gap-5 min-w-full w-max px-3 pt-6 pb-3 border-b border-slate-200 relative">
-                    {monthlyTrendsData.list.map((m) => {
-                      const isCurrentFilter = filterMonthMode === "single" && filterSelectedMonth === m.monthKey;
-                      const MAX_BAR_PX = 136;
-                      const barHeightPx = m.total > 0
-                        ? Math.max(Math.round((m.total / monthlyTrendsData.maxMonthlyTotal) * MAX_BAR_PX), 16)
-                        : 6;
-                      const committeeRatio = m.total > 0 ? m.committeeCount / m.total : 0;
-                      const committeeHeightPx = m.committeeCount > 0
-                        ? Math.max(Math.round(barHeightPx * committeeRatio), 4)
-                        : 0;
-                      const targetHeightPx = Math.max(barHeightPx - committeeHeightPx, 0);
-
-                      return (
-                        <div 
-                          key={m.monthKey}
-                          onClick={() => {
-                            if (isCurrentFilter) {
-                              setFilterMonthMode("all");
-                              setFilterSelectedMonth("");
-                            } else {
-                              setFilterMonthMode("single");
-                              setFilterSelectedMonth(m.monthKey);
-                            }
-                          }}
-                          className="flex flex-col items-center cursor-pointer group select-none"
-                          title={`เดือน ${m.label}: ทั้งหมด ${m.total.toLocaleString()} ราย (กลุ่มเป้าหมาย ${m.targetGroupCount.toLocaleString()}, คณะทำงาน ${m.committeeCount.toLocaleString()}) - คลิกเพื่อกรอง`}
-                        >
-                          {/* Bar Track Area with fixed height so all bars align to bottom baseline */}
-                          <div className="h-[164px] flex flex-col justify-end items-center">
-                            {/* Value on top of bar */}
-                            <div className={`text-[11px] font-black mb-1.5 px-1.5 py-0.5 rounded-md transition-all group-hover:scale-110 ${
-                              isCurrentFilter 
-                                ? "bg-indigo-600 text-white shadow-xs" 
-                                : "text-slate-700 group-hover:text-indigo-600"
-                            }`}>
-                              {m.total.toLocaleString()}
-                            </div>
-
-                            {/* Stacked Vertical Bar */}
-                            <div 
-                              style={{ height: `${barHeightPx}px` }}
-                              className={`w-11 sm:w-14 rounded-t-lg overflow-hidden flex flex-col justify-end shadow-xs transition-all duration-300 ${
-                                isCurrentFilter 
-                                  ? "ring-2 ring-indigo-600 ring-offset-2 scale-105" 
-                                  : "group-hover:opacity-90 group-hover:scale-[1.03]"
-                              }`}
-                            >
-                              {/* Purple: Working group (top segment) */}
-                              {committeeHeightPx > 0 && (
-                                <div 
-                                  style={{ height: `${committeeHeightPx}px` }} 
-                                  className="w-full bg-purple-500 transition-all duration-300 shrink-0"
-                                  title={`คณะทำงาน: ${m.committeeCount.toLocaleString()} ราย`}
-                                />
-                              )}
-                              {/* Blue: Target group (bottom segment) */}
-                              {targetHeightPx > 0 && (
-                                <div 
-                                  style={{ height: `${targetHeightPx}px` }} 
-                                  className="w-full bg-blue-500 transition-all duration-300 shrink-0"
-                                  title={`กลุ่มเป้าหมายโครงการ: ${m.targetGroupCount.toLocaleString()} ราย`}
-                                />
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Month Label below baseline */}
-                          <div className="text-center pt-2.5">
-                            <span className={`block text-[11px] font-bold transition-colors ${
-                              isCurrentFilter ? "text-indigo-700 font-black" : "text-slate-700 group-hover:text-indigo-600"
-                            }`}>
-                              {m.labelShort}
-                            </span>
-                            <span className="block text-[9px] text-slate-400 font-medium mt-0.5 whitespace-nowrap">
-                              (แรก {m.initialCount.toLocaleString()} / ซ้ำ {m.followUpCount.toLocaleString()})
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1">
-                  <span>* แท่งกราฟจำแนกสี: สีฟ้า = กลุ่มเป้าหมายโครงการ, สีม่วง = คณะทำงาน</span>
-                  <span>คลิกที่แท่งเดือนเพื่อกรองเฉพาะเดือนนั้นทันที</span>
-                </div>
-              </div>
-
-              {/* Monthly Breakdown Detail Cards */}
-              <div className="space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-black text-slate-700 uppercase tracking-wide">
-                    ตารางแจกแจงสถิติรายเดือน (Monthly Detail Breakdown)
-                  </h4>
-                  <span className="text-[10px] text-slate-400 font-semibold">
-                    จำแนกตามประเภทผู้รับตรวจและผลการคัดกรองเบื้องต้น
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {monthlyTrendsData.list.map((m) => {
-                    const isCurrentFilter = filterMonthMode === "single" && filterSelectedMonth === m.monthKey;
-                    const dangerCount = Math.max(m.htDanger, m.dmDanger);
-                    const riskCount = Math.max(m.htRisk, m.dmRisk);
-                    const normalCount = Math.min(m.htNormal, m.dmNormal);
-
-                    return (
-                      <div 
-                        key={m.monthKey}
-                        className={`p-4 rounded-xl border transition-all ${
-                          isCurrentFilter 
-                            ? "bg-indigo-50/40 border-indigo-300 ring-2 ring-indigo-500/20 shadow-xs" 
-                            : "bg-white border-slate-200 hover:border-slate-300 hover:shadow-2xs"
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2.5">
-                          <div>
-                            <span className="text-xs font-black text-slate-800 block">
-                              {m.label}
-                            </span>
-                            <span className="text-[10px] text-slate-400">
-                              รหัสรอบเดือน: {m.monthKey}
-                            </span>
-                          </div>
-                          
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (isCurrentFilter) {
-                                setFilterMonthMode("all");
-                                setFilterSelectedMonth("");
-                              } else {
-                                setFilterMonthMode("single");
-                                setFilterSelectedMonth(m.monthKey);
-                              }
-                            }}
-                            className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                              isCurrentFilter 
-                                ? "bg-indigo-600 text-white shadow-2xs" 
-                                : "bg-slate-100 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600"
-                            }`}
-                          >
-                            {isCurrentFilter ? "กำลังกรองอยู่ ✓" : "กรองเดือนนี้"}
-                          </button>
-                        </div>
-
-                        {/* Counts in month */}
-                        <div className="grid grid-cols-2 gap-2 my-3 text-xs">
-                          <div className="bg-slate-50 p-2 rounded-lg">
-                            <span className="text-[10px] text-slate-400 block font-medium">ยอดรวมคัดกรอง</span>
-                            <span className="font-black text-slate-800 text-base">{m.total} <span className="text-[10px] font-normal text-slate-500">ราย</span></span>
-                            <div className="text-[9px] text-slate-400 mt-0.5">
-                              แรกรับ {m.initialCount} | ซ้ำ {m.followUpCount}
-                            </div>
-                          </div>
-
-                          <div className="bg-slate-50 p-2 rounded-lg space-y-1">
-                            <div className="flex items-center justify-between text-[10px]">
-                              <span className="text-blue-700 font-bold">1. เป้าหมาย:</span>
-                              <span className="font-black text-blue-800">{m.targetGroupCount}</span>
-                            </div>
-                            <div className="flex items-center justify-between text-[10px]">
-                              <span className="text-purple-700 font-bold">2. คณะทำงาน:</span>
-                              <span className="font-black text-purple-800">{m.committeeCount}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Risk status distribution chips */}
-                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px]">
-                          <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
-                            ปกติ {normalCount}
-                          </span>
-                          <span className="font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md">
-                            เสี่ยง {riskCount}
-                          </span>
-                          <span className="font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md">
-                            สงสัยป่วย {dangerCount}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
         
         {/* Row 1: Search & Core Actions */}
@@ -2817,6 +2575,23 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
               </>
             )}
 
+            {/* Action: Toggle Hide Names */}
+            {onToggleHideNames && (
+              <button
+                type="button"
+                onClick={onToggleHideNames}
+                className={`font-bold text-xs py-3 px-3.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shrink-0 transition-all border ${
+                  hideNames
+                    ? "bg-amber-100 border-amber-300 hover:bg-amber-200 text-amber-800 shadow-2xs"
+                    : "bg-slate-50 border-slate-300 hover:bg-slate-100 text-slate-700"
+                }`}
+                title={hideNames ? "คลิกเพื่อแสดงรายชื่อจริง" : "คลิกเพื่อปกปิด/ซ่อนรายชื่อและเบอร์โทร (PDPA)"}
+              >
+                {hideNames ? <EyeOff className="w-4 h-4 text-amber-700" /> : <Eye className="w-4 h-4 text-slate-500" />}
+                {hideNames ? "ปกปิดรายชื่อ: เปิด" : "ปกปิดรายชื่อ"}
+              </button>
+            )}
+
             {/* Action: Export CSV */}
             <button
               onClick={handleExportCSV}
@@ -2983,7 +2758,7 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
                       <td className="py-4 px-5">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="font-bold text-slate-800 hover:text-blue-600 cursor-pointer text-sm" onClick={() => onSelectRecord(r)}>
-                            {r.name}
+                            {maskPatientName(r.name, hideNames, r.id)}
                           </span>
                           <span className={`inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold ${
                             r.participantType === "คณะทำงาน"
@@ -3155,7 +2930,7 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
             <h3 className="text-lg font-bold text-slate-800 text-center mb-2">ยืนยันการลบข้อมูล</h3>
             <p className="text-sm text-slate-600 text-center mb-6">
               คุณต้องการลบข้อมูลคัดกรองของ <br/>
-              <span className="font-semibold text-slate-800">"{recordToDelete.name}"</span> ใช่หรือไม่? <br/>
+              <span className="font-semibold text-slate-800">"{maskPatientName(recordToDelete.name, hideNames, recordToDelete.id)}"</span> ใช่หรือไม่? <br/>
               <span className="text-xs text-rose-500 mt-2 block">การกระทำนี้ไม่สามารถกู้คืนได้</span>
             </p>
             <div className="flex gap-3">

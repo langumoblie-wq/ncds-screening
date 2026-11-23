@@ -7,7 +7,7 @@ import {
   Trash2, Check, ShieldAlert, Printer, Download, FileCheck, Loader2, History
 } from "lucide-react";
 import { ScreeningRecord } from "../types";
-import { formatThaiDate } from "../utils";
+import { formatThaiDate, maskPatientName, maskPhoneNumber } from "../utils";
 import { CustomTrendChart } from "./TrendChart";
 import { BloodPressureTrendRecharts } from "./BloodPressureTrendRecharts";
 
@@ -18,6 +18,7 @@ interface RecordModalProps {
   onClose: () => void;
   onUpdateRecord: (updatedRecord: ScreeningRecord) => void;
   onDeleteRecord?: (id: number) => void;
+  hideNames?: boolean;
 }
 
 export const RecordModal: React.FC<RecordModalProps> = ({ 
@@ -26,7 +27,8 @@ export const RecordModal: React.FC<RecordModalProps> = ({
   allRecords = [], 
   onClose, 
   onUpdateRecord, 
-  onDeleteRecord 
+  onDeleteRecord,
+  hideNames = false
 }) => {
   const [activeRecordId, setActiveRecordId] = useState<number>(initialRecord.id);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -316,7 +318,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                 </div>
                 <div>
                   <span className="text-slate-500 block text-xs">ชื่อ-นามสกุล</span>
-                  <span className="font-semibold text-slate-800">{record.name}</span>
+                  <span className="font-semibold text-slate-800">{maskPatientName(record.name, hideNames, record.id)}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
@@ -330,7 +332,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                 </div>
                 <div>
                   <span className="text-slate-500 block text-xs">เบอร์โทรศัพท์</span>
-                  <span className="font-semibold text-slate-800">{record.phone}</span>
+                  <span className="font-semibold text-slate-800">{maskPhoneNumber(record.phone, hideNames)}</span>
                 </div>
                 <div>
                   <span className="text-slate-500 block text-xs">บ้านเลขที่ / ชุมชน</span>
@@ -703,7 +705,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
               {/* Blood Pressure Comparative Trend using Recharts */}
               <BloodPressureTrendRecharts
                 visits={patientVisits}
-                patientName={record.name}
+                patientName={maskPatientName(record.name, hideNames, record.id)}
               />
 
               {/* Blood Sugar Trend Chart */}
@@ -824,12 +826,12 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'flex-end', gap: '10px' }}>
                     <span>(ลงชื่อ)</span>
-                    <span style={{ display: 'inline-block', width: '220px', borderBottom: '1px dotted black', textAlign: 'center', fontWeight: 'bold', paddingBottom: '2px' }}>{record.name}</span>
+                    <span style={{ display: 'inline-block', width: '220px', borderBottom: '1px dotted black', textAlign: 'center', fontWeight: 'bold', paddingBottom: '2px' }}>{maskPatientName(record.name, hideNames, record.id)}</span>
                     <span>ผู้เข้าร่วมกิจกรรม/เจ้าของข้อมูลส่วนบุคคล</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'flex-end', gap: '10px' }}>
                     <span>(</span>
-                    <span style={{ display: 'inline-block', width: '220px', textAlign: 'center', fontWeight: 'bold' }}>{record.name}</span>
+                    <span style={{ display: 'inline-block', width: '220px', textAlign: 'center', fontWeight: 'bold' }}>{maskPatientName(record.name, hideNames, record.id)}</span>
                     <span>)</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'flex-end', gap: '10px', marginTop: '10px' }}>
@@ -894,13 +896,13 @@ export const RecordModal: React.FC<RecordModalProps> = ({
               <tbody>
                 <tr>
                   <td style={{ padding: '3px 6px', width: '15%', color: '#64748b' }}>ชื่อ-นามสกุล:</td>
-                  <td style={{ padding: '3px 6px', width: '35%', fontWeight: 'bold', color: '#0f172a' }}>{record.name}</td>
+                  <td style={{ padding: '3px 6px', width: '35%', fontWeight: 'bold', color: '#0f172a' }}>{maskPatientName(record.name, hideNames, record.id)}</td>
                   <td style={{ padding: '3px 6px', width: '15%', color: '#64748b' }}>อายุ / เพศ:</td>
                   <td style={{ padding: '3px 6px', width: '35%', fontWeight: 'bold', color: '#0f172a' }}>{record.age} ปี / {record.gender}</td>
                 </tr>
                 <tr>
                   <td style={{ padding: '3px 6px', color: '#64748b' }}>เบอร์โทรศัพท์:</td>
-                  <td style={{ padding: '3px 6px', fontWeight: 'bold', color: '#0f172a' }}>{record.phone || "-"}</td>
+                  <td style={{ padding: '3px 6px', fontWeight: 'bold', color: '#0f172a' }}>{maskPhoneNumber(record.phone, hideNames) || "-"}</td>
                   <td style={{ padding: '3px 6px', color: '#64748b' }}>ที่อยู่ / ชุมชน:</td>
                   <td style={{ padding: '3px 6px', fontWeight: 'bold', color: '#0f172a' }}>{record.address || "-"}</td>
                 </tr>
@@ -1168,7 +1170,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
           <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'space-between', padding: '0 30px', fontSize: '11px' }}>
             <div style={{ textAlign: 'center' }}>
               <div style={{ marginBottom: '40px' }}>ลงชื่อ............................................................</div>
-              <div style={{ fontWeight: 'bold', color: '#0f172a' }}>({record.name})</div>
+              <div style={{ fontWeight: 'bold', color: '#0f172a' }}>({maskPatientName(record.name, hideNames, record.id)})</div>
               <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px' }}>ผู้เข้าร่วมโครงการ / ผู้รับการตรวจ</div>
               <div style={{ fontSize: '10px', color: '#64748b', marginTop: '3px' }}>วันที่ {recordDate}</div>
             </div>

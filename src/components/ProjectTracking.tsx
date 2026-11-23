@@ -19,12 +19,13 @@ import {
   Database, Save, RefreshCw, Settings, CheckCircle2, X, Search, Sparkles,
   Calendar, Layers, Table, FileSpreadsheet, History, FileText
 } from "lucide-react";
-import { formatThaiDate } from "../utils";
+import { formatThaiDate, maskPatientName } from "../utils";
 import { ExecutiveModelReport } from "./ExecutiveModelReport";
 import { ExecutiveBriefingDashboard } from "./ExecutiveBriefingDashboard";
 
 interface ProjectTrackingProps {
   records: ScreeningRecord[];
+  hideNames?: boolean;
 }
 
 
@@ -86,7 +87,7 @@ const MultiSelectDropdown = ({ options, selected, onChange, placeholder, disable
   );
 };
 
-export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => {
+export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records, hideNames = false }) => {
   const [modelFilter, setModelFilter] = useState<string[]>([]);
   const [districtFilter, setDistrictFilter] = useState<string[]>([]);
   const [subdistrictFilter, setSubdistrictFilter] = useState<string[]>([]);
@@ -1494,7 +1495,7 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
                                   <tbody className="divide-y divide-slate-100">
                                     {s.duplicates.map(d => (
                                       <tr key={d.name}>
-                                        <td className="py-2 px-4 font-semibold text-slate-700">{d.name}</td>
+                                        <td className="py-2 px-4 font-semibold text-slate-700">{maskPatientName(d.name, hideNames)}</td>
                                         <td className="py-2 px-4 text-center font-bold text-amber-600">{d.count}</td>
                                         <td className="py-2 px-4">
                                           <div className="flex flex-wrap gap-1">

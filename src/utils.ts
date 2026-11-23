@@ -512,3 +512,54 @@ export function getRecordYearMonth(dateStr?: string): string {
   const iso = parseDateToIso(dateStr);
   return iso.substring(0, 7);
 }
+
+/**
+ * Masks a patient's full name for PDPA / Privacy display when hideNames is enabled.
+ * e.g., "นายสมชาย ใจดี" -> "นายส*** ใ***" or "สมชาย ใจดี" -> "ส*** ใ***"
+ */
+export function maskPatientName(name?: string, hideNames: boolean = false, indexOrId?: number | string): string {
+  if (!name) return "-";
+  if (!hideNames) return name;
+
+  const trimmed = name.trim();
+  if (!trimmed) return "ปกปิดรายชื่อ";
+
+  const prefixes = ["นางสาว", "น.ส.", "ด.ช.", "ด.ญ.", "นาย", "นาง", "คุณ", "ร.ต.อ.", "ด.ต.", "จ.ส.ต.", "ส.ต.อ."];
+  let foundPrefix = "";
+  let rest = trimmed;
+
+  for (const p of prefixes) {
+    if (rest.startsWith(p)) {
+      foundPrefix = p;
+      rest = rest.slice(p.length).trim();
+      break;
+    }
+  }
+
+  const parts = rest.split(/\s+/).filter(Boolean);
+  if (parts.length === 0) {
+    return `${foundPrefix}***`;
+  }
+
+  const firstChar = Array.from(parts[0])[0] || "";
+  const maskedFirst = `${foundPrefix}${firstChar}***`;
+
+  if (parts.length > 1) {
+    const lastChar = Array.from(parts[parts.length - 1])[0] || "";
+    return `${maskedFirst} ${lastChar}***`;
+  }
+
+  return indexOrId !== undefined ? `${maskedFirst} (#${indexOrId})` : maskedFirst;
+}
+
+/**
+ * Masks a patient's phone number when hideNames / privacy mode is enabled.
+ */
+export function maskPhoneNumber(phone?: string, hideNames: boolean = false): string {
+  if (!phone) return "-";
+  if (!hideNames) return phone;
+  const clean = phone.trim();
+  if (clean.length < 4 || clean === "ไม่มีเบอร์โทร") return "***-***-****";
+  return `${clean.slice(0, 3)}-***-${clean.slice(-2)}`;
+}
+
