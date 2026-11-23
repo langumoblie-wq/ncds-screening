@@ -99,6 +99,7 @@ export const NcdForm: React.FC<NcdFormProps> = ({
   // Vitals
   const [weight, setWeight] = useState<number | "">("");
   const [height, setHeight] = useState<number | "">("");
+  const [waist, setWaist] = useState<number | "">("");
   const [bpSys, setBpSys] = useState<number | "">("");
   const [bpDia, setBpDia] = useState<number | "">("");
   const [sugar, setSugar] = useState<number | "">("");
@@ -186,6 +187,7 @@ export const NcdForm: React.FC<NcdFormProps> = ({
       // Vitals
       setWeight(initialRecord.weight || "");
       setHeight(initialRecord.height || "");
+      setWaist(initialRecord.waist || "");
       setBpSys(initialRecord.bpSys || "");
       setBpDia(initialRecord.bpDia || "");
       setSugar(initialRecord.sugar || "");
@@ -260,6 +262,7 @@ export const NcdForm: React.FC<NcdFormProps> = ({
       setSodium("ไม่ค่อยทานเค็ม");
       setWeight("");
       setHeight("");
+      setWaist("");
       setBpSys("");
       setBpDia("");
       setSugar("");
@@ -484,6 +487,7 @@ export const NcdForm: React.FC<NcdFormProps> = ({
       sodium,
       weight: Number(weight),
       height: Number(height),
+      waist: waist === "" ? undefined : Number(waist),
       bpSys: Number(bpSys),
       bpDia: Number(bpDia),
       sugar: sugar === "" ? 0 : Number(sugar),
@@ -1069,7 +1073,7 @@ export const NcdForm: React.FC<NcdFormProps> = ({
           </div>
 
           <div className="p-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               
               <div>
                 <label className="block text-xs font-semibold text-slate-500 mb-1">น้ำหนัก (กิโลกรัม) <span className="text-rose-500">*</span></label>
@@ -1095,6 +1099,39 @@ export const NcdForm: React.FC<NcdFormProps> = ({
                   placeholder="เช่น 168.0"
                   className="w-full text-sm rounded-xl border border-slate-300 p-3 focus:ring-2 focus:ring-blue-500 outline-none"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">
+                  รอบเอว (นิ้ว) <span className="text-slate-400 text-[10px] font-normal">(ไม่บังคับ)</span>
+                </label>
+                <div className="relative">
+                  <input 
+                    type="number" 
+                    step="0.1"
+                    min="0"
+                    value={waist} 
+                    onChange={(e) => setWaist(e.target.value ? Number(e.target.value) : "")}
+                    placeholder="เช่น 32"
+                    className="w-full text-sm rounded-xl border border-slate-300 p-3 pr-12 focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                  <span className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 text-xs font-medium">นิ้ว</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">มวลกล้ามเนื้อ <span className="text-slate-400 text-[10px] font-normal">(ไม่บังคับ)</span></label>
+                <div className="relative">
+                  <input 
+                    type="number" 
+                    step="0.1"
+                    value={muscleMass} 
+                    onChange={(e) => setMuscleMass(e.target.value ? Number(e.target.value) : "")}
+                    placeholder="เช่น 45.2"
+                    className="w-full text-sm rounded-xl border border-slate-300 p-3 pr-12 focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                  <span className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 text-xs font-medium">กก.</span>
+                </div>
               </div>
 
               <div>
@@ -1127,7 +1164,7 @@ export const NcdForm: React.FC<NcdFormProps> = ({
                 </div>
               </div>
 
-              <div className="sm:col-span-2 lg:col-span-1">
+              <div className="sm:col-span-2 lg:col-span-2">
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="block text-xs font-semibold text-slate-700">
                     น้ำตาลในเลือด (DTX) <span className="text-slate-400 text-[10px] font-normal">(ไม่บังคับ)</span>
@@ -1178,21 +1215,6 @@ export const NcdForm: React.FC<NcdFormProps> = ({
                     ? "* อดอาหาร ≥8 ชม.: ปกติ <100, เสี่ยง 100-125, สงสัยป่วย ≥126 mg/dL" 
                     : "* ไม่อดอาหาร: ปกติ <140, เสี่ยง 140-199, สงสัยป่วย ≥200 mg/dL"}
                 </p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 mb-1">มวลกล้ามเนื้อ <span className="text-slate-400 text-[10px] font-normal">(ไม่บังคับ)</span></label>
-                <div className="relative">
-                  <input 
-                    type="number" 
-                    step="0.1"
-                    value={muscleMass} 
-                    onChange={(e) => setMuscleMass(e.target.value ? Number(e.target.value) : "")}
-                    placeholder="เช่น 45.2"
-                    className="w-full text-sm rounded-xl border border-slate-300 p-3 pr-12 focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
-                  <span className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 text-xs font-medium">กก.</span>
-                </div>
               </div>
 
             </div>

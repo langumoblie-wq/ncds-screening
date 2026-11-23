@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { formatThaiDate } from "../utils";
 import { ExecutiveModelReport } from "./ExecutiveModelReport";
+import { ExecutiveBriefingDashboard } from "./ExecutiveBriefingDashboard";
 
 interface ProjectTrackingProps {
   records: ScreeningRecord[];
@@ -92,7 +93,7 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
   const [targetAreaFilter, setTargetAreaFilter] = useState<string[]>([]);
   const [riskFilter, setRiskFilter] = useState<string[]>([]);
   const [participantFilter, setParticipantFilter] = useState<string[]>([]);
-  const [trackingViewMode, setTrackingViewMode] = useState<"both" | "executive" | "targets" | "visits">("both");
+  const [trackingViewMode, setTrackingViewMode] = useState<"both" | "briefing" | "executive" | "targets" | "visits">("both");
   const [tableSearch, setTableSearch] = useState<string>("");
   const [targets, setTargets] = useState<Record<string, number>>({});
   const [editingKey, setEditingKey] = useState<string | null>(null);
@@ -1014,6 +1015,18 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
             </button>
             <button
               type="button"
+              onClick={() => setTrackingViewMode("briefing")}
+              className={`text-xs px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                trackingViewMode === "briefing"
+                  ? "bg-slate-900 text-white shadow-2xs"
+                  : "text-slate-600 hover:text-slate-800"
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              <span>บรีฟผู้บริหาร (คีย์เวิร์ด & รายตำบล)</span>
+            </button>
+            <button
+              type="button"
               onClick={() => setTrackingViewMode("executive")}
               className={`text-xs px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1 ${
                 trackingViewMode === "executive"
@@ -1075,6 +1088,14 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
           </span>
         </div>
       </div>
+
+      {/* EXECUTIVE BRIEFING DASHBOARD SECTION */}
+      {trackingViewMode === "briefing" && (
+        <ExecutiveBriefingDashboard
+          records={filteredRecords}
+          initialTargets={targets}
+        />
+      )}
 
       {/* EXECUTIVE MODEL REPORT SECTION (รายงานสรุปผลและการติดตามโครงการ แยกรายโมเดล สำหรับผู้บริหาร) */}
       {(trackingViewMode === "both" || trackingViewMode === "executive") && (
@@ -1263,305 +1284,6 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records }) => 
                     </td>
                     <td className="py-3 px-4 text-center text-[10px] text-slate-500 font-semibold">
                       (BMI/BP/DTX)
-                    </td>
-                  </tr>
-                </tfoot>
-              )}
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* SECTION 2: Area × Visits Breakdown Matrix Table (ตารางแจกแจงผลงานรายพื้นที่เป้าหมายแยกตามครั้งที่) */}
-      {(trackingViewMode === "visits" || trackingViewMode === "both") && (
-        <div className={`bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-4 ${isExecutiveActive ? "print:hidden" : ""}`}>
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-            <div className="flex items-center gap-3">
-              <div className="bg-purple-600 text-white p-2.5 rounded-2xl shadow-sm">
-                <Table className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-base font-black text-slate-800">
-                  ตารางแจกแจงผลงานรายพื้นที่เป้าหมาย x รายการครั้งที่ (Area × Visits Breakdown Matrix)
-                </h3>
-                <p className="text-xs text-slate-500 font-semibold mt-0.5">
-                  ติดตามผลงานการคัดกรองครั้งที่ 1 (แรกรับ) และการติดตามผลครั้งที่ 2, 3, 4+ จำแนกรายพื้นที่โครงการ
-                </p>
-              </div>
-            </div>
-
-            <div className="text-xs font-semibold text-slate-500 shrink-0">
-              พื้นที่แสดงผล: <strong className="text-slate-800">{matrixFilteredStats.length}</strong> / {stats.length} แห่ง
-            </div>
-          </div>
-
-          {/* Dedicated Filter Bar for Model / District in Area × Visits Breakdown Matrix */}
-          <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-3.5 flex flex-col gap-3 print:hidden">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              {/* Quick Model Filter Buttons */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                  <Filter className="w-3.5 h-3.5 text-purple-600" />
-                  กรองตารางนี้ตาม โมเดล / อำเภอ:
-                </span>
-
-                <div className="inline-flex p-1 bg-white rounded-xl border border-slate-200 gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setMatrixModelFilter([])}
-                    className={`text-xs px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                      matrixModelFilter.length === 0
-                        ? "bg-slate-800 text-white shadow-2xs"
-                        : "text-slate-600 hover:bg-slate-100"
-                    }`}
-                  >
-                    ทุกโมเดล
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setMatrixModelFilter(prev =>
-                        prev.length === 1 && prev[0] === "ตำบล" ? [] : ["ตำบล"]
-                      )
-                    }
-                    className={`text-xs px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                      matrixModelFilter.includes("ตำบล")
-                        ? "bg-purple-600 text-white shadow-2xs"
-                        : "text-purple-700 hover:bg-purple-50"
-                    }`}
-                  >
-                    โมเดลตำบล
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setMatrixModelFilter(prev =>
-                        prev.length === 1 && prev[0] === "หมู่บ้าน" ? [] : ["หมู่บ้าน"]
-                      )
-                    }
-                    className={`text-xs px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                      matrixModelFilter.includes("หมู่บ้าน")
-                        ? "bg-blue-600 text-white shadow-2xs"
-                        : "text-blue-700 hover:bg-blue-50"
-                    }`}
-                  >
-                    โมเดลหมู่บ้าน
-                  </button>
-                </div>
-              </div>
-
-              {/* MultiSelect Dropdowns for Model & District + Reset */}
-              <div className="flex flex-wrap items-center gap-2 flex-1 sm:flex-none justify-end">
-                <MultiSelectDropdown
-                  options={["ตำบล", "หมู่บ้าน"]}
-                  selected={matrixModelFilter}
-                  onChange={setMatrixModelFilter}
-                  placeholder="เลือกโมเดล (ทั้งหมด)"
-                  labelKey={(v) => `โมเดล${v}`}
-                />
-
-                <MultiSelectDropdown
-                  options={matrixAvailableDistricts}
-                  selected={matrixDistrictFilter}
-                  onChange={setMatrixDistrictFilter}
-                  placeholder="เลือกอำเภอ (ทุกอำเภอ)"
-                  labelKey={(v) => `อ.${v}`}
-                />
-
-                {(matrixModelFilter.length > 0 || matrixDistrictFilter.length > 0) && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMatrixModelFilter([]);
-                      setMatrixDistrictFilter([]);
-                    }}
-                    className="text-xs px-3 py-2 bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 rounded-xl font-bold flex items-center gap-1 transition-colors cursor-pointer shrink-0"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                    <span>ล้างตัวกรองตารางนี้</span>
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Quick District Chips */}
-            <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t border-slate-200/70">
-              <span className="text-[11px] font-bold text-slate-500 mr-1">เลือกอำเภอด่วน:</span>
-              <button
-                type="button"
-                onClick={() => setMatrixDistrictFilter([])}
-                className={`text-[11px] px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer border ${
-                  matrixDistrictFilter.length === 0
-                    ? "bg-indigo-600 text-white border-indigo-600"
-                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
-                }`}
-              >
-                ทุกอำเภอ
-              </button>
-              {matrixAvailableDistricts.map((dist) => {
-                const isSelected = matrixDistrictFilter.includes(dist);
-                return (
-                  <button
-                    key={dist}
-                    type="button"
-                    onClick={() => {
-                      setMatrixDistrictFilter(prev =>
-                        prev.includes(dist)
-                          ? prev.filter(d => d !== dist)
-                          : [...prev, dist]
-                      );
-                    }}
-                    className={`text-[11px] px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer border ${
-                      isSelected
-                        ? "bg-indigo-600 text-white border-indigo-600 shadow-2xs"
-                        : "bg-white text-slate-700 border-slate-200 hover:bg-indigo-50 hover:border-indigo-200"
-                    }`}
-                  >
-                    อ.{dist}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="overflow-x-auto rounded-2xl border border-slate-200">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-slate-600">
-                  <th className="py-3 px-4 font-bold w-12 text-center">ลำดับ</th>
-                  <th className="py-3 px-4 font-bold">พื้นที่เป้าหมาย (Area)</th>
-                  <th className="py-3 px-4 font-bold">โมเดล / อำเภอ</th>
-                  <th className="py-3 px-4 font-bold text-center text-slate-700">เป้าหมาย (คน)</th>
-                  <th className="py-3 px-4 font-bold text-center text-indigo-700">ยอดรวม (Visits)</th>
-                  <th className="py-3 px-4 font-bold text-center text-blue-700 bg-blue-50/50">ครั้งที่ 1 (แรกรับ)</th>
-                  <th className="py-3 px-4 font-bold text-center text-indigo-700 bg-indigo-50/50">ครั้งที่ 2 (ติดตาม 1)</th>
-                  <th className="py-3 px-4 font-bold text-center text-purple-700 bg-purple-50/50">ครั้งที่ 3 (ติดตาม 2)</th>
-                  <th className="py-3 px-4 font-bold text-center text-fuchsia-700 bg-fuchsia-50/50">ครั้งที่ 4+ (ติดตาม 3+)</th>
-                  <th className="py-3 px-4 font-bold text-center text-teal-700">อัตราติดตาม (% Follow-up)</th>
-                  <th className="py-3 px-4 font-bold text-center text-emerald-700">ความก้าวหน้า (% Progress)</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-semibold">
-                {matrixFilteredStats.length === 0 ? (
-                  <tr>
-                    <td colSpan={11} className="py-8 text-center text-slate-400">
-                      ไม่พบพื้นที่ที่ตรงกับตัวกรอง โมเดล / อำเภอ ที่เลือก
-                    </td>
-                  </tr>
-                ) : (
-                  matrixFilteredStats.map((s, idx) => (
-                    <tr key={s.key} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="py-3 px-4 text-center font-bold text-slate-400 text-[11px]">
-                        {idx + 1}
-                      </td>
-                      <td className="py-3 px-4 font-bold text-slate-800">
-                        {s.area}
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setMatrixModelFilter(prev =>
-                                prev.length === 1 && prev[0] === s.modelType ? [] : [s.modelType]
-                              )
-                            }
-                            title={`คลิกเพื่อกรองเฉพาะ โมเดล${s.modelType}`}
-                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded cursor-pointer transition-opacity hover:opacity-80 ${
-                              s.modelType === "ตำบล" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"
-                            }`}
-                          >
-                            {s.modelType}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setMatrixDistrictFilter(prev =>
-                                prev.length === 1 && prev[0] === cleanDistrict(s.district) ? [] : [cleanDistrict(s.district)]
-                              )
-                            }
-                            title={`คลิกเพื่อกรองเฉพาะ อ.${s.district}`}
-                            className="text-[11px] text-slate-600 hover:text-indigo-600 font-semibold cursor-pointer hover:underline"
-                          >
-                            อ.{s.district}
-                          </button>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-center font-bold text-slate-700">
-                        {s.target > 0 ? `${s.target.toLocaleString()}` : "-"}
-                      </td>
-                      <td className="py-3 px-4 text-center font-black text-indigo-600 text-sm">
-                        {s.totalVisits}
-                      </td>
-                      <td className="py-3 px-4 text-center font-bold text-blue-700 bg-blue-50/20">
-                        {s.v1Count}
-                      </td>
-                      <td className="py-3 px-4 text-center font-bold text-indigo-700 bg-indigo-50/20">
-                        {s.v2Count}
-                      </td>
-                      <td className="py-3 px-4 text-center font-bold text-purple-700 bg-purple-50/20">
-                        {s.v3Count}
-                      </td>
-                      <td className="py-3 px-4 text-center font-bold text-fuchsia-700 bg-fuchsia-50/20">
-                        {s.v4PlusCount}
-                      </td>
-                      <td className="py-3 px-4 text-center">
-                        <span className={`font-bold px-2 py-0.5 rounded-md ${
-                          s.followUpRate >= 50 
-                            ? "bg-teal-50 text-teal-700" 
-                            : s.followUpRate > 0 
-                            ? "bg-amber-50 text-amber-700" 
-                            : "text-slate-400"
-                        }`}>
-                          {s.followUpRate > 0 ? `${s.followUpRate.toFixed(1)}%` : "0%"}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-center">
-                        {s.target > 0 ? (
-                          <span className={`font-black px-2 py-0.5 rounded-md ${getTextColorClass(s.realPercent)} bg-slate-50`}>
-                            {s.realPercent.toFixed(1)}%
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-slate-400">ยังไม่ตั้งเป้า</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-              {matrixFilteredStats.length > 0 && (
-                <tfoot>
-                  <tr className="bg-slate-100/80 font-black text-slate-800 border-t-2 border-slate-300">
-                    <td colSpan={3} className="py-3 px-4">
-                      รวมพื้นที่ตามตัวกรอง ({matrixFilteredStats.length} แห่ง)
-                    </td>
-                    <td className="py-3 px-4 text-center text-slate-800 font-black">
-                      {matrixFilteredStats.reduce((sum, s) => sum + s.target, 0).toLocaleString()}
-                    </td>
-                    <td className="py-3 px-4 text-center text-indigo-700 text-sm font-black">
-                      {matrixFilteredStats.reduce((sum, s) => sum + s.totalVisits, 0)}
-                    </td>
-                    <td className="py-3 px-4 text-center text-blue-800 bg-blue-100/50">
-                      {matrixFilteredStats.reduce((sum, s) => sum + s.v1Count, 0)}
-                    </td>
-                    <td className="py-3 px-4 text-center text-indigo-800 bg-indigo-100/50">
-                      {matrixFilteredStats.reduce((sum, s) => sum + s.v2Count, 0)}
-                    </td>
-                    <td className="py-3 px-4 text-center text-purple-800 bg-purple-100/50">
-                      {matrixFilteredStats.reduce((sum, s) => sum + s.v3Count, 0)}
-                    </td>
-                    <td className="py-3 px-4 text-center text-fuchsia-800 bg-fuchsia-100/50">
-                      {matrixFilteredStats.reduce((sum, s) => sum + s.v4PlusCount, 0)}
-                    </td>
-                    <td className="py-3 px-4 text-center text-teal-800">
-                      {(() => {
-                        const totalV1 = matrixFilteredStats.reduce((sum, s) => sum + s.v1Count, 0);
-                        const totalFollow = matrixFilteredStats.reduce((sum, s) => sum + s.followUpCount, 0);
-                        return totalV1 > 0 ? `${((totalFollow / totalV1) * 100).toFixed(1)}%` : "0%";
-                      })()}
-                    </td>
-                    <td className="py-3 px-4 text-center text-emerald-800 font-black">
-                      {matrixOverall.percent.toFixed(1)}%
                     </td>
                   </tr>
                 </tfoot>

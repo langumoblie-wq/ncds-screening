@@ -65,6 +65,7 @@ export interface ScreeningRecord {
   followUpAction: string;
   followUpNote: string;
   bmi: string;
+  waist?: number;
   muscleMass?: number;
   subdistrict?: string;
   modelType?: "หมู่บ้าน" | "ตำบล" | "";

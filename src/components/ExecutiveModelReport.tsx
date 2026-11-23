@@ -176,6 +176,14 @@ interface ModelExecutiveAnalytics {
   avgBpSys: string;
   avgBpDia: string;
   avgSugar: string;
+  avgWaist: string;
+  waistRecordedCount: number;
+  waistExceedCount: number;
+  waistExceedPct: number;
+  lowWaterCount: number;
+  lowWaterPct: number;
+  adequateWaterCount: number;
+  adequateWaterPct: number;
   topBehaviors: { name: string; count: number; pct: number }[];
   peopleWithPlanCount: number;
   totalPlanSet: number;
@@ -501,8 +509,10 @@ function buildModelAnalytics(
   let sysSum = 0, sysN = 0;
   let diaSum = 0, diaN = 0;
   let sugarSum = 0, sugarN = 0;
+  let waistSum = 0, waistN = 0, waistExceedCount = 0;
 
   let sweetRisk = 0, fatRisk = 0, saltRisk = 0, noExercise = 0, poorSleep = 0, smokeRisk = 0, alcoholRisk = 0;
+  let lowWaterRisk = 0, adequateWaterCount = 0;
 
   const pillarTrack: Record<"sweet" | "fat" | "salt" | "sleep" | "water" | "exercise", { set: number; achieved: number }> = {
     sweet: { set: 0, achieved: 0 },
@@ -582,6 +592,14 @@ function buildModelAnalytics(
       sugarSum += latest.sugar;
       sugarN++;
     }
+    if (latest.waist !== undefined && latest.waist !== null && Number(latest.waist) > 0) {
+      const w = Number(latest.waist);
+      waistSum += w;
+      waistN++;
+      if (latest.gender === "ชาย" ? w >= 36 : w >= 32) {
+        waistExceedCount++;
+      }
+    }
 
     if (latest.foodHabit?.sweet?.level === "เสี่ยงสูง" || latest.foodHabit?.sweet?.level === "เสี่ยงสูงมาก") sweetRisk++;
     if (latest.foodHabit?.fat?.level === "เสี่ยงสูง" || latest.foodHabit?.fat?.level === "เสี่ยงสูงมาก") fatRisk++;
@@ -596,6 +614,8 @@ function buildModelAnalytics(
     if (latest.sleep?.includes("น้อยกว่า 6") || latest.sleep?.includes("ไม่เพียงพอ")) poorSleep++;
     if (latest.smoking?.includes("สูบอยู่") || latest.smoking?.includes("ประจำ")) smokeRisk++;
     if (latest.alcohol?.includes("ประจำ") || latest.alcohol?.includes("ครั้งคราว")) alcoholRisk++;
+    if (latest.water?.includes("น้อยกว่า 6")) lowWaterRisk++;
+    else if (latest.water) adequateWaterCount++;
 
     const recWithPlan = [...sorted].reverse().find((r) => r.personalPlan) || latest;
     if (recWithPlan.personalPlan) {
@@ -653,6 +673,7 @@ function buildModelAnalytics(
     { name: "บริโภคอาหารรสหวานจัด", count: sweetRisk, pct: totalAchieved > 0 ? Math.round((sweetRisk / uniqueCount) * 100) : 0 },
     { name: "บริโภคอาหารมัน/ของทอด", count: fatRisk, pct: totalAchieved > 0 ? Math.round((fatRisk / uniqueCount) * 100) : 0 },
     { name: "บริโภครสเค็ม/โซเดียมสูง", count: saltRisk, pct: totalAchieved > 0 ? Math.round((saltRisk / uniqueCount) * 100) : 0 },
+    { name: "ดื่มน้ำเปล่าน้อยกว่า 6 แก้ว/วัน", count: lowWaterRisk, pct: totalAchieved > 0 ? Math.round((lowWaterRisk / uniqueCount) * 100) : 0 },
     { name: "ขาดการออกกำลังกาย", count: noExercise, pct: totalAchieved > 0 ? Math.round((noExercise / uniqueCount) * 100) : 0 },
     { name: "นอนหลับพักผ่อนไม่เพียงพอ", count: poorSleep, pct: totalAchieved > 0 ? Math.round((poorSleep / uniqueCount) * 100) : 0 },
     { name: "การสูบบุหรี่", count: smokeRisk, pct: totalAchieved > 0 ? Math.round((smokeRisk / uniqueCount) * 100) : 0 },
@@ -751,6 +772,14 @@ function buildModelAnalytics(
     avgBpSys: sysN > 0 ? Math.round(sysSum / sysN).toString() : "-",
     avgBpDia: diaN > 0 ? Math.round(diaSum / diaN).toString() : "-",
     avgSugar: sugarN > 0 ? Math.round(sugarSum / sugarN).toString() : "-",
+    avgWaist: waistN > 0 ? (waistSum / waistN).toFixed(1) : "-",
+    waistRecordedCount: waistN,
+    waistExceedCount,
+    waistExceedPct: waistN > 0 ? Math.round((waistExceedCount / waistN) * 100) : 0,
+    lowWaterCount: lowWaterRisk,
+    lowWaterPct: totalAchieved > 0 ? Math.round((lowWaterRisk / uniqueCount) * 100) : 0,
+    adequateWaterCount,
+    adequateWaterPct: totalAchieved > 0 ? Math.round((adequateWaterCount / uniqueCount) * 100) : 0,
     topBehaviors: behaviorsList.slice(0, 4),
     peopleWithPlanCount,
     totalPlanSet,
@@ -870,6 +899,9 @@ export const ExecutiveModelReport: React.FC<ExecutiveModelReportProps> = ({
         "เบาหวาน (DM): สงสัยป่วย (คน)",
         "BMI เกินเกณฑ์ ≥23 (คน)",
         "BMI เกินเกณฑ์ ≥23 (%)",
+        "รอบเอวเฉลี่ย (นิ้ว)",
+        "รอบเอวเกินเกณฑ์ (คน)",
+        "ดื่มน้ำเพียงพอ ≥6 แก้ว (%)",
         "ตรวจครั้งที่ 1 (คน)",
         "ตรวจครั้งที่ 2 (คน)",
         "ตรวจครั้งที่ 3 (คน)",
@@ -906,6 +938,9 @@ export const ExecutiveModelReport: React.FC<ExecutiveModelReportProps> = ({
         m.dmDangerCount,
         m.bmiOverweightCount,
         m.bmiOverweightPct,
+        m.avgWaist,
+        m.waistExceedCount,
+        m.adequateWaterPct,
         m.v1Count,
         m.v2Count,
         m.v3Count,
@@ -2076,6 +2111,20 @@ export const ExecutiveModelReport: React.FC<ExecutiveModelReportProps> = ({
                         <strong className="text-slate-800">{m.dmNormalCount} / {m.dmRiskCount} / {m.dmDangerCount} คน</strong>
                       </div>
                       <div className="flex justify-between">
+                        <span>รอบเอวเฉลี่ย / อ้วนลงพุง (เกินเกณฑ์):</span>
+                        <strong className="text-violet-700">
+                          {m.waistRecordedCount > 0
+                            ? `${m.avgWaist} นิ้ว / ${m.waistExceedCount} คน (${m.waistExceedPct}%)`
+                            : "รอระบุข้อมูลรอบเอว"}
+                        </strong>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>การดื่มน้ำเปล่า (เพียงพอ ≥6 แก้ว / ดื่มน้อย &lt;6 แก้ว):</span>
+                        <strong className="text-cyan-700">
+                          {m.adequateWaterCount} คน ({m.adequateWaterPct}%) / {m.lowWaterCount} คน ({m.lowWaterPct}%)
+                        </strong>
+                      </div>
+                      <div className="flex justify-between">
                         <span>ผู้ติดตามที่ผลความดัน/น้ำตาล/BMI ดีขึ้น:</span>
                         <strong className="text-emerald-700">{m.anyClinicalImprovedCount}/{m.evaluatedCohortCount} คน ({m.anyClinicalImprovedPct}%)</strong>
                       </div>
@@ -2140,130 +2189,6 @@ export const ExecutiveModelReport: React.FC<ExecutiveModelReportProps> = ({
                 </div>
               )}
 
-              {/* Model Detailed Area Progress & Risk Breakdown Table */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs sm:text-sm font-black text-slate-800">
-                    ตารางแจกแจงผลการคัดกรองและเกณฑ์ความเสี่ยงรายพื้นที่เป้าหมาย — {m.modelLabel}
-                  </h4>
-                  <span className="text-[11px] text-slate-500 font-semibold">
-                    รวม {m.areas.length} พื้นที่เป้าหมาย
-                  </span>
-                </div>
-
-                <div className="overflow-x-auto rounded-2xl border border-slate-200">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-slate-100 border-b border-slate-200 text-slate-700">
-                        <th className="py-2.5 px-2.5 font-bold text-center w-9">ที่</th>
-                        <th className="py-2.5 px-3 font-bold">อำเภอ / ตำบล</th>
-                        <th className="py-2.5 px-3 font-bold">พื้นที่เป้าหมาย ({m.modelName})</th>
-                        <th className="py-2.5 px-2.5 font-bold text-center">เป้าหมาย</th>
-                        <th className="py-2.5 px-2.5 font-bold text-center text-indigo-800">คัดกรอง (คน)</th>
-                        <th className="py-2.5 px-2.5 font-bold text-center">รวม (ครั้ง)</th>
-                        <th className="py-2.5 px-2.5 font-bold text-center bg-emerald-50/60 text-emerald-800">ปกติ (คน)</th>
-                        <th className="py-2.5 px-2.5 font-bold text-center bg-amber-50/60 text-amber-800">เสี่ยงสูง (คน)</th>
-                        <th className="py-2.5 px-2.5 font-bold text-center bg-rose-50/60 text-rose-800">สงสัยป่วย (คน)</th>
-                        <th className="py-2.5 px-2.5 font-bold text-center">HT (ป/ส/ป่วย)</th>
-                        <th className="py-2.5 px-2.5 font-bold text-center">DM (ป/ส/ป่วย)</th>
-                        <th className="py-2.5 px-2.5 font-bold text-center">รอบตรวจ (1/2/3/4+)</th>
-                        <th className="py-2.5 px-2.5 font-bold text-center">% บรรลุเป้า</th>
-                        <th className="py-2.5 px-2.5 font-bold text-center">สถานะผลงาน</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 font-semibold">
-                      {m.areas.map((a, idx) => (
-                        <tr key={a.key} className="hover:bg-slate-50/80 print:break-inside-avoid">
-                          <td className="py-2.5 px-2.5 text-center text-slate-400 font-bold">{idx + 1}</td>
-                          <td className="py-2.5 px-3 text-slate-700">
-                            อ.{a.district} {a.subdistrict ? `• ต.${a.subdistrict}` : ""}
-                          </td>
-                          <td className="py-2.5 px-3 font-bold text-slate-900">{a.area}</td>
-                          <td className="py-2.5 px-2.5 text-center text-slate-700">
-                            {a.target > 0 ? a.target.toLocaleString() : "-"}
-                          </td>
-                          <td className="py-2.5 px-2.5 text-center font-black text-indigo-700 text-sm">
-                            {a.achieved.toLocaleString()}
-                          </td>
-                          <td className="py-2.5 px-2.5 text-center font-bold text-slate-700">
-                            {a.totalVisits.toLocaleString()}
-                          </td>
-                          <td className="py-2.5 px-2.5 text-center bg-emerald-50/20 text-emerald-700 font-bold">
-                            {a.normalCount} <span className="text-[10px] text-slate-400">({a.normalPct}%)</span>
-                          </td>
-                          <td className="py-2.5 px-2.5 text-center bg-amber-50/20 text-amber-700 font-bold">
-                            {a.riskCount} <span className="text-[10px] text-slate-400">({a.riskPct}%)</span>
-                          </td>
-                          <td className="py-2.5 px-2.5 text-center bg-rose-50/20 text-rose-700 font-bold">
-                            {a.dangerCount} <span className="text-[10px] text-slate-400">({a.dangerPct}%)</span>
-                          </td>
-                          <td className="py-2.5 px-2.5 text-center text-[11px]">
-                            <span className="text-emerald-700">{a.htNormalCount}</span>/
-                            <span className="text-amber-700">{a.htRiskCount}</span>/
-                            <span className="text-rose-700">{a.htDangerCount}</span>
-                          </td>
-                          <td className="py-2.5 px-2.5 text-center text-[11px]">
-                            <span className="text-emerald-700">{a.dmNormalCount}</span>/
-                            <span className="text-amber-700">{a.dmRiskCount}</span>/
-                            <span className="text-rose-700">{a.dmDangerCount}</span>
-                          </td>
-                          <td className="py-2.5 px-2.5 text-center text-[11px] text-slate-700">
-                            {a.v1Count}/{a.v2Count}/{a.v3Count}/{a.v4PlusCount}
-                          </td>
-                          <td className="py-2.5 px-2.5 text-center font-black">
-                            {a.target > 0 ? (
-                              <span className={a.realPercent >= 80 ? "text-emerald-700" : a.realPercent >= 50 ? "text-amber-700" : "text-rose-700"}>
-                                {a.realPercent.toFixed(1)}%
-                              </span>
-                            ) : (
-                              <span className="text-slate-400 text-[10px]">ยังไม่ตั้งเป้า</span>
-                            )}
-                          </td>
-                          <td className="py-2.5 px-2.5 text-center">
-                            <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-md border ${a.statusColor}`}>
-                              {a.statusLabel}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr className="bg-slate-100 font-black text-slate-900 border-t-2 border-slate-300">
-                        <td colSpan={3} className="py-3 px-3">
-                          รวมผลงาน {m.modelLabel} ({m.areas.length} พื้นที่)
-                        </td>
-                        <td className="py-3 px-2.5 text-center">{m.totalTarget.toLocaleString()}</td>
-                        <td className="py-3 px-2.5 text-center text-indigo-800 text-sm">{m.totalAchieved.toLocaleString()}</td>
-                        <td className="py-3 px-2.5 text-center">{m.totalVisits.toLocaleString()}</td>
-                        <td className="py-3 px-2.5 text-center text-emerald-800 bg-emerald-100/50">
-                          {m.normalCount} ({m.normalPct}%)
-                        </td>
-                        <td className="py-3 px-2.5 text-center text-amber-800 bg-amber-100/50">
-                          {m.riskCount} ({m.riskPct}%)
-                        </td>
-                        <td className="py-3 px-2.5 text-center text-rose-800 bg-rose-100/50">
-                          {m.dangerCount} ({m.dangerPct}%)
-                        </td>
-                        <td className="py-3 px-2.5 text-center text-[11px]">
-                          {m.htNormalCount}/{m.htRiskCount}/{m.htDangerCount}
-                        </td>
-                        <td className="py-3 px-2.5 text-center text-[11px]">
-                          {m.dmNormalCount}/{m.dmRiskCount}/{m.dmDangerCount}
-                        </td>
-                        <td className="py-3 px-2.5 text-center text-[11px]">
-                          {m.v1Count}/{m.v2Count}/{m.v3Count}/{m.v4PlusCount}
-                        </td>
-                        <td className="py-3 px-2.5 text-center text-emerald-800">
-                          {m.totalTarget > 0 ? `${m.achievementPct.toFixed(1)}%` : "-"}
-                        </td>
-                        <td className="py-3 px-2.5 text-center text-[11px] text-slate-700">
-                          ผ่านเกณฑ์ ≥80% จำนวน {m.achieved80Areas} แห่ง
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              </div>
             </div>
           );
         })}
@@ -2585,62 +2510,6 @@ export const ExecutiveModelReport: React.FC<ExecutiveModelReportProps> = ({
             </table>
           </div>
 
-          {/* PDF Table 3 & 4: รายละเอียดรายพื้นที่ แยกรายโมเดล */}
-          {modelsToRender.map((m, idx) => (
-            <div key={m.modelName} style={{ marginBottom: "16px" }}>
-              <div style={{ fontSize: "12px", fontWeight: 800, color: m.modelName === "ตำบล" ? "#581c87" : "#1e3a8a", marginBottom: "5px" }}>
-                ส่วนที่ {idx + 3}: ตารางแจกแจงผลการคัดกรองรายพื้นที่เป้าหมาย แยกตามเกณฑ์ความเสี่ยง — {m.modelLabel}
-              </div>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "9px", border: "1px solid #cbd5e1" }}>
-                <thead>
-                  <tr style={{ backgroundColor: m.modelName === "ตำบล" ? "#f3e8ff" : "#dbeafe", color: "#0f172a" }}>
-                    <th style={{ border: "1px solid #cbd5e1", padding: "4px", textAlign: "center" }}>ที่</th>
-                    <th style={{ border: "1px solid #cbd5e1", padding: "4px 5px", textAlign: "left" }}>อำเภอ / ตำบล</th>
-                    <th style={{ border: "1px solid #cbd5e1", padding: "4px 5px", textAlign: "left" }}>พื้นที่เป้าหมาย</th>
-                    <th style={{ border: "1px solid #cbd5e1", padding: "4px", textAlign: "center" }}>เป้า</th>
-                    <th style={{ border: "1px solid #cbd5e1", padding: "4px", textAlign: "center" }}>คัดกรอง (คน)</th>
-                    <th style={{ border: "1px solid #cbd5e1", padding: "4px", textAlign: "center" }}>ปกติ (คน/%)</th>
-                    <th style={{ border: "1px solid #cbd5e1", padding: "4px", textAlign: "center" }}>เสี่ยงสูง (คน/%)</th>
-                    <th style={{ border: "1px solid #cbd5e1", padding: "4px", textAlign: "center" }}>สงสัยป่วย (คน/%)</th>
-                    <th style={{ border: "1px solid #cbd5e1", padding: "4px", textAlign: "center" }}>HT (ป/ส/ป่วย)</th>
-                    <th style={{ border: "1px solid #cbd5e1", padding: "4px", textAlign: "center" }}>DM (ป/ส/ป่วย)</th>
-                    <th style={{ border: "1px solid #cbd5e1", padding: "4px", textAlign: "center" }}>รอบ (1/2/3/4+)</th>
-                    <th style={{ border: "1px solid #cbd5e1", padding: "4px", textAlign: "center" }}>% เป้า</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {m.areas.map((a, aIdx) => (
-                    <tr key={a.key}>
-                      <td style={{ border: "1px solid #cbd5e1", padding: "3.5px", textAlign: "center" }}>{aIdx + 1}</td>
-                      <td style={{ border: "1px solid #cbd5e1", padding: "3.5px 5px" }}>อ.{a.district} {a.subdistrict ? `ต.${a.subdistrict}` : ""}</td>
-                      <td style={{ border: "1px solid #cbd5e1", padding: "3.5px 5px", fontWeight: 700 }}>{a.area}</td>
-                      <td style={{ border: "1px solid #cbd5e1", padding: "3.5px", textAlign: "center" }}>{a.target > 0 ? a.target : "-"}</td>
-                      <td style={{ border: "1px solid #cbd5e1", padding: "3.5px", textAlign: "center", fontWeight: 800, color: "#312e81" }}>{a.achieved}</td>
-                      <td style={{ border: "1px solid #cbd5e1", padding: "3.5px", textAlign: "center", color: "#047857" }}>{a.normalCount} ({a.normalPct}%)</td>
-                      <td style={{ border: "1px solid #cbd5e1", padding: "3.5px", textAlign: "center", color: "#b45309" }}>{a.riskCount} ({a.riskPct}%)</td>
-                      <td style={{ border: "1px solid #cbd5e1", padding: "3.5px", textAlign: "center", color: "#be123c" }}>{a.dangerCount} ({a.dangerPct}%)</td>
-                      <td style={{ border: "1px solid #cbd5e1", padding: "3.5px", textAlign: "center" }}>{a.htNormalCount}/{a.htRiskCount}/{a.htDangerCount}</td>
-                      <td style={{ border: "1px solid #cbd5e1", padding: "3.5px", textAlign: "center" }}>{a.dmNormalCount}/{a.dmRiskCount}/{a.dmDangerCount}</td>
-                      <td style={{ border: "1px solid #cbd5e1", padding: "3.5px", textAlign: "center" }}>{a.v1Count}/{a.v2Count}/{a.v3Count}/{a.v4PlusCount}</td>
-                      <td style={{ border: "1px solid #cbd5e1", padding: "3.5px", textAlign: "center", fontWeight: 700 }}>{a.target > 0 ? `${a.realPercent.toFixed(1)}%` : "-"}</td>
-                    </tr>
-                  ))}
-                  <tr style={{ backgroundColor: "#f1f5f9", fontWeight: 800 }}>
-                    <td colSpan={3} style={{ border: "1px solid #cbd5e1", padding: "4px 6px" }}>รวม {m.modelLabel} ({m.areas.length} พื้นที่)</td>
-                    <td style={{ border: "1px solid #cbd5e1", padding: "4px", textAlign: "center" }}>{m.totalTarget}</td>
-                    <td style={{ border: "1px solid #cbd5e1", padding: "4px", textAlign: "center", color: "#312e81" }}>{m.totalAchieved}</td>
-                    <td style={{ border: "1px solid #cbd5e1", padding: "4px", textAlign: "center", color: "#047857" }}>{m.normalCount} ({m.normalPct}%)</td>
-                    <td style={{ border: "1px solid #cbd5e1", padding: "4px", textAlign: "center", color: "#b45309" }}>{m.riskCount} ({m.riskPct}%)</td>
-                    <td style={{ border: "1px solid #cbd5e1", padding: "4px", textAlign: "center", color: "#be123c" }}>{m.dangerCount} ({m.dangerPct}%)</td>
-                    <td style={{ border: "1px solid #cbd5e1", padding: "4px", textAlign: "center" }}>{m.htNormalCount}/{m.htRiskCount}/{m.htDangerCount}</td>
-                    <td style={{ border: "1px solid #cbd5e1", padding: "4px", textAlign: "center" }}>{m.dmNormalCount}/{m.dmRiskCount}/{m.dmDangerCount}</td>
-                    <td style={{ border: "1px solid #cbd5e1", padding: "4px", textAlign: "center" }}>{m.v1Count}/{m.v2Count}/{m.v3Count}/{m.v4PlusCount}</td>
-                    <td style={{ border: "1px solid #cbd5e1", padding: "4px", textAlign: "center" }}>{m.totalTarget > 0 ? `${m.achievementPct.toFixed(1)}%` : "-"}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          ))}
 
           {/* PDF Footer Signature */}
           <div style={{ marginTop: "22px", paddingTop: "14px", borderTop: "1px solid #cbd5e1", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", textAlign: "center", fontSize: "10px" }}>

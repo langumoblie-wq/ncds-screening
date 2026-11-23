@@ -4,7 +4,8 @@ import { RefreshCw,
   MapPin, Eye, Trash2, SlidersHorizontal, ArrowUpDown, ChevronDown, 
   Download, FileSpreadsheet, RotateCcw, Cigarette, Wine, Flame, EyeOff,
   Pencil, PlusCircle, History, Apple, Dumbbell, Smile, Moon, Activity, Upload,
-  Layers, UserCheck, Calendar, Check, GitBranch, TrendingUp, CalendarRange, Clock, BarChart2, Printer
+  Layers, UserCheck, Calendar, Check, GitBranch, TrendingUp, CalendarRange, Clock, BarChart2, Printer,
+  Droplet, Ruler
 } from "lucide-react";
 import { ScreeningRecord, DistrictType, LOCATION_DATA, DISTRICT_SUBDISTRICT_MAP } from "../types";
 import { parseDateToIso, formatYearMonthThai, formatYearMonthThaiShort, getRecordYearMonth, formatThaiDate } from "../utils";
@@ -343,6 +344,7 @@ const LifestyleBehaviors3O2S: React.FC<{
   foodSweetCount: number;
   foodFatCount: number;
   foodSaltCount: number;
+  lowWaterCount: number;
   total: number;
 }> = ({
   smokeCount,
@@ -352,6 +354,7 @@ const LifestyleBehaviors3O2S: React.FC<{
   foodSweetCount,
   foodFatCount,
   foodSaltCount,
+  lowWaterCount,
   total
 }) => {
   const getPct = (count: number) => {
@@ -391,6 +394,17 @@ const LifestyleBehaviors3O2S: React.FC<{
       barColor: "from-amber-400 to-yellow-500",
       icon: <Flame className="w-3.5 h-3.5" />,
       desc: "ปรุงเพิ่มเค็ม/ทานสำเร็จรูป/หมักดองบ่อย"
+    },
+    {
+      id: "water",
+      group: "3อ",
+      title: "อ.อาหาร (ดื่มน้ำเปล่าน้อย <6 แก้ว)",
+      count: lowWaterCount,
+      pct: getPct(lowWaterCount),
+      color: "bg-cyan-500",
+      barColor: "from-cyan-400 to-sky-500",
+      icon: <Droplet className="w-3.5 h-3.5" />,
+      desc: "ดื่มน้ำสะอาดน้อยกว่า 6 แก้ว/วัน เสี่ยงภาวะขาดน้ำและระบบเผาผลาญต่ำ"
     },
     {
       id: "exercise",
@@ -972,6 +986,11 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
             } else if (riskType === "bmi_risk") {
               const b = parseFloat(r.bmi);
               return (!isNaN(b) && b >= 23.0);
+            } else if (riskType === "low_water") {
+              return Boolean(r.water?.includes("น้อยกว่า 6"));
+            } else if (riskType === "waist_risk") {
+              if (!r.waist || r.waist <= 0) return false;
+              return r.gender === "ชาย" ? r.waist >= 36 : r.waist >= 32;
             }
             return false;
           });
@@ -1039,6 +1058,8 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
     let sodiumCount = 0;
     let noExerciseCount = 0;
     let poorSleepCount = 0;
+    let lowWaterCount = 0;
+    let adequateWaterCount = 0;
 
     let foodSweetCount = 0;
     let foodFatCount = 0;
@@ -1049,6 +1070,12 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
     let bmiObese1 = 0;
     let bmiObese2 = 0;
     let foodAnyRiskCount = 0;
+
+    // Waist circumference (inches) tallies
+    let waistRecordedCount = 0;
+    let waistSum = 0;
+    let waistExceedCount = 0; // ชาย >= 36 นิ้ว (90 ซม.), หญิง >= 32 นิ้ว (80 ซม.)
+    let waistNormalCount = 0;
 
     filteredRecords.forEach((r) => {
       if (!r) return;
@@ -1085,6 +1112,12 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
       if (r.exercise?.includes("ไม่ออก") || r.exercise?.includes("นั่งนิ่ง")) noExerciseCount++;
       if (r.sleep?.includes("น้อยกว่า 6") || r.sleep?.includes("ไม่เพียงพอ")) poorSleepCount++;
 
+      if (r.water?.includes("น้อยกว่า 6")) {
+        lowWaterCount++;
+      } else if (r.water) {
+        adequateWaterCount++;
+      }
+
       const hasSweetRisk = r.foodHabit?.sweet?.level === "เสี่ยงสูงมาก" || r.foodHabit?.sweet?.level === "เสี่ยงสูง";
       const hasFatRisk = r.foodHabit?.fat?.level === "เสี่ยงสูงมาก" || r.foodHabit?.fat?.level === "เสี่ยงสูง";
       const hasSaltRisk = r.foodHabit?.salt?.level === "เสี่ยงสูงมาก" || r.foodHabit?.salt?.level === "เสี่ยงสูง" || r.sodium?.includes("เค็มประจำ");
@@ -1102,6 +1135,16 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
         else if (bmiVal < 30.0) bmiObese1++;
         else bmiObese2++;
       }
+
+      // Waist circumference (inches) breakdown
+      if (r.waist !== undefined && r.waist !== null && Number(r.waist) > 0) {
+        const w = Number(r.waist);
+        waistRecordedCount++;
+        waistSum += w;
+        const isExceed = r.gender === "ชาย" ? w >= 36 : w >= 32;
+        if (isExceed) waistExceedCount++;
+        else waistNormalCount++;
+      }
       
       if (hasSweetRisk || hasFatRisk || r.sodium?.includes("เค็มประจำ") || r.foodHabit?.salt?.level === "เสี่ยงสูงมาก" || r.foodHabit?.salt?.level === "เสี่ยงสูง") {
         foodAnyRiskCount++;
@@ -1117,12 +1160,21 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
       ht: { normal: htNormal, risk: htRisk, danger: htDanger },
       dm: { normal: dmNormal, risk: dmRisk, danger: dmDanger },
       bmiStats: { underweight: bmiUnderweight, normal: bmiNormal, overweight: bmiOverweight, obese1: bmiObese1, obese2: bmiObese2 },
+      waistStats: {
+        recordedCount: waistRecordedCount,
+        avgWaist: waistRecordedCount > 0 ? (waistSum / waistRecordedCount).toFixed(1) : null,
+        exceedCount: waistExceedCount,
+        normalCount: waistNormalCount,
+        exceedPct: waistRecordedCount > 0 ? Math.round((waistExceedCount / waistRecordedCount) * 100) : 0
+      },
       lifestyle: { 
         smokeCount, 
         alcoholCount, 
         sodiumCount, 
         noExerciseCount,
         poorSleepCount,
+        lowWaterCount,
+        adequateWaterCount,
         foodSweetCount,
         foodFatCount,
         foodSaltCount,
@@ -1158,6 +1210,7 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
       { name: "การรับประทานรสหวานจัด (อ.อาหาร)", count: stats.lifestyle.foodSweetCount, pct: Math.round((stats.lifestyle.foodSweetCount / total) * 100) },
       { name: "การรับประทานอาหารทอด/ไขมันสูง (อ.อาหาร)", count: stats.lifestyle.foodFatCount, pct: Math.round((stats.lifestyle.foodFatCount / total) * 100) },
       { name: "การรับประทานเค็มจัด/ปรุงรสเค็ม (อ.อาหาร)", count: stats.lifestyle.foodSaltCount, pct: Math.round((stats.lifestyle.foodSaltCount / total) * 100) },
+      { name: "การดื่มน้ำเปล่าน้อยกว่า 6 แก้ว/วัน (อ.อาหาร)", count: stats.lifestyle.lowWaterCount, pct: Math.round((stats.lifestyle.lowWaterCount / total) * 100) },
       { name: "การขาดการออกกำลังกาย (อ.ออกกำลังกาย)", count: stats.lifestyle.noExerciseCount, pct: Math.round((stats.lifestyle.noExerciseCount / total) * 100) },
       { name: "การนอนหลับพักผ่อนไม่เพียงพอ (อ.อารมณ์)", count: stats.lifestyle.poorSleepCount, pct: Math.round((stats.lifestyle.poorSleepCount / total) * 100) },
       { name: "การสูบบุหรี่ประจำ (ส.สูบ)", count: stats.lifestyle.smokeCount, pct: Math.round((stats.lifestyle.smokeCount / total) * 100) },
@@ -1172,6 +1225,8 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
 
     const bmiOverweightTotal = stats.bmiStats.overweight + stats.bmiStats.obese1 + stats.bmiStats.obese2;
     const bmiOverweightPct = Math.round((bmiOverweightTotal / total) * 100);
+    const lowWaterPct = Math.round((stats.lifestyle.lowWaterCount / total) * 100);
+    const adequateWaterPct = Math.round((stats.lifestyle.adequateWaterCount / total) * 100);
 
     return {
       total,
@@ -1184,6 +1239,11 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
       topBehavior,
       bmiOverweightTotal,
       bmiOverweightPct,
+      waistStats: stats.waistStats,
+      lowWaterCount: stats.lifestyle.lowWaterCount,
+      lowWaterPct,
+      adequateWaterCount: stats.lifestyle.adequateWaterCount,
+      adequateWaterPct,
       allBehaviors: behaviors
     };
   }, [stats]);
@@ -1202,7 +1262,7 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
     if (filteredRecords.length === 0) return;
     
     // Construct rows with visit tracking metadata
-    const headers = ["ID", "Date", "VisitNumber", "VisitType", "IsLatestVisit", "TotalVisitsForPerson", "Name", "Age", "Gender", "Phone", "District", "TargetArea", "BMI", "BP_Systolic", "BP_Diastolic", "HT_Result", "BloodSugar", "DM_Result", "FollowUpAction"];
+    const headers = ["ID", "Date", "VisitNumber", "VisitType", "IsLatestVisit", "TotalVisitsForPerson", "Name", "Age", "Gender", "Phone", "District", "TargetArea", "BMI", "Waist_Inches", "BP_Systolic", "BP_Diastolic", "HT_Result", "BloodSugar", "DM_Result", "Water_Intake", "FollowUpAction"];
     const rows = filteredRecords.map((r) => {
       const key = `${r.name}_${r.phone || ""}`;
       const pInfo = patientVisitMapping[key];
@@ -1223,11 +1283,13 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
         r.district,
         `"${r.targetArea}"`,
         r.bmi,
+        r.waist && r.waist > 0 ? r.waist : "",
         r.bpSys,
         r.bpDia,
         r.htResult?.level || "",
         r.sugar,
         r.dmResult?.level || "",
+        `"${r.water || ""}"`,
         `"${r.followUpAction || ""}"`
       ];
     });
@@ -1925,6 +1987,7 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
           foodSweetCount={stats.lifestyle.foodSweetCount}
           foodFatCount={stats.lifestyle.foodFatCount}
           foodSaltCount={stats.lifestyle.foodSaltCount}
+          lowWaterCount={stats.lifestyle.lowWaterCount}
           total={stats.total}
         />
 
@@ -2027,12 +2090,12 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
               )}
             </div>
 
-            {/* BMI Analysis */}
+            {/* BMI, Waist & Water Intake Analysis */}
             <div className="bg-gradient-to-br from-indigo-50/50 to-blue-50/50 p-4 rounded-xl border border-indigo-200/60 flex flex-col justify-between">
-              <div className="space-y-3.5">
+              <div className="space-y-3">
                 <div className="flex items-center gap-1.5 text-indigo-850 font-bold text-xs">
                   <span className="bg-indigo-100 text-indigo-700 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black font-mono">C</span>
-                  <span>ภาวะโภชนาการและดัชนีมวลกาย (BMI Analysis)</span>
+                  <span>ดัชนีมวลกาย รอบเอว (นิ้ว) และการดื่มน้ำเปล่า</span>
                 </div>
                 
                 <div className="space-y-2.5 text-xs text-slate-600 leading-relaxed font-semibold">
@@ -2040,24 +2103,50 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
                     <div className="flex items-start gap-2">
                       <Activity className="w-4.5 h-4.5 text-indigo-500 shrink-0 mt-0.5" />
                       <div>
-                        <span><strong>อัตราน้ำหนักเกินเกณฑ์:</strong> ประชากรกลุ่มเสี่ยงที่มีภาวะท้วม อ้วน หรืออ้วนมาก มีจำนวน <strong className="text-indigo-700">{interpretation.bmiOverweightTotal}</strong> ราย หรือคิดเป็น <strong className="text-indigo-700 text-sm font-black font-mono">{interpretation.bmiOverweightPct}%</strong> ของจำนวนผู้คัดกรองทั้งหมด ซึ่งเป็นปัจจัยเสี่ยงโดยตรงต่อโรคความดันโลหิตและเบาหวาน</span>
+                        <span><strong>อัตราน้ำหนักเกินเกณฑ์ (BMI ≥ 23):</strong> พบจำนวน <strong className="text-indigo-700">{interpretation.bmiOverweightTotal}</strong> ราย (<strong className="text-indigo-700 text-sm font-black font-mono">{interpretation.bmiOverweightPct}%</strong>) ซึ่งเสี่ยงต่อโรคความดันและเบาหวาน</span>
                       </div>
                     </div>
                   ) : (
                     <div className="flex items-start gap-2">
                       <CheckCircle2 className="w-4.5 h-4.5 text-emerald-500 shrink-0 mt-0.5" />
                       <div>
-                        <span><strong>ภาวะโภชนาการดี:</strong> ประชากรในกลุ่มที่คัดกรองส่วนใหญ่อยู่ในเกณฑ์มาตรฐาน ไม่พบกลุ่มภาวะน้ำหนักเกินในระดับที่ต้องเฝ้าระวัง</span>
+                        <span><strong>ภาวะโภชนาการดี:</strong> ประชากรส่วนใหญ่อยู่ในเกณฑ์มาตรฐาน ไม่พบกลุ่มภาวะน้ำหนักเกิน</span>
                       </div>
                     </div>
                   )}
+
+                  {/* Waist Circumference Summary */}
+                  <div className="flex items-start gap-2 pt-1.5 border-t border-indigo-100/80">
+                    <Ruler className="w-4 h-4 text-violet-600 shrink-0 mt-0.5" />
+                    <div>
+                      {interpretation.waistStats.recordedCount > 0 ? (
+                        <span>
+                          <strong>รอบเอวเฉลี่ย:</strong> <strong className="text-violet-700 font-mono">{interpretation.waistStats.avgWaist} นิ้ว</strong> (จาก {interpretation.waistStats.recordedCount} รายที่ระบุ) • รอบเอวเกินเกณฑ์อ้วนลงพุง (ชาย ≥36 / หญิง ≥32 นิ้ว) <strong className="text-rose-600">{interpretation.waistStats.exceedCount} ราย ({interpretation.waistStats.exceedPct}%)</strong>
+                        </span>
+                      ) : (
+                        <span>
+                          <strong>ข้อมูลรอบเอว (นิ้ว):</strong> ยังไม่มีรายการที่บันทึกรอบเอวในชุดข้อมูลที่กรอง
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Daily Plain Water Intake Summary */}
+                  <div className="flex items-start gap-2 pt-1.5 border-t border-indigo-100/80">
+                    <Droplet className="w-4 h-4 text-cyan-600 shrink-0 mt-0.5" />
+                    <div>
+                      <span>
+                        <strong>การดื่มน้ำเปล่าต่อวัน:</strong> ดื่มเพียงพอ (≥6 แก้ว) <strong className="text-emerald-700">{interpretation.adequateWaterCount} ราย ({interpretation.adequateWaterPct}%)</strong> • ดื่มน้อย (&lt;6 แก้ว) <strong className="text-amber-700">{interpretation.lowWaterCount} ราย ({interpretation.lowWaterPct}%)</strong>
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {interpretation.bmiOverweightPct >= 30 && (
+              {(interpretation.bmiOverweightPct >= 30 || interpretation.waistStats.exceedPct >= 30 || interpretation.lowWaterPct >= 30) && (
                 <div className="mt-3 text-[10px] bg-white border border-indigo-200 text-indigo-850 p-2.5 rounded-xl font-bold flex items-center gap-1.5 leading-tight">
                   <span className="shrink-0 bg-indigo-500 text-white text-[9px] px-1.5 py-0.5 rounded font-black font-mono">แนวทางจัดกิจกรรม</span>
-                  <span>ควรจัดกิจกรรมปรับพฤติกรรมการกิน (ลดหวาน/มัน/เค็ม) ควบคู่กับการส่งเสริมการออกกำลังกายชุมชน</span>
+                  <span>ส่งเสริมการลดรอบเอว ควบคุมน้ำหนัก และรณรงค์ดื่มน้ำเปล่าสะอาดให้ได้ 6-8 แก้ว/วัน</span>
                 </div>
               )}
             </div>
@@ -2544,18 +2633,20 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
           {/* Behavior Risk Selector (3อ. 2ส.) */}
           <div className="w-56 shrink-0">
             <MultiSelectDropdown 
-              options={["food", "exercise", "sleep", "smoking", "alcohol", "bmi_risk"]}
+              options={["food", "low_water", "exercise", "sleep", "smoking", "alcohol", "bmi_risk", "waist_risk"]}
               selected={filterBehaviorRisk}
               onChange={setFilterBehaviorRisk}
               placeholder="แสดงทุกพฤติกรรมเสี่ยง"
               labelKey={(v) => {
                 const map: Record<string, string> = {
                   food: "อาหาร (กินหวาน/มัน/เค็มจัด)",
+                  low_water: "การดื่มน้ำเปล่า (น้อยกว่า 6 แก้ว/วัน)",
                   exercise: "การออกกำลังกาย (ไม่ออกเลย)",
                   sleep: "การนอนหลับ (พักผ่อนไม่เพียงพอ)",
                   smoking: "สูบบุหรี่ (ยังสูบอยู่)",
                   alcohol: "ดื่มแอลกอฮอล์ (ดื่มเป็นประจำ/ครั้งคราว)",
-                  bmi_risk: "ดัชนีมวลกาย (BMI ท้วม/อ้วนขึ้นไป)"
+                  bmi_risk: "ดัชนีมวลกาย (BMI ท้วม/อ้วนขึ้นไป)",
+                  waist_risk: "รอบเอวเกินเกณฑ์ (ชาย ≥36 / หญิง ≥32 นิ้ว)"
                 };
                 return map[v] || v;
               }}
@@ -2822,11 +2913,11 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
                   onClick={() => handleSort("bmi")}
                 >
                   <div className="flex items-center justify-center gap-1">
-                    BMI
+                    BMI / รอบเอว
                     <ArrowUpDown className="w-3.5 h-3.5 text-slate-400" />
                   </div>
                 </th>
-                <th className="py-3 px-5">ผลการจัดการเบื้องต้น</th>
+                <th className="py-3 px-5">ผลการจัดการเบื้องต้น / ดื่มน้ำ</th>
                 <th className="py-3 px-5 text-center w-28">เครื่องมือ</th>
               </tr>
             </thead>
@@ -2940,35 +3031,68 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
                         </span>
                       </td>
 
-                      {/* BMI */}
+                      {/* BMI & Waist */}
                       <td className="py-4 px-5 text-center">
                         {(() => {
                           const b = parseFloat(r.bmi);
-                          if (isNaN(b) || b <= 0) return <span className="font-mono font-bold text-slate-400">-</span>;
+                          const hasWaist = r.waist !== undefined && r.waist !== null && Number(r.waist) > 0;
+                          const waistExceed = hasWaist ? (r.gender === "ชาย" ? Number(r.waist) >= 36 : Number(r.waist) >= 32) : false;
+
+                          if ((isNaN(b) || b <= 0) && !hasWaist) return <span className="font-mono font-bold text-slate-400">-</span>;
                           let colorClass = "";
                           let label = "";
-                          if (b < 18.5) { colorClass = "bg-blue-50 text-blue-600 border-blue-200"; label = "ผอม"; }
-                          else if (b < 23) { colorClass = "bg-emerald-50 text-emerald-600 border-emerald-200"; label = "ปกติ"; }
-                          else if (b < 25) { colorClass = "bg-amber-50 text-amber-600 border-amber-200"; label = "ท้วม"; }
-                          else if (b < 30) { colorClass = "bg-rose-50 text-rose-600 border-rose-200"; label = "อ้วน"; }
-                          else { colorClass = "bg-purple-50 text-purple-600 border-purple-200"; label = "อ้วนมาก"; }
+                          if (!isNaN(b) && b > 0) {
+                            if (b < 18.5) { colorClass = "bg-blue-50 text-blue-600 border-blue-200"; label = "ผอม"; }
+                            else if (b < 23) { colorClass = "bg-emerald-50 text-emerald-600 border-emerald-200"; label = "ปกติ"; }
+                            else if (b < 25) { colorClass = "bg-amber-50 text-amber-600 border-amber-200"; label = "ท้วม"; }
+                            else if (b < 30) { colorClass = "bg-rose-50 text-rose-600 border-rose-200"; label = "อ้วน"; }
+                            else { colorClass = "bg-purple-50 text-purple-600 border-purple-200"; label = "อ้วนมาก"; }
+                          }
                           return (
                             <div className="flex flex-col items-center justify-center gap-1">
-                              <span className={`px-2 py-0.5 rounded-md border text-[9px] font-bold whitespace-nowrap ${colorClass}`}>
-                                {label}
-                              </span>
-                              <span className="font-mono font-black text-slate-700 text-[11px]">{r.bmi}</span>
+                              {!isNaN(b) && b > 0 && (
+                                <div className="flex items-center gap-1">
+                                  <span className={`px-2 py-0.5 rounded-md border text-[9px] font-bold whitespace-nowrap ${colorClass}`}>
+                                    {label}
+                                  </span>
+                                  <span className="font-mono font-black text-slate-700 text-[11px]">{r.bmi}</span>
+                                </div>
+                              )}
+                              {hasWaist && (
+                                <span
+                                  className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold border whitespace-nowrap ${
+                                    waistExceed
+                                      ? "bg-rose-50 text-rose-700 border-rose-200"
+                                      : "bg-slate-50 text-slate-600 border-slate-200"
+                                  }`}
+                                  title={`รอบเอว ${r.waist} นิ้ว (${Math.round(Number(r.waist) * 2.54)} ซม.)`}
+                                >
+                                  เอว {r.waist}&quot; {waistExceed ? "(เกิน)" : ""}
+                                </span>
+                              )}
                             </div>
                           );
                         })()}
                       </td>
 
-                      {/* Management Action */}
+                      {/* Management Action & Water Intake */}
                       <td className="py-4 px-5">
                         <span className="font-semibold text-slate-700 block">{r.followUpAction}</span>
                         {r.followUpNote && (
                           <span className="text-[10px] text-slate-400 block max-w-[150px] truncate" title={r.followUpNote}>
                             {r.followUpNote}
+                          </span>
+                        )}
+                        {r.water && (
+                          <span
+                            className={`inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded text-[9px] font-bold border ${
+                              r.water.includes("น้อยกว่า 6")
+                                ? "bg-amber-50 text-amber-700 border-amber-200"
+                                : "bg-cyan-50 text-cyan-700 border-cyan-200"
+                            }`}
+                          >
+                            <Droplet className="w-2.5 h-2.5" />
+                            น้ำ: {r.water}
                           </span>
                         )}
                       </td>

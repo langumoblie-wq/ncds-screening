@@ -329,6 +329,16 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
                       <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md border border-slate-200/60 font-semibold flex items-center gap-1">
                         <span className="text-slate-400 font-normal">พื้นที่เป้าหมาย:</span> {latestVisit.targetArea || "ไม่ได้ระบุ"}
                       </span>
+                      {latestVisit.waist && latestVisit.waist > 0 ? (
+                        <span className="bg-violet-50 text-violet-700 px-2 py-0.5 rounded-md border border-violet-200/80 font-semibold flex items-center gap-1">
+                          <span className="text-violet-400 font-normal">รอบเอว:</span> {latestVisit.waist} นิ้ว ({Math.round(latestVisit.waist * 2.54)} ซม.)
+                        </span>
+                      ) : null}
+                      {latestVisit.water ? (
+                        <span className="bg-cyan-50 text-cyan-700 px-2 py-0.5 rounded-md border border-cyan-200/80 font-semibold flex items-center gap-1">
+                          <span className="text-cyan-500 font-normal">ดื่มน้ำเปล่า:</span> {latestVisit.water}
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -495,7 +505,7 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
 
                 <div className="border-t border-slate-100 pt-3 mt-4 text-[9px] text-slate-400 flex justify-between font-bold">
                   <span>ประวัติครอบครัว: {latestVisit.familyHistory.includes("ความดันโลหิตสูง") ? "มีประวัติครอบครัว" : "ไม่มี"}</span>
-                  <span>ความถี่ปัสสาวะ/วัดเคม: {latestVisit.sodium}</span>
+                  <span>การบริโภครสเค็ม: {latestVisit.sodium || "-"}</span>
                 </div>
               </div>
 
@@ -528,7 +538,7 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
 
                 <div className="border-t border-slate-100 pt-3 mt-4 text-[9px] text-slate-400 flex justify-between font-bold">
                   <span>ประวัติครอบครัว: {latestVisit.familyHistory.includes("เบาหวาน") ? "มีประวัติครอบครัว" : "ไม่มี"}</span>
-                  <span>ความถี่ในการดื่ม/ทานหวาน: {latestVisit.water}</span>
+                  <span>การดื่มน้ำเปล่า/วัน: {latestVisit.water || "-"}</span>
                 </div>
               </div>
 
@@ -639,6 +649,44 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
                         bgClass: "bg-red-500/20 border-red-500/30",
                         icon: <AlertCircle className="w-5 h-5 text-red-400" />
                       });
+                    }
+
+                    if (latestVisit.waist && latestVisit.waist > 0) {
+                      const isWaistExceed = latestVisit.gender === "ชาย" ? latestVisit.waist >= 36 : latestVisit.waist >= 32;
+                      const thresholdText = latestVisit.gender === "ชาย" ? "36 นิ้ว (90 ซม.)" : "32 นิ้ว (80 ซม.)";
+                      if (isWaistExceed) {
+                        factors.push({
+                          title: `ภาวะอ้วนลงพุง (รอบเอว ${latestVisit.waist} นิ้ว)`,
+                          desc: `รอบเอวเกินเกณฑ์มาตรฐาน (${thresholdText}) บ่งชี้ถึงไขมันสะสมในช่องท้องสูง ซึ่งเป็นตัวกระตุ้นภาวะดื้ออินซูลินและความดันโลหิตสูง`,
+                          bgClass: "bg-rose-500/20 border-rose-500/30",
+                          icon: <Activity className="w-5 h-5 text-rose-400" />
+                        });
+                      } else {
+                        factors.push({
+                          title: `รอบเอวอยู่ในเกณฑ์ปกติ (${latestVisit.waist} นิ้ว)`,
+                          desc: `รอบเอวต่ำกว่าเกณฑ์เฝ้าระวัง (${thresholdText}) ช่วยลดความเสี่ยงภาวะอ้วนลงพุงและโรคกลุ่มเมตาบอลิก`,
+                          bgClass: "bg-emerald-500/20 border-emerald-500/30",
+                          icon: <Activity className="w-5 h-5 text-emerald-400" />
+                        });
+                      }
+                    }
+
+                    if (latestVisit.water) {
+                      if (latestVisit.water.includes("น้อยกว่า 6")) {
+                        factors.push({
+                          title: `การดื่มน้ำเปล่าน้อย (${latestVisit.water})`,
+                          desc: "การดื่มน้ำสะอาดน้อยกว่า 6 แก้ว/วัน ทำให้เลือดมีความหนืดสูงขึ้น ระบบไหลเวียนเลือดและไตทำงานหนัก ควรจิบน้ำเปล่าให้ครบ 6-8 แก้ว/วัน",
+                          bgClass: "bg-amber-500/20 border-amber-500/30",
+                          icon: <Droplet className="w-5 h-5 text-amber-400" />
+                        });
+                      } else {
+                        factors.push({
+                          title: `การดื่มน้ำเปล่าเพียงพอ (${latestVisit.water})`,
+                          desc: "การดื่มน้ำสะอาดอย่างเพียงพอช่วยส่งเสริมการไหลเวียนโลหิต การทำงานของไต และการเผาผลาญน้ำตาลในเลือดได้ดี",
+                          bgClass: "bg-cyan-500/20 border-cyan-500/30",
+                          icon: <Droplet className="w-5 h-5 text-cyan-400" />
+                        });
+                      }
                     }
 
                     return factors.map((factor, idx) => (
@@ -868,10 +916,10 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
                     <tr className="bg-slate-50/20 border-b border-slate-100 text-slate-400 font-bold text-[9px] uppercase tracking-wider">
                       <th className="py-3 px-5">ครั้งที่</th>
                       <th className="py-3 px-5">วันที่ตรวจ</th>
-                      <th className="py-3 px-5 text-center">BMI / น้ำหนัก</th>
+                      <th className="py-3 px-5 text-center">BMI / น้ำหนัก / รอบเอว</th>
                       <th className="py-3 px-5 text-center">ความดัน (HT)</th>
                       <th className="py-3 px-5 text-center">ระดับน้ำตาล (DM)</th>
-                      <th className="py-3 px-5">ผลการจัดการเบื้องต้น / บันทึก</th>
+                      <th className="py-3 px-5">ผลการจัดการเบื้องต้น / ดื่มน้ำ</th>
                       <th className="py-3 px-5 text-center">รายละเอียด</th>
                     </tr>
                   </thead>
@@ -886,7 +934,9 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
                           <td className="py-3.5 px-5 font-semibold text-slate-500">{formatThaiDate(v.date, "medium")}</td>
                           <td className="py-3.5 px-5 text-center">
                             <span className="font-bold text-slate-700">{v.bmi}</span>
-                            <span className="text-[10px] text-slate-400 block font-semibold">{v.weight} kg</span>
+                            <span className="text-[10px] text-slate-400 block font-semibold">
+                              {v.weight} kg{v.waist && v.waist > 0 ? ` • เอว ${v.waist}"` : ""}
+                            </span>
                           </td>
                           <td className="py-3.5 px-5 text-center">
                             <span className={`inline-block text-[9px] font-extrabold px-2.5 py-0.5 rounded-full border ${vHt.badgeClass}`}>
@@ -903,6 +953,11 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
                             {v.followUpNote && (
                               <span className="text-[9.5px] text-slate-400 block max-w-[200px] truncate" title={v.followUpNote}>
                                 {v.followUpNote}
+                              </span>
+                            )}
+                            {v.water && (
+                              <span className="text-[9.5px] text-cyan-700 font-semibold block mt-0.5">
+                                ดื่มน้ำ: {v.water}
                               </span>
                             )}
                           </td>

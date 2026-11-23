@@ -365,9 +365,9 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                 <Activity className="w-4 h-4 text-emerald-600" />
                 ข้อมูลการตรวจทางคลินิก
               </h4>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                 
-                {/* Weight / Height / BMI */}
+                {/* Weight / Height */}
                 <div className="bg-white p-3 rounded-lg border border-slate-100 text-center shadow-xs">
                   <span className="text-xs text-slate-500">น้ำหนัก / ส่วนสูง</span>
                   <div className="font-bold text-slate-800 mt-1">
@@ -378,6 +378,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                   </div>
                 </div>
 
+                {/* BMI */}
                 <div className="bg-white p-3 rounded-lg border border-slate-100 text-center shadow-xs">
                   <span className="text-xs text-slate-500">ดัชนีมวลกาย (BMI)</span>
                   <div className="font-bold text-blue-600 mt-1">
@@ -392,6 +393,35 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                      parseFloat(record.bmi) >= 23 ? "น้ำหนักเกิน" :
                      parseFloat(record.bmi) >= 18.5 ? "ปกติ" : "ผอม"}
                   </span>
+                </div>
+
+                {/* Waist (รอบเอว) */}
+                <div className="bg-white p-3 rounded-lg border border-slate-100 text-center shadow-xs">
+                  <span className="text-xs text-slate-500">รอบเอว (นิ้ว)</span>
+                  <div className="font-bold text-slate-800 mt-1">
+                    {record.waist && record.waist > 0 ? (
+                      <>
+                        {record.waist} <span className="text-xs font-normal">นิ้ว</span>
+                      </>
+                    ) : (
+                      "-"
+                    )}
+                  </div>
+                  {record.waist && record.waist > 0 ? (
+                    <span
+                      className={`inline-block text-[10px] px-1.5 py-0.2 rounded-full font-medium mt-0.5 border ${
+                        (record.gender === "ชาย" ? record.waist >= 36 : record.waist >= 32)
+                          ? "bg-rose-50 text-rose-700 border-rose-200"
+                          : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                      }`}
+                    >
+                      {Math.round(record.waist * 2.54)} ซม. • {(record.gender === "ชาย" ? record.waist >= 36 : record.waist >= 32) ? "อ้วนลงพุง" : "ปกติ"}
+                    </span>
+                  ) : (
+                    <span className="inline-block text-[10px] px-1.5 py-0.2 bg-slate-100 text-slate-500 rounded-full font-medium mt-0.5 border border-slate-200">
+                      ไม่ได้ระบุ
+                    </span>
+                  )}
                 </div>
 
                 {/* Blood Pressure */}
@@ -538,6 +568,18 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                 <div className="p-2 rounded-lg bg-slate-50 border border-slate-100">
                   <span className="text-slate-400 block">การนอนหลับ</span>
                   <span className="font-semibold text-indigo-700 mt-0.5 block">{record.sleep}</span>
+                </div>
+                <div className="p-2 rounded-lg bg-slate-50 border border-slate-100">
+                  <span className="text-slate-400 block">การดื่มน้ำเปล่า/วัน</span>
+                  <span className={`font-semibold mt-0.5 block ${
+                    record.water?.includes("น้อยกว่า 6") ? "text-amber-600" : "text-cyan-700"
+                  }`}>{record.water || "ไม่ได้ระบุ"}</span>
+                </div>
+                <div className="p-2 rounded-lg bg-slate-50 border border-slate-100">
+                  <span className="text-slate-400 block">พฤติกรรมรสเค็ม</span>
+                  <span className={`font-semibold mt-0.5 block ${
+                    record.sodium?.includes("ประจำ") || record.sodium?.includes("จัด") ? "text-amber-600" : "text-slate-700"
+                  }`}>{record.sodium || "ไม่ได้ระบุ"}</span>
                 </div>
               </div>
             </div>
@@ -883,7 +925,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
             <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#1e3a8a', marginBottom: '6px' }}>
               🩺 ข้อมูลการตรวจทางคลินิกและสัญญาณชีพ
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '8px' }}>
               {/* Weight & Height */}
               <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px', textAlign: 'center', backgroundColor: '#ffffff' }}>
                 <div style={{ fontSize: '10px', color: '#64748b' }}>น้ำหนัก / ส่วนสูง</div>
@@ -901,6 +943,17 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                 </div>
                 <div style={{ fontSize: '10px', fontWeight: 'bold', color: parseFloat(record.bmi) >= 23 ? '#dc2626' : '#16a34a' }}>
                   {getBmiLabel(record.bmi)}
+                </div>
+              </div>
+
+              {/* Waist */}
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px', textAlign: 'center', backgroundColor: '#ffffff' }}>
+                <div style={{ fontSize: '10px', color: '#64748b' }}>รอบเอว</div>
+                <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#0f172a', marginTop: '2px' }}>
+                  {record.waist && record.waist > 0 ? `${record.waist} นิ้ว` : "-"}
+                </div>
+                <div style={{ fontSize: '10px', color: '#64748b' }}>
+                  {record.waist && record.waist > 0 ? `(${Math.round(record.waist * 2.54)} ซม.)` : "ไม่ได้ระบุ"}
                 </div>
               </div>
 
@@ -984,6 +1037,10 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                   <tr>
                     <td style={{ color: '#64748b', paddingTop: '3px' }}>ออกกำลังกาย: <strong style={{ color: '#0f172a' }}>{record.exercise}</strong></td>
                     <td style={{ color: '#64748b', paddingTop: '3px' }}>การนอนหลับ: <strong style={{ color: '#0f172a' }}>{record.sleep}</strong></td>
+                  </tr>
+                  <tr>
+                    <td style={{ color: '#64748b', paddingTop: '3px' }}>การดื่มน้ำเปล่า: <strong style={{ color: '#0f172a' }}>{record.water || "-"}</strong></td>
+                    <td style={{ color: '#64748b', paddingTop: '3px' }}>การทานรสเค็ม: <strong style={{ color: '#0f172a' }}>{record.sodium || "-"}</strong></td>
                   </tr>
                 </tbody>
               </table>

@@ -33,7 +33,9 @@ import {
   Info,
   ChevronRight,
   Printer,
-  CalendarRange
+  CalendarRange,
+  Droplet,
+  Ruler
 } from "lucide-react";
 import { parseDateToIso, formatYearMonthThai, formatYearMonthThaiShort } from "../utils";
 
@@ -228,6 +230,9 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
     let sweetCount = 0;
     let fatCount = 0;
     let saltCount = 0;
+    let lowWaterCount = 0;
+    let sixToEightWaterCount = 0;
+    let moreThan8WaterCount = 0;
 
     // BMI categories
     let underweight = 0; // < 18.5
@@ -238,6 +243,12 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
 
     let recordsWithMuscleCount = 0;
     let muscleMassSum = 0;
+
+    // Waist circumference (inches)
+    let recordsWithWaistCount = 0;
+    let waistSum = 0;
+    let waistExceedCount = 0;
+    let waistNormalCount = 0;
 
     // Follow-up tracking
     // Group records by name to trace progress
@@ -307,6 +318,10 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
       if (r.foodHabit?.fat?.level === "เสี่ยงสูงมาก" || r.foodHabit?.fat?.level === "เสี่ยงสูง") fatCount++;
       if (r.foodHabit?.salt?.level === "เสี่ยงสูงมาก" || r.foodHabit?.salt?.level === "เสี่ยงสูง" || r.sodium?.includes("เค็มประจำ")) saltCount++;
 
+      if (r.water?.includes("น้อยกว่า 6")) lowWaterCount++;
+      else if (r.water?.includes("มากกว่า 8")) moreThan8WaterCount++;
+      else if (r.water) sixToEightWaterCount++;
+
       // BMI Calculator
       const bmiVal = parseFloat(r.bmi);
       if (!isNaN(bmiVal) && bmiVal > 0) {
@@ -321,6 +336,16 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
       if (r.muscleMass !== undefined && r.muscleMass !== null && r.muscleMass > 0) {
         recordsWithMuscleCount++;
         muscleMassSum += r.muscleMass;
+      }
+
+      // Waist circumference (inches) tally
+      if (r.waist !== undefined && r.waist !== null && Number(r.waist) > 0) {
+        const w = Number(r.waist);
+        recordsWithWaistCount++;
+        waistSum += w;
+        const isExceed = r.gender === "ชาย" ? w >= 36 : w >= 32;
+        if (isExceed) waistExceedCount++;
+        else waistNormalCount++;
       }
     });
 
@@ -455,6 +480,7 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
       { name: "พฤติกรรมการทานหวานจัด (รสหวาน)", count: sweetCount, pct: Math.round((sweetCount / total) * 100), color: "text-red-600", bg: "bg-red-50", type: "food" },
       { name: "พฤติกรรมการทานของมัน/ทอดจัด (รสมัน)", count: fatCount, pct: Math.round((fatCount / total) * 100), color: "text-orange-600", bg: "bg-orange-50", type: "food" },
       { name: "พฤติกรรมการปรุงเค็มจัด/โซเดียมสูง (รสเค็ม)", count: saltCount, pct: Math.round((saltCount / total) * 100), color: "text-amber-600", bg: "bg-amber-50", type: "food" },
+      { name: "การดื่มน้ำเปล่าน้อยกว่า 6 แก้วต่อวัน", count: lowWaterCount, pct: Math.round((lowWaterCount / total) * 100), color: "text-cyan-600", bg: "bg-cyan-50", type: "water" },
       { name: "การขาดกิจกรรมทางกาย/ไม่ออกกำลังกาย", count: noExerciseCount, pct: Math.round((noExerciseCount / total) * 100), color: "text-blue-600", bg: "bg-blue-50", type: "exercise" },
       { name: "พฤติกรรมการพักผ่อนน้อยกว่า 6 ชั่วโมง", count: poorSleepCount, pct: Math.round((poorSleepCount / total) * 100), color: "text-purple-600", bg: "bg-purple-50", type: "sleep" },
       { name: "อัตราการสูบบุหรี่ในชุมชน", count: smokeCount, pct: Math.round((smokeCount / total) * 100), color: "text-slate-600", bg: "bg-slate-50", type: "smoke" },
@@ -484,6 +510,24 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
       muscleMass: {
         count: recordsWithMuscleCount,
         avg: recordsWithMuscleCount > 0 ? (muscleMassSum / recordsWithMuscleCount).toFixed(1) : null
+      },
+      waist: {
+        count: recordsWithWaistCount,
+        avg: recordsWithWaistCount > 0 ? (waistSum / recordsWithWaistCount).toFixed(1) : null,
+        avgCm: recordsWithWaistCount > 0 ? Math.round((waistSum / recordsWithWaistCount) * 2.54) : null,
+        exceedCount: waistExceedCount,
+        normalCount: waistNormalCount,
+        exceedPct: recordsWithWaistCount > 0 ? Math.round((waistExceedCount / recordsWithWaistCount) * 100) : 0
+      },
+      water: {
+        lowCount: lowWaterCount,
+        lowPct: Math.round((lowWaterCount / total) * 100),
+        sixToEightCount: sixToEightWaterCount,
+        sixToEightPct: Math.round((sixToEightWaterCount / total) * 100),
+        moreThan8Count: moreThan8WaterCount,
+        moreThan8Pct: Math.round((moreThan8WaterCount / total) * 100),
+        adequateCount: sixToEightWaterCount + moreThan8WaterCount,
+        adequatePct: Math.round(((sixToEightWaterCount + moreThan8WaterCount) / total) * 100)
       },
       followUp: {
         candidates: followUpCandidates,
@@ -933,6 +977,99 @@ export const NcdAnalyticsDashboard: React.FC<NcdAnalyticsDashboardProps> = ({ re
                 </div>
               </div>
             )}
+
+            {/* Waist Circumference & Daily Water Intake Analytics Grid */}
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Waist Circumference Indicator */}
+              <div className="p-4 bg-violet-50/40 border border-violet-100 rounded-xl flex flex-col justify-between space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-violet-100 text-violet-700">
+                      <Ruler className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-black text-slate-800 block">
+                        ข้อมูลรอบเอวและภาวะอ้วนลงพุง (Waist Circumference)
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-semibold">
+                        เกณฑ์รอบเอวเกิน: ชาย ≥ 36 นิ้ว (90 ซม.) • หญิง ≥ 32 นิ้ว (80 ซม.)
+                      </span>
+                    </div>
+                  </div>
+                  {analysis.waist.count > 0 && (
+                    <span className="text-xs font-black px-2.5 py-1 rounded-full bg-white border border-violet-200 text-violet-700 tabular-nums">
+                      เฉลี่ย {analysis.waist.avg} นิ้ว ({analysis.waist.avgCm} ซม.)
+                    </span>
+                  )}
+                </div>
+
+                {analysis.waist.count > 0 ? (
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-white p-2.5 rounded-lg border border-slate-200/80">
+                      <span className="text-[10px] text-slate-400 font-bold block">ผู้ระบุรอบเอว</span>
+                      <span className="text-base font-black text-slate-800">{analysis.waist.count} ราย</span>
+                    </div>
+                    <div className="bg-white p-2.5 rounded-lg border border-emerald-200/80">
+                      <span className="text-[10px] text-emerald-700 font-bold block">รอบเอวปกติ</span>
+                      <span className="text-base font-black text-emerald-600">{analysis.waist.normalCount} ราย</span>
+                    </div>
+                    <div className="bg-white p-2.5 rounded-lg border border-rose-200/80">
+                      <span className="text-[10px] text-rose-700 font-bold block">อ้วนลงพุง (เกินเกณฑ์)</span>
+                      <span className="text-base font-black text-rose-600">
+                        {analysis.waist.exceedCount} ราย ({analysis.waist.exceedPct}%)
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-xs text-slate-500 bg-white/80 border border-slate-200/70 rounded-lg p-3 text-center font-medium">
+                    ยังไม่มีรายการที่บันทึกข้อมูลรอบเอว (นิ้ว) ในชุดข้อมูลที่เลือก
+                  </div>
+                )}
+              </div>
+
+              {/* Daily Water Intake Indicator */}
+              <div className="p-4 bg-cyan-50/40 border border-cyan-100 rounded-xl flex flex-col justify-between space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-cyan-100 text-cyan-700">
+                      <Droplet className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-black text-slate-800 block">
+                        พฤติกรรมการดื่มน้ำเปล่าต่อวัน (Daily Water Intake)
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-semibold">
+                        เกณฑ์แนะนำ: ดื่มน้ำเปล่าสะอาดอย่างน้อย 6-8 แก้วต่อวัน
+                      </span>
+                    </div>
+                  </div>
+                  <span className="text-xs font-black px-2.5 py-1 rounded-full bg-white border border-cyan-200 text-cyan-700 tabular-nums">
+                    เพียงพอ {analysis.water.adequatePct}%
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="bg-white p-2.5 rounded-lg border border-amber-200/80">
+                    <span className="text-[10px] text-amber-700 font-bold block">น้อยกว่า 6 แก้ว</span>
+                    <span className="text-base font-black text-amber-600">
+                      {analysis.water.lowCount} ราย ({analysis.water.lowPct}%)
+                    </span>
+                  </div>
+                  <div className="bg-white p-2.5 rounded-lg border border-cyan-200/80">
+                    <span className="text-[10px] text-cyan-700 font-bold block">6 - 8 แก้ว/วัน</span>
+                    <span className="text-base font-black text-cyan-600">
+                      {analysis.water.sixToEightCount} ราย ({analysis.water.sixToEightPct}%)
+                    </span>
+                  </div>
+                  <div className="bg-white p-2.5 rounded-lg border border-emerald-200/80">
+                    <span className="text-[10px] text-emerald-700 font-bold block">มากกว่า 8 แก้ว</span>
+                    <span className="text-base font-black text-emerald-600">
+                      {analysis.water.moreThan8Count} ราย ({analysis.water.moreThan8Pct}%)
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
 
             {analysis.bmi.unhealthyBmiCount > 0 && (
               <div className="mt-4 p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">

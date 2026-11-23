@@ -11,6 +11,7 @@ import { IndividualProfile } from "./components/IndividualProfile";
 import { NcdAnalyticsDashboard } from "./components/NcdAnalyticsDashboard";
 import { RecordModal } from "./components/RecordModal";
 import { ProjectTracking } from "./components/ProjectTracking";
+import { ExecutiveBriefingDashboard } from "./components/ExecutiveBriefingDashboard";
 import { ScreeningRecord, DistrictType } from "./types";
 import { 
   cleanDistrict, 
@@ -20,7 +21,7 @@ import {
 } from "./components/BackupRestoreModal";
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<"form" | "dash" | "individual" | "analytics" | "tracking">("form");
+  const [activeTab, setActiveTab] = useState<"form" | "dash" | "individual" | "analytics" | "tracking" | "briefing">("form");
   // Immediate localStorage initialization so mobile users NEVER see a blank screen or hang
   const [records, setRecords] = useState<ScreeningRecord[]>(() => {
     try {
@@ -1110,6 +1111,18 @@ export default function App() {
                 <Activity className="w-4 h-4" />
                 <span>ติดตามโครงการ</span>
               </button>
+
+              <button
+                onClick={() => setActiveTab("briefing")}
+                className={`px-3 sm:px-4 py-2 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all cursor-pointer shrink-0 whitespace-nowrap min-h-[38px] ${
+                  activeTab === "briefing"
+                    ? "bg-slate-900 text-white shadow-2xs font-bold"
+                    : "text-slate-700 hover:bg-slate-100/70 hover:text-slate-900"
+                }`}
+              >
+                <ShieldCheck className="w-4 h-4" />
+                <span>บรีฟผู้บริหาร</span>
+              </button>
             </div>
 
             {/* Desktop Database & Admin Status Section */}
@@ -1274,6 +1287,20 @@ export default function App() {
                 <ProjectTracking records={records} />
               </motion.div>
             )}
+            {activeTab === "briefing" && (
+              <motion.div
+                key="briefing-view"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                transition={{ duration: 0.25 }}
+              >
+                <ExecutiveBriefingDashboard
+                  records={records}
+                  onNavigateToTracking={() => setActiveTab("tracking")}
+                />
+              </motion.div>
+            )}
           </AnimatePresence>
         )}
 
@@ -1429,12 +1456,22 @@ export default function App() {
 
         <button
           onClick={() => setActiveTab("tracking")}
-          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer min-w-[56px] min-h-[44px] ${
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer min-w-[50px] min-h-[44px] ${
             activeTab === "tracking" ? "text-indigo-600 font-bold" : "text-slate-500 hover:text-slate-800"
           }`}
         >
           <Activity className={`w-5 h-5 ${activeTab === "tracking" ? "stroke-[2.5]" : "stroke-[1.75]"}`} />
           <span className="text-[10px] mt-0.5">ติดตาม</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("briefing")}
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer min-w-[50px] min-h-[44px] ${
+            activeTab === "briefing" ? "text-slate-900 font-bold" : "text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          <ShieldCheck className={`w-5 h-5 ${activeTab === "briefing" ? "stroke-[2.5]" : "stroke-[1.75]"}`} />
+          <span className="text-[10px] mt-0.5">ผู้บริหาร</span>
         </button>
       </nav>
 
