@@ -1321,7 +1321,7 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
       const pInfo = patientVisitMapping[key];
       const isLatest = pInfo ? pInfo.latestRecordId === r.id : true;
       const vNum = r.visitNumber || 1;
-      const visitType = vNum === 1 ? "คัดกรองแรกรับ" : `ติดตามครั้งที่ ${vNum - 1}`;
+      const visitType = vNum === 1 ? "ครั้งที่ 1 (แรกรับ)" : `ครั้งที่ ${vNum}`;
       return [
         r.id,
         formatThaiDate(r.date, "slash"),
@@ -2380,7 +2380,7 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
               placeholder="แสดงทุกครั้งที่ตรวจ"
               labelKey={(v) => {
                 const n = parseInt(v, 10);
-                return n === 1 ? "ครั้งที่ 1 (แรกรับ)" : `ครั้งที่ ${n} (ติดตาม #${n - 1})`;
+                return n === 1 ? "ครั้งที่ 1 (แรกรับ)" : `ครั้งที่ ${n}`;
               }}
             />
           </div>
@@ -2723,7 +2723,7 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
                               : "bg-purple-50 text-purple-700 border border-purple-200"
                           }`}>
                             ครั้งที่ {r.visitNumber || 1}
-                            {(r.visitNumber || 1) === 1 ? " (แรกรับ)" : ` (ติดตาม #${(r.visitNumber || 1) - 1})`}
+                            {(r.visitNumber || 1) === 1 ? " (แรกรับ)" : ""}
                           </span>
 
                           {patientVisitMapping[`${r.name}_${r.phone || ""}`]?.latestRecordId === r.id && (
@@ -3013,7 +3013,7 @@ export const NcdDashboard: React.FC<NcdDashboardProps> = ({
                       <div className="space-y-0.5">
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-extrabold text-slate-800">
-                            ครั้งที่ {vNum} {vNum === 1 ? "(คัดกรองแรกรับ)" : `(ติดตาม #${vNum - 1})`}
+                            ครั้งที่ {vNum} {vNum === 1 ? "(ครั้งแรก / แรกรับ)" : ""}
                           </span>
                           {isClickedRow && (
                             <span className="text-[10px] font-bold px-2 py-0.2 rounded-full bg-amber-200/80 text-amber-900">

@@ -409,7 +409,7 @@ export const ProjectTracking: React.FC<ProjectTrackingProps> = ({ records, hideN
       if (!map[v]) {
         map[v] = {
           visitNumber: v,
-          label: v === 1 ? "ครั้งที่ 1 (คัดกรองแรกรับ)" : `ครั้งที่ ${v} (ติดตาม #${v - 1})`,
+          label: v === 1 ? "ครั้งที่ 1 (แรกรับ)" : `ครั้งที่ ${v}`,
           total: 0,
           uniquePatients: new Set(),
           targetGroupCount: 0,

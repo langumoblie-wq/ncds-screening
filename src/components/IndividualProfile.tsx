@@ -478,7 +478,7 @@ export const IndividualProfile: React.FC<IndividualProfileProps> = ({
                           : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
                       }`}
                     >
-                      <span>{vNum === 1 ? "ครั้งที่ 1 (แรกรับ)" : `ครั้งที่ ${vNum} (ติดตาม #${vNum - 1})`}</span>
+                      <span>{vNum === 1 ? "ครั้งที่ 1 (แรกรับ)" : `ครั้งที่ ${vNum}`}</span>
                       {isLatest && (
                         <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
                           isSelected ? "bg-white/20 text-white" : "bg-emerald-100 text-emerald-800"

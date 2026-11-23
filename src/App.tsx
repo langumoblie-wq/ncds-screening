@@ -20,6 +20,44 @@ import {
   getRecordModel, 
   getRecordSubdistrict 
 } from "./components/BackupRestoreModal";
+import { parseDateToIso } from "./utils";
+
+// Ensure every person's screening visits are counted sequentially starting from 1 (แรกรับ), 2, 3... in chronological order
+function ensureSequentialVisitNumbers(list: ScreeningRecord[]): ScreeningRecord[] {
+  if (!Array.isArray(list) || list.length === 0) return list;
+  const byPerson = new Map<string, ScreeningRecord[]>();
+  list.forEach((r) => {
+    if (!r || typeof r !== "object") return;
+    const key = (r.name || "").trim().replace(/\s+/g, " ");
+    if (!key) return;
+    if (!byPerson.has(key)) byPerson.set(key, []);
+    byPerson.get(key)!.push(r);
+  });
+
+  const visitMap = new Map<number, number>();
+  byPerson.forEach((visits) => {
+    visits.sort((a, b) => {
+      const isoA = parseDateToIso(a.date);
+      const isoB = parseDateToIso(b.date);
+      if (isoA && isoB && isoA !== isoB) return isoA.localeCompare(isoB);
+      const vA = Number(a.visitNumber) || 1;
+      const vB = Number(b.visitNumber) || 1;
+      if (vA !== vB) return vA - vB;
+      return (Number(a.id) || 0) - (Number(b.id) || 0);
+    });
+    visits.forEach((v, idx) => {
+      visitMap.set(Number(v.id), idx + 1);
+    });
+  });
+
+  return list.map((r) => {
+    const seqNum = visitMap.get(Number(r.id));
+    if (seqNum !== undefined && Number(r.visitNumber) !== seqNum) {
+      return { ...r, visitNumber: seqNum };
+    }
+    return r;
+  });
+}
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<"form" | "dash" | "individual" | "analytics" | "tracking" | "briefing">("form");
@@ -31,7 +69,9 @@ export default function App() {
         if (localRecords) {
           const parsed = JSON.parse(localRecords);
           if (Array.isArray(parsed)) {
-            return parsed.filter((r) => r !== null && r !== undefined && typeof r === "object" && "id" in r);
+            return ensureSequentialVisitNumbers(
+              parsed.filter((r) => r !== null && r !== undefined && typeof r === "object" && "id" in r)
+            );
           }
         }
       }
@@ -286,9 +326,10 @@ export default function App() {
         }
       });
 
-      const mergedRecords = Array.from(recordMap.values())
-        .filter(r => !allDeletedIds.has(Number(r.id)) && !r.isDeleted)
-        .sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
+      const mergedRecords = ensureSequentialVisitNumbers(
+        Array.from(recordMap.values())
+          .filter(r => !allDeletedIds.has(Number(r.id)) && !r.isDeleted)
+      ).sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
 
       setRecords(mergedRecords);
       try {

@@ -267,7 +267,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                         : "bg-white hover:bg-indigo-100/60 text-slate-700 border-slate-200"
                     }`}
                   >
-                    <span>{vNum === 1 ? "ครั้งที่ 1 (แรกรับ)" : `ครั้งที่ ${vNum} (ติดตาม #${vNum - 1})`}</span>
+                    <span>{vNum === 1 ? "ครั้งที่ 1 (แรกรับ)" : `ครั้งที่ ${vNum}`}</span>
                     {isLatest && (
                       <span className={`text-[9px] px-1 py-0.1 rounded font-bold ${
                         isSelected ? "bg-white/20 text-white" : "bg-emerald-100 text-emerald-800"

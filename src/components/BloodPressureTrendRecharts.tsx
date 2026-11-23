@@ -109,7 +109,7 @@ export const BloodPressureTrendRecharts: React.FC<BloodPressureTrendRechartsProp
         id: v.id,
         visitNumber: v.visitNumber,
         label: `ครั้งที่ ${v.visitNumber}`,
-        fullLabel: v.visitNumber === 1 ? "ครั้งที่ 1 (แรกรับ)" : `ครั้งที่ ${v.visitNumber} (ติดตาม #${v.visitNumber - 1})`,
+        fullLabel: v.visitNumber === 1 ? "ครั้งที่ 1 (แรกรับ)" : `ครั้งที่ ${v.visitNumber}`,
         date: formatThaiDate(v.date, "medium"),
         sys,
         dia,

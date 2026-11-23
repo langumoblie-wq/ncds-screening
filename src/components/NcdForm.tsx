@@ -148,7 +148,27 @@ export const NcdForm: React.FC<NcdFormProps> = ({
   // Food Habits scores (mapping of question ID to choice: 0, 1, or 2)
   const [foodHabitAnswers, setFoodHabitAnswers] = useState<Record<string, number>>({});
 
-  // Sync initialRecord for Editing Mode
+  // All visits belonging to the currently edited/followed-up patient (or matched by name), sorted chronologically
+  const patientVisits = useMemo(() => {
+    const targetName = (initialRecord?.name || name || "").trim().replace(/\s+/g, " ");
+    if (!targetName || targetName.length < 2) return [];
+    return (allRecords || [])
+      .filter((r) => {
+        if (!r || r.isDeleted) return false;
+        const rName = (r.name || "").trim().replace(/\s+/g, " ");
+        return rName === targetName;
+      })
+      .sort((a, b) => {
+        const isoA = parseDateToIso(a.date);
+        const isoB = parseDateToIso(b.date);
+        if (isoA && isoB && isoA !== isoB) return isoA.localeCompare(isoB);
+        const vDiff = (Number(a.visitNumber) || 1) - (Number(b.visitNumber) || 1);
+        if (vDiff !== 0) return vDiff;
+        return (Number(a.id) || 0) - (Number(b.id) || 0);
+      });
+  }, [allRecords, initialRecord?.name, name]);
+
+  // Sync initialRecord for Editing / Follow-up Mode
   useEffect(() => {
     if (initialRecord) {
       if (initialRecord.date) {
@@ -164,7 +184,29 @@ export const NcdForm: React.FC<NcdFormProps> = ({
       setParticipantType(initialRecord.participantType || "กลุ่มเป้าหมายโครงการ");
 
       setName(initialRecord.name);
-      setVisitNumber(isFollowUp ? initialRecord.visitNumber + 1 : initialRecord.visitNumber);
+
+      // Compute sequential visit number (1 = first visit, 2, 3... in chronological order)
+      const targetName = (initialRecord.name || "").trim().replace(/\s+/g, " ");
+      const personRecords = (allRecords || [])
+        .filter((r) => r && !r.isDeleted && (r.name || "").trim().replace(/\s+/g, " ") === targetName)
+        .sort((a, b) => {
+          const isoA = parseDateToIso(a.date);
+          const isoB = parseDateToIso(b.date);
+          if (isoA && isoB && isoA !== isoB) return isoA.localeCompare(isoB);
+          const vDiff = (Number(a.visitNumber) || 1) - (Number(b.visitNumber) || 1);
+          if (vDiff !== 0) return vDiff;
+          return (Number(a.id) || 0) - (Number(b.id) || 0);
+        });
+
+      if (isFollowUp) {
+        const nextSequentialVisit = personRecords.length > 0 ? personRecords.length + 1 : (Number(initialRecord.visitNumber) || 1) + 1;
+        setVisitNumber(nextSequentialVisit);
+      } else {
+        const idx = personRecords.findIndex((r) => r.id === initialRecord.id);
+        const sequentialVisit = idx !== -1 ? idx + 1 : (Number(initialRecord.visitNumber) || 1);
+        setVisitNumber(sequentialVisit);
+      }
+
       setAge(initialRecord.age);
       setGender(initialRecord.gender);
       setAddress(initialRecord.address);
@@ -309,26 +351,21 @@ export const NcdForm: React.FC<NcdFormProps> = ({
     }
   }, [initialRecord, isFollowUp]);
 
+  // When adding a new record (!initialRecord), automatically count visitNumber starting at 1 for first-time patients,
+  // and N + 1 sequentially if the entered name already has N previous visits in the system.
+  useEffect(() => {
+    if (!initialRecord) {
+      if (patientVisits.length > 0) {
+        setVisitNumber(patientVisits.length + 1);
+      } else {
+        setVisitNumber(1);
+      }
+    }
+  }, [patientVisits.length, initialRecord]);
+
   // Quick search state for finding an existing patient to edit directly from the form tab
   const [editSearchQuery, setEditSearchQuery] = useState("");
   const [showQuickEditFinder, setShowQuickEditFinder] = useState(false);
-
-  // All visits belonging to the currently edited/followed-up patient (or matched by name)
-  const patientVisits = useMemo(() => {
-    const targetName = (initialRecord?.name || name || "").trim().replace(/\s+/g, " ");
-    if (!targetName || targetName.length < 2) return [];
-    return (allRecords || [])
-      .filter((r) => {
-        if (!r || r.isDeleted) return false;
-        const rName = (r.name || "").trim().replace(/\s+/g, " ");
-        return rName === targetName;
-      })
-      .sort((a, b) => {
-        const vDiff = (Number(a.visitNumber) || 1) - (Number(b.visitNumber) || 1);
-        if (vDiff !== 0) return vDiff;
-        return parseDateToIso(a.date).localeCompare(parseDateToIso(b.date));
-      });
-  }, [allRecords, initialRecord?.name, name]);
 
   // Quick search results grouped by patient name so user can pick which person and which visit (ครั้งที่) to edit
   const quickEditPatientGroups = useMemo(() => {
@@ -359,7 +396,12 @@ export const NcdForm: React.FC<NcdFormProps> = ({
     });
     const list = Array.from(map.values()).slice(0, 15);
     list.forEach((g) => {
-      g.visits.sort((a, b) => (Number(a.visitNumber) || 1) - (Number(b.visitNumber) || 1));
+      g.visits.sort((a, b) => {
+        const isoA = parseDateToIso(a.date);
+        const isoB = parseDateToIso(b.date);
+        if (isoA && isoB && isoA !== isoB) return isoA.localeCompare(isoB);
+        return (Number(a.visitNumber) || 1) - (Number(b.visitNumber) || 1);
+      });
     });
     return list;
   }, [allRecords, editSearchQuery]);
@@ -676,7 +718,7 @@ export const NcdForm: React.FC<NcdFormProps> = ({
     if (!initialRecord || isFollowUp) {
       setHasConsented(false);
       setName("");
-      setVisitNumber(prev => prev + 1);
+      setVisitNumber(1);
       setAge("");
       setGender("");
       setAddress("");
@@ -808,15 +850,15 @@ export const NcdForm: React.FC<NcdFormProps> = ({
                         </div>
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5">
-                        {group.visits.map((v) => {
-                          const vNum = v.visitNumber || 1;
+                        {group.visits.map((v, vIdx) => {
+                          const vNum = vIdx + 1;
                           const isCurrent = initialRecord?.id === v.id && !isFollowUp;
                           return (
                             <button
                               key={v.id}
                               type="button"
                               onClick={() => {
-                                onSelectRecordToEdit(v, false);
+                                onSelectRecordToEdit({ ...v, visitNumber: vNum }, false);
                                 setShowQuickEditFinder(false);
                               }}
                               className={`text-[11px] px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 border transition-all cursor-pointer ${
@@ -826,7 +868,7 @@ export const NcdForm: React.FC<NcdFormProps> = ({
                               }`}
                             >
                               <Pencil className="w-3 h-3" />
-                              <span>แก้ไข ครั้งที่ {vNum}</span>
+                              <span>แก้ไข ครั้งที่ {vNum}{vNum === 1 ? " (แรกรับ)" : ""}</span>
                               <span className={`text-[10px] ${isCurrent ? "text-amber-100" : "text-slate-500"}`}>
                                 ({formatThaiDate(v.date, "slash")})
                               </span>
@@ -865,14 +907,14 @@ export const NcdForm: React.FC<NcdFormProps> = ({
             </div>
 
             <div className="flex flex-wrap items-center gap-2 pt-1">
-              {patientVisits.map((v) => {
-                const vNum = v.visitNumber || 1;
+              {patientVisits.map((v, vIdx) => {
+                const vNum = vIdx + 1;
                 const isSelectedForEdit = initialRecord?.id === v.id && !isFollowUp;
                 return (
                   <button
                     key={v.id}
                     type="button"
-                    onClick={() => onSelectRecordToEdit(v, false)}
+                    onClick={() => onSelectRecordToEdit({ ...v, visitNumber: vNum }, false)}
                     className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-2 cursor-pointer ${
                       isSelectedForEdit
                         ? "bg-amber-600 text-white border-amber-600 shadow-xs ring-2 ring-amber-500/25"
@@ -882,7 +924,7 @@ export const NcdForm: React.FC<NcdFormProps> = ({
                     <Pencil className={`w-3.5 h-3.5 ${isSelectedForEdit ? "text-white" : "text-amber-600"}`} />
                     <div className="text-left">
                       <div className="flex items-center gap-1.5">
-                        <span>ครั้งที่ {vNum} {vNum === 1 ? "(แรกรับ)" : `(ติดตาม #${vNum - 1})`}</span>
+                        <span>ครั้งที่ {vNum}{vNum === 1 ? " (ครั้งแรก / แรกรับ)" : ""}</span>
                         {isSelectedForEdit && (
                           <span className="text-[9px] px-1.5 py-0.2 rounded bg-white/20 text-white font-extrabold">
                             กำลังแก้ไข
@@ -902,7 +944,7 @@ export const NcdForm: React.FC<NcdFormProps> = ({
                 type="button"
                 onClick={() => {
                   const latestV = patientVisits[patientVisits.length - 1];
-                  if (latestV) onSelectRecordToEdit(latestV, true);
+                  if (latestV) onSelectRecordToEdit({ ...latestV, visitNumber: patientVisits.length }, true);
                 }}
                 className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
                   isFollowUp
@@ -912,7 +954,7 @@ export const NcdForm: React.FC<NcdFormProps> = ({
               >
                 <PlusCircle className="w-3.5 h-3.5" />
                 <span>
-                  + เพิ่มการตรวจครั้งถัดไป (ครั้งที่ {(patientVisits[patientVisits.length - 1]?.visitNumber || 1) + 1})
+                  + เพิ่มการตรวจครั้งถัดไป (ครั้งที่ {patientVisits.length + 1})
                 </span>
               </button>
             </div>
@@ -1052,10 +1094,10 @@ export const NcdForm: React.FC<NcdFormProps> = ({
                   className="flex-1 text-sm rounded-xl border border-slate-300 p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white font-semibold text-slate-800"
                 >
                   {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((num) => {
-                    const existingForNum = patientVisits.find((v) => (v.visitNumber || 1) === num);
+                    const existingForNum = patientVisits[num - 1] || patientVisits.find((v) => (v.visitNumber || 1) === num);
                     return (
                       <option key={num} value={num}>
-                        ครั้งที่ {num} {num === 1 ? "(คัดกรองแรกรับ)" : `(ติดตามครั้งที่ ${num - 1})`}
+                        ครั้งที่ {num}{num === 1 ? " (ครั้งแรก / แรกรับ)" : ""}
                         {existingForNum ? ` • มีข้อมูลวันที่ ${formatThaiDate(existingForNum.date, "slash")}` : ""}
                       </option>
                     );
@@ -1076,9 +1118,13 @@ export const NcdForm: React.FC<NcdFormProps> = ({
               </div>
               {/* If another visit record exists for this patient with the chosen visitNumber, offer 1-click switch to edit that visit */}
               {(() => {
-                const matchedExistingVisit = patientVisits.find(
-                  (v) => (v.visitNumber || 1) === Number(visitNumber) && v.id !== initialRecord?.id
-                );
+                const matchedByIndex = patientVisits[Number(visitNumber) - 1];
+                const matchedExistingVisit =
+                  matchedByIndex && matchedByIndex.id !== initialRecord?.id
+                    ? matchedByIndex
+                    : patientVisits.find(
+                        (v) => (v.visitNumber || 1) === Number(visitNumber) && v.id !== initialRecord?.id
+                      );
                 if (matchedExistingVisit && onSelectRecordToEdit) {
                   return (
                     <div className="mt-1.5 p-2 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-between gap-2 text-[11px]">
@@ -1087,7 +1133,7 @@ export const NcdForm: React.FC<NcdFormProps> = ({
                       </span>
                       <button
                         type="button"
-                        onClick={() => onSelectRecordToEdit(matchedExistingVisit, false)}
+                        onClick={() => onSelectRecordToEdit({ ...matchedExistingVisit, visitNumber: Number(visitNumber) }, false)}
                         className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold shrink-0 cursor-pointer transition-colors"
                       >
                         ดึงข้อมูลครั้งที่ {visitNumber} มาแก้ไข
